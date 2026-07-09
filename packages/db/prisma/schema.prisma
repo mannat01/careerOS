@@ -2,8 +2,8 @@
 // schema source of truth; this file covers ONLY the M01 slice — later milestones
 // add resume/application/prep/memory/CIE tables via expand/contract migrations.
 //
-// STUB(M01): authored + reviewed offline; `prisma migrate dev` has NOT been run
-// (no Postgres in this sandbox). Run against a pgvector-enabled Postgres in M01 CI.
+// Migration `init_m01` has been applied against live Postgres (pgvector/pg16).
+// The Prisma-backed stores in packages/db/src/stores/ use the generated client.
 
 generator client {
   provider        = "prisma-client-js"

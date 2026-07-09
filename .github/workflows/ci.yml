@@ -53,6 +53,8 @@ jobs:
         run: pnpm --filter @careeros/db schema:validate
       - name: Migration check (deploy is a no-op if migrations are in sync)
         run: pnpm --filter @careeros/db exec prisma migrate deploy
+      - name: Integration tests (Prisma-backed stores against live Postgres)
+        run: pnpm --filter @careeros/db test:integration
       - name: Unit + integration + security + eval-gate suites
         run: pnpm -w test
       # Permanent gates: capability-gate + connector allow-list security suites and the

@@ -104,13 +104,26 @@ importers:
         version: link:../config
 
   packages/db:
-    devDependencies:
-      '@careeros/config':
+    dependencies:
+      '@careeros/contracts':
         specifier: workspace:*
-        version: link:../config
+        version: link:../contracts
       '@prisma/client':
         specifier: ^6.16.2
         version: 6.16.2(prisma@6.16.2(typescript@5.9.3))(typescript@5.9.3)
+    devDependencies:
+      '@careeros/capability-gate':
+        specifier: workspace:*
+        version: link:../capability-gate
+      '@careeros/config':
+        specifier: workspace:*
+        version: link:../config
+      '@careeros/connectors':
+        specifier: workspace:*
+        version: link:../connectors
+      '@careeros/observability':
+        specifier: workspace:*
+        version: link:../observability
       '@prisma/prisma-schema-wasm':
         specifier: 6.16.0-7.1c57fdcd7e44b29b9313256c76699e91c3ac3c43
         version: 6.16.0-7.1c57fdcd7e44b29b9313256c76699e91c3ac3c43

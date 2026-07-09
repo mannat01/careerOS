@@ -1,6 +1,19 @@
-// STUB(M01): stands in for the generated Prisma client re-export:
-//   export { PrismaClient } from '@prisma/client';
-// Client generation needs `prisma generate` (network for engines) and migrations
-// need a live Postgres — neither exists in this sandbox. The authored schema lives
-// at prisma/schema.prisma; seed data below is real and test-covered.
+/**
+ * @careeros/db — Prisma client re-export + Prisma-backed store implementations.
+ *
+ * The generated Prisma client lives at @prisma/client (requires `prisma generate`).
+ * Store implementations in ./stores/ wrap the client behind the interfaces defined
+ * in their respective owning packages (capability-gate, observability, connectors,
+ * apps/api identity).
+ *
+ * Import boundary: only @careeros/db and its consumers (apps/api, connectors, memory)
+ * touch these stores. agents and web never import @careeros/db.
+ */
+
+export { PrismaClient } from '@prisma/client';
 export { SOURCE_REGISTRY_SEED, type SourceRegistrySeedRow } from './seed-data.js';
+
+export { PrismaApprovalTokenStore } from './stores/prisma-approval-token-store.js';
+export { PrismaAuditSink } from './stores/prisma-audit-sink.js';
+export { PrismaSourceRegistry } from './stores/prisma-source-registry.js';
+export { PrismaUserRepo, PrismaUserSettingsRepo, PrismaUserLifecycleRepo } from './stores/prisma-identity-repos.js';

@@ -45,6 +45,7 @@ No historical data exists. An agent's **first** deliverable is its hand-authored
 - Respect package import boundaries (`project-structure.md §2`): `agents` never import `db`; only `memory`/`connectors` touch their stores; `web` never imports server/db packages. No cyclic deps. No `process.env` outside `packages/config`.
 - One skill-agent per folder: `agent.ts`, `prompt.ts`, `io.ts` (zod), `agent.eval.ts`. Prompts are versioned; changing one requires its eval to pass.
 - Migrations via Prisma only, expand/contract, never one-step breaking.
+- Prefer the file editor over multi-line shell heredocs for doc/file edits — heredocs stall the agent terminal.
 
 ## 8. Git & PR
 - Trunk-based, small PRs, Conventional Commits. Each PR references its milestone + task id from `task-board.md`.
