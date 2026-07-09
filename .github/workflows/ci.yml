@@ -1,0 +1,57 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: careeros
+          POSTGRES_PASSWORD: careeros
+          POSTGRES_DB: careeros_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U careeros -d careeros_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://careeros:careeros@localhost:5432/careeros_test
+      REDIS_URL: redis://localhost:6379
+      S3_BUCKET: careeros-artifacts
+      AUTH_PROVIDER: clerk
+      APPROVAL_TOKEN_SECRET: ci-test-secret-ci-test-secret-32ch
+      LLM_PRIMARY_PROVIDER: anthropic
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9.0.0 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm -w typecheck
+      - name: Lint (incl. import-boundary rules)
+        run: pnpm -w lint
+      - name: Prisma schema validate
+        run: pnpm --filter @careeros/db schema:validate
+      - name: Migration check (deploy is a no-op if migrations are in sync)
+        run: pnpm --filter @careeros/db exec prisma migrate deploy
+      - name: Unit + integration + security + eval-gate suites
+        run: pnpm -w test
+      # Permanent gates: capability-gate + connector allow-list security suites and the
+      # zero-fabrication eval (once M03 lands) run inside `pnpm -w test` and MUST stay green.

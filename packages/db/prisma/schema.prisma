@@ -1,0 +1,280 @@
+// CareerOS — M01 core entities (database-schema.md). Prisma migrations are the
+// schema source of truth; this file covers ONLY the M01 slice — later milestones
+// add resume/application/prep/memory/CIE tables via expand/contract migrations.
+//
+// STUB(M01): authored + reviewed offline; `prisma migrate dev` has NOT been run
+// (no Postgres in this sandbox). Run against a pgvector-enabled Postgres in M01 CI.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+enum SubscriptionTier {
+  free
+  pro
+}
+
+enum UserStatus {
+  active
+  suspended
+  deleted
+}
+
+enum Provenance {
+  imported
+  user
+  inferred_confirmed
+}
+
+enum SkillLevel {
+  beginner
+  intermediate
+  advanced
+  expert
+}
+
+enum SourceType {
+  ats_public
+  licensed_aggregator
+  gov_feed
+  user_oauth
+}
+
+enum AuditActor {
+  user
+  twin
+  system
+}
+
+// ---------------- identity ----------------
+
+model User {
+  id               String           @id @default(uuid()) @db.Uuid
+  email            String           @unique
+  authProviderId   String           @unique @map("auth_provider_id")
+  subscriptionTier SubscriptionTier @default(free) @map("subscription_tier")
+  status           UserStatus       @default(active)
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  settings       UserSettings?
+  profile        Profile?
+  auditLogs      AuditLog[]
+  approvalTokens ApprovalToken[]
+
+  @@map("users")
+}
+
+model UserSettings {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Per action-type Green/Yellow/Red overrides; may only tighten the gate registry.
+  autonomyDefaults Json  @map("autonomy_defaults")
+  quietHours       Json? @map("quiet_hours")
+  briefingSchedule Json? @map("briefing_schedule")
+  sourcePrefs      Json  @map("source_prefs")
+  dataUseOptins    Json  @map("data_use_optins")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("user_settings")
+}
+
+model Profile {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  headline    String?
+  summary     String?
+  targetRoles Json?   @map("target_roles")
+  targetComp  Json?   @map("target_comp")
+  locations   Json?
+  remotePref  String? @map("remote_pref")
+  goals       Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  experiences Experience[]
+  projects    Project[]
+  education   Education[]
+  skillClaims SkillClaim[]
+
+  @@index([userId])
+  @@map("profiles")
+}
+
+model Experience {
+  id        String  @id @default(uuid()) @db.Uuid
+  profileId String  @map("profile_id") @db.Uuid
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  company    String
+  title      String
+  start      DateTime? @db.Date
+  end        DateTime? @db.Date
+  bullets    Json?
+  skills     String[]
+  provenance Provenance
+  version    Int        @default(1)
+  /// pgvector embedding for memory retrieval (hnsw index added in migration SQL).
+  embedding  Unsupported("vector(1536)")?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([profileId])
+  @@map("experiences")
+}
+
+model Project {
+  id        String  @id @default(uuid()) @db.Uuid
+  profileId String  @map("profile_id") @db.Uuid
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  links       Json?
+  skills      String[]
+  provenance  Provenance
+  embedding   Unsupported("vector(1536)")?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([profileId])
+  @@map("projects")
+}
+
+model Education {
+  id        String  @id @default(uuid()) @db.Uuid
+  profileId String  @map("profile_id") @db.Uuid
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  institution String
+  credential  String?
+  field       String?
+  start       DateTime?  @db.Date
+  end         DateTime?  @db.Date
+  provenance  Provenance
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([profileId])
+  @@map("education")
+}
+
+model SkillClaim {
+  id        String  @id @default(uuid()) @db.Uuid
+  profileId String  @map("profile_id") @db.Uuid
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  skill        String
+  level        SkillLevel
+  /// refs into experience/project ids evidencing this skill
+  evidenceRefs Json?      @map("evidence_refs")
+  provenance   Provenance
+  embedding    Unsupported("vector(1536)")?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([profileId])
+  @@map("skill_claims")
+}
+
+// ---------------- opportunity (global, not user-owned) ----------------
+
+model Opportunity {
+  id        String         @id @default(uuid()) @db.Uuid
+  sourceKey String         @map("source_key")
+  source    SourceRegistry @relation(fields: [sourceKey], references: [key])
+  sourceRef String         @map("source_ref")
+
+  company            String
+  role               String
+  comp               Json?
+  location           String?
+  remote             Boolean?
+  requirementsParsed Json?    @map("requirements_parsed")
+  /// UNTRUSTED ingested payload — sanitized by packages/connectors before persist.
+  rawPayload         Json     @map("raw_payload")
+  dedupKey           String   @map("dedup_key")
+  ingestedAt         DateTime @map("ingested_at")
+  embedding          Unsupported("vector(1536)")?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([sourceKey, sourceRef])
+  @@index([dedupKey])
+  @@map("opportunities")
+}
+
+// ---------------- connectors ----------------
+
+model SourceRegistry {
+  id      String     @id @default(uuid()) @db.Uuid
+  key     String     @unique
+  type    SourceType
+  enabled Boolean    @default(false)
+  /// Exact hostnames the guarded fetch layer may contact for this source.
+  hosts      Json
+  ratePolicy Json?   @map("rate_policy")
+  mapping    Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  opportunities Opportunity[]
+
+  @@map("source_registry")
+}
+
+// ---------------- audit / security ----------------
+
+/// Append-only: no application code path updates or deletes rows; removal happens
+/// only via account hard-delete cascade (database-schema.md §4).
+model AuditLog {
+  id     String     @id @default(uuid()) @db.Uuid
+  userId String     @map("user_id") @db.Uuid
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actor  AuditActor
+  action String
+  target String?
+  reason String
+  modelVersion String? @map("model_version")
+  traceId      String? @map("trace_id")
+  at           DateTime @default(now())
+
+  @@index([userId, at])
+  @@map("audit_log")
+}
+
+/// Binds a Yellow action to one user + one exact approved payload; single-use.
+model ApprovalToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action      String
+  payloadHash String    @map("payload_hash")
+  expiresAt   DateTime  @map("expires_at")
+  consumedAt  DateTime? @map("consumed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId, expiresAt])
+  @@map("approval_tokens")
+}
