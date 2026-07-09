@@ -43,6 +43,8 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Prisma generate (typed client for @careeros/db)
+        run: pnpm --filter @careeros/db exec prisma generate
       - name: Typecheck
         run: pnpm -w typecheck
       - name: Lint (incl. import-boundary rules)
