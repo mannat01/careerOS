@@ -2,7 +2,7 @@
  * Seed runner — upserts SOURCE_REGISTRY_SEED into source_registry (idempotent).
  * Run: pnpm --filter @careeros/db exec tsx src/seed.ts  (or `make db-seed`).
  */
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
 import { SOURCE_REGISTRY_SEED } from './seed-data.js';
 
@@ -17,15 +17,15 @@ async function main(): Promise<void> {
         type: row.type,
         enabled: row.enabled,
         hosts: row.hosts,
-        ratePolicy: row.ratePolicy ?? undefined,
-        mapping: row.mapping ?? undefined,
+        ratePolicy: (row.ratePolicy ?? undefined) as Prisma.InputJsonValue | undefined,
+        mapping: (row.mapping ?? undefined) as Prisma.InputJsonValue | undefined,
       },
       update: {
         type: row.type,
         enabled: row.enabled,
         hosts: row.hosts,
-        ratePolicy: row.ratePolicy ?? undefined,
-        mapping: row.mapping ?? undefined,
+        ratePolicy: (row.ratePolicy ?? undefined) as Prisma.InputJsonValue | undefined,
+        mapping: (row.mapping ?? undefined) as Prisma.InputJsonValue | undefined,
       },
     });
   }
