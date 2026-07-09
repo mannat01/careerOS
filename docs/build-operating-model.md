@@ -31,7 +31,13 @@ On a fresh session: read `CLAUDE.md` → `docs/build-operating-model.md` (this f
 | 2026-07-08 | M01 Foundations (config, contracts, capability-gate, connectors, observability, llm-gateway, db schema, api handlers) | Fable | ✅ 80/80 tests, 2 security suites | pg/redis/s3/clerk/otel/live-http/nest-boot | ✅ re-ran, 80/80 |
 | 2026-07-08 | M01 starter kit (docker-compose, CI, eslint boundaries, Makefile) | Opus | ✅ YAML+preset validated | CI unproven until a real push | ✅ |
 | 2026-07-09 | M01 re-verified on user machine (VS Code + Cline + Fable via OmniRoute) | Fable | ✅ 80/80, both security suites | (unchanged — infra close-out next) | ✅ report reviewed |
-| _next_ | M01 infra close-out (Cline runbook Step 3a–d) → then M02 core slice | Fable/Cline | _queued_ | pg/redis/clerk/otel/nest-boot | _pending_ |
+| 2026-07-09 | M01 Step 3a: initial `init_m01` migration + seed against live Postgres (compose pg/redis/minio all healthy; seed → 1 enabled source `greenhouse`; re-run `migrate deploy` = no-op) | Cline | ✅ 80/80 still green | redis-runtime/clerk/otel/nest-boot | _pending_ |
+| _next_ | M01 infra close-out (Cline runbook Step 3b–d) → then M02 core slice | Fable/Cline | _queued_ | redis-runtime/clerk/otel/nest-boot | _pending_ |
+
+### Follow-ups (queued)
+- Prisma migrations use snake_case table names (`source_registry` etc.) via `@@map`; raw SQL queries must use the mapped names.
+- Seed script (`packages/db/src/seed.ts`) is idempotent (upsert by `key`); keep it that way as sources are added.
+- CI runs lint + typecheck + tests only; migration deploy against a service container is not yet in CI (queue for M02).
 
 **Execution surface (current):** VS Code + Cline extension running Fable 5 via OmniRoute, on the user's machine (real infra available). Opus reviews at each 🛑 gate in `docs/cline-runbook.md`.
 **Doc-sync note:** these docs postdate `careeros-m01-plus-starterkit.zip` and must be added to the repo's `docs/`: build-operating-model.md, github-setup.md, milestone-02-workorder.md, omniroute-guide.md, cline-runbook.md.

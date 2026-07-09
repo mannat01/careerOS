@@ -7,7 +7,7 @@ down:
 db-migrate:
 	pnpm --filter @careeros/db exec prisma migrate dev
 db-seed:
-	pnpm --filter @careeros/db exec tsx src/seed-data.ts
+	pnpm --filter @careeros/db exec tsx src/seed.ts
 test:
 	pnpm -w test
 bootstrap: up   ## one command to get a working local env
