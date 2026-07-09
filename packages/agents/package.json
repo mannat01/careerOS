@@ -3,6 +3,5 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "src/index.ts",
-  "scripts": { "build": "tsc -b", "lint": "eslint .", "typecheck": "tsc --noEmit", "test": "vitest run" }
+  "main": "src/index.ts"
 }

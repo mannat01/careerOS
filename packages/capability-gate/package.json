@@ -4,9 +4,17 @@
   "private": true,
   "type": "module",
   "main": "src/index.ts",
-  "scripts": { "build": "tsc --noEmit", "lint": "eslint .", "typecheck": "tsc --noEmit", "test": "vitest run" },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
   "dependencies": {
     "@careeros/contracts": "workspace:*",
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@careeros/config": "workspace:*"
   }
 }

@@ -13,6 +13,7 @@
     "schema:validate": "node scripts/validate-schema.mjs"
   },
   "devDependencies": {
+    "@careeros/config": "workspace:*",
     "@prisma/prisma-schema-wasm": "6.16.0-7.1c57fdcd7e44b29b9313256c76699e91c3ac3c43",
     "prisma": "^6.16.2"
   }
