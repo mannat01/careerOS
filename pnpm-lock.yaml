@@ -92,7 +92,11 @@ importers:
 
   apps/workers: {}
 
-  evals: {}
+  evals:
+    devDependencies:
+      '@careeros/config':
+        specifier: workspace:*
+        version: link:../packages/config
 
   packages/agents: {}
 
