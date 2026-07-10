@@ -31,7 +31,8 @@ jobs:
       DATABASE_URL: postgresql://careeros:careeros@localhost:5432/careeros_test
       REDIS_URL: redis://localhost:6379
       S3_BUCKET: careeros-artifacts
-      AUTH_PROVIDER: clerk
+      AUTH_PROVIDER: dev
+      DEV_AUTH_SECRET: ci-dev-auth-secret-that-is-at-least-32-chars
       APPROVAL_TOKEN_SECRET: ci-test-secret-ci-test-secret-32ch
       LLM_PRIMARY_PROVIDER: anthropic
     steps:
@@ -43,6 +44,8 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Circular dependency check (madge)
+        run: pnpm exec madge --circular --extensions ts packages/config/src packages/contracts/src packages/capability-gate/src packages/connectors/src packages/observability/src packages/db/src apps/api/src
       - name: Prisma generate (typed client for @careeros/db)
         run: pnpm --filter @careeros/db exec prisma generate
       - name: Typecheck

@@ -7,6 +7,7 @@ const VALID: Record<string, string> = {
   REDIS_URL: 'redis://localhost:6379',
   S3_BUCKET: 'careeros-artifacts',
   APPROVAL_TOKEN_SECRET: 'x'.repeat(32),
+  DEV_AUTH_SECRET: 'y'.repeat(32),
 };
 
 describe('env schema (packages/config)', () => {
@@ -18,7 +19,11 @@ describe('env schema (packages/config)', () => {
     expect(env.LLM_PRIMARY_PROVIDER).toBe('anthropic');
     expect(env.LLM_CHEAP_MODEL.length).toBeGreaterThan(0);
     expect(env.LLM_FRONTIER_MODEL.length).toBeGreaterThan(0);
-    expect(env.AUTH_PROVIDER).toBe('clerk');
+    expect(env.AUTH_PROVIDER).toBe('dev');
+  });
+
+  it('rejects a weak DEV_AUTH_SECRET', () => {
+    expect(() => loadEnv({ ...VALID, DEV_AUTH_SECRET: 'short' })).toThrowError(/32/);
   });
 
   it('rejects a missing DATABASE_URL', () => {

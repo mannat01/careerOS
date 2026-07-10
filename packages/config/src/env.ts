@@ -26,8 +26,12 @@ export const envSchema = z.object({
   ),
   S3_BUCKET: z.preprocess(emptyToUndefined, z.string().min(1)),
 
-  // Auth (managed provider — never roll our own)
-  AUTH_PROVIDER: z.preprocess(emptyToUndefined, z.enum(['clerk', 'workos']).default('clerk')),
+  // Auth (managed provider — never roll our own; dev = locally-signed HS256 JWT)
+  AUTH_PROVIDER: z.preprocess(emptyToUndefined, z.enum(['dev', 'clerk', 'workos']).default('dev')),
+  DEV_AUTH_SECRET: z.preprocess(
+    emptyToUndefined,
+    z.string().min(32, 'DEV_AUTH_SECRET must be at least 32 chars'),
+  ),
 
   // LLM gateway (ADR-001: single vendor, two tiers)
   LLM_PRIMARY_PROVIDER: z.preprocess(emptyToUndefined, z.literal('anthropic').default('anthropic')),
