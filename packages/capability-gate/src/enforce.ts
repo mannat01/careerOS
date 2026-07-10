@@ -22,7 +22,11 @@ export interface AuditWriter {
     reason: string;
     modelVersion?: string | null;
     traceId?: string | null;
-  }): Promise<unknown> | unknown;
+    // The gate awaits but never inspects the sink's return value, so `unknown` is the
+    // honest contract (accepts sync fakes AND async clients returning their record).
+    // The old `Promise<unknown> | unknown` union was redundant — `unknown` already
+    // absorbs `Promise<unknown>`, so the extra member added no safety, only noise.
+  }): unknown;
 }
 
 export interface EnforceInput {

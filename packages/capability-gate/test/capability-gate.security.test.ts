@@ -37,7 +37,9 @@ function makeDeps(nowMs = 1_000_000): { deps: EnforceDeps; auditLog: AuditEntry[
   const deps: EnforceDeps = {
     secret: SECRET,
     tokenStore: store,
-    audit: { append: (r) => void auditLog.push(r as AuditEntry) },
+    // No cast: the record parameter is already structurally assignable to AuditEntry,
+    // so an assertion would only mask future signature drift in security code.
+    audit: { append: (r) => void auditLog.push(r) },
     now: () => clock.now,
   };
   return { deps, auditLog, store, clock };

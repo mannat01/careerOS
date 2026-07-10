@@ -29,6 +29,19 @@ const d = HAS_INFRA ? describe : describe.skip;
 const DEV_SECRET = 'e2e-dev-auth-secret-that-is-at-least-32-chars';
 const APPROVAL_SECRET = 'e2e-approval-secret-that-is-at-least-32-chars';
 
+/**
+ * Typed view over supertest's `any` response body (HTTP boundary). A single,
+ * explicit cast here keeps every assertion site type-checked instead of
+ * spraying unsafe `any` member accesses through the suite.
+ */
+function body<T>(res: { body: unknown }): T {
+  return res.body as T;
+}
+
+interface ErrorBody {
+  error: { code: string; message: string };
+}
+
 d('M01 /v1/me over HTTP (booted NestJS app)', () => {
   let app: INestApplication;
   let http: App;
@@ -99,16 +112,18 @@ d('M01 /v1/me over HTTP (booted NestJS app)', () => {
   it('GET /v1/me returns the token owner and provisions default settings', async () => {
     const res = await request(http).get('/v1/me').set('Authorization', `Bearer ${tokenA}`);
     expect(res.status).toBe(200);
-    expect(res.body.user.id).toBe(userA.id);
-    expect(res.body.user.email).toBe(userA.email);
-    expect(res.body.settings.userId).toBe(userA.id);
+    const me = body<{ user: { id: string; email: string }; settings: { userId: string } }>(res);
+    expect(me.user.id).toBe(userA.id);
+    expect(me.user.email).toBe(userA.email);
+    expect(me.settings.userId).toBe(userA.id);
   });
 
   it("user B's token can never read user A's data (row scope from verified context)", async () => {
     const res = await request(http).get('/v1/me').set('Authorization', `Bearer ${tokenB}`);
     expect(res.status).toBe(200);
-    expect(res.body.user.id).toBe(userB.id);
-    expect(res.body.user.email).not.toBe(userA.email);
+    const me = body<{ user: { id: string; email: string } }>(res);
+    expect(me.user.id).toBe(userB.id);
+    expect(me.user.email).not.toBe(userA.email);
   });
 
   it('PATCH /v1/me/settings validates and persists a partial update', async () => {
@@ -117,8 +132,9 @@ d('M01 /v1/me over HTTP (booted NestJS app)', () => {
       .set('Authorization', `Bearer ${tokenA}`)
       .send({ dataUseOptIns: { training: true } });
     expect(res.status).toBe(200);
-    expect(res.body.userId).toBe(userA.id);
-    expect(res.body.dataUseOptIns.training).toBe(true);
+    const settings = body<{ userId: string; dataUseOptIns: { training: boolean } }>(res);
+    expect(settings.userId).toBe(userA.id);
+    expect(settings.dataUseOptIns.training).toBe(true);
   });
 
   it('PATCH /v1/me/settings rejects an invalid payload with 422', async () => {
@@ -127,7 +143,7 @@ d('M01 /v1/me over HTTP (booted NestJS app)', () => {
       .set('Authorization', `Bearer ${tokenA}`)
       .send({ quietHours: { start: 'not-a-time' } });
     expect(res.status).toBe(422);
-    expect(res.body.error.code).toBe('validation_failed');
+    expect(body<ErrorBody>(res).error.code).toBe('validation_failed');
   });
 
   // ---------- Green: export ----------
@@ -136,8 +152,9 @@ d('M01 /v1/me over HTTP (booted NestJS app)', () => {
     const before = await queue.waitingCount();
     const res = await request(http).post('/v1/me/export').set('Authorization', `Bearer ${tokenA}`);
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe('queued');
-    expect(res.body.jobId).toBeDefined();
+    const job = body<{ status: string; jobId: string }>(res);
+    expect(job.status).toBe('queued');
+    expect(job.jobId).toBeDefined();
     const after = await queue.waitingCount();
     expect(after).toBe(before + 1);
   });
@@ -147,7 +164,7 @@ d('M01 /v1/me over HTTP (booted NestJS app)', () => {
   it('DELETE /v1/me WITHOUT approval token → 403 capability_denied', async () => {
     const res = await request(http).delete('/v1/me').set('Authorization', `Bearer ${tokenA}`);
     expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('capability_denied');
+    expect(body<ErrorBody>(res).error.code).toBe('capability_denied');
     // User A still exists.
     const still = await prisma.user.findUnique({ where: { id: userA.id } });
     expect(still).not.toBeNull();
@@ -174,7 +191,7 @@ d('M01 /v1/me over HTTP (booted NestJS app)', () => {
       .set('Authorization', `Bearer ${tokenA}`)
       .set('X-Approval-Token', approval);
     expect(res.status).toBe(200);
-    expect(res.body.deleted).toBe(true);
+    expect(body<{ deleted: boolean }>(res).deleted).toBe(true);
 
     // DB cascade: user, settings, approval tokens, audit rows all gone.
     expect(await prisma.user.findUnique({ where: { id: userA.id } })).toBeNull();

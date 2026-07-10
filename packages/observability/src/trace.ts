@@ -6,9 +6,15 @@ export function newTraceId(): string {
 }
 
 // STUB(M01): stands in for OpenTelemetry SDK initialization (NodeSDK + OTLP exporter
-// at OTEL_EXPORTER_OTLP_ENDPOINT, resource attrs, auto-instrumentation). No-op offline.
-export function initTracing(_opts: { serviceName: string; endpoint?: string }): {
+// at OTEL_EXPORTER_OTLP_ENDPOINT, resource attrs, auto-instrumentation). Offline no-op,
+// but the options are consumed (echoed back) so callers can assert their wiring —
+// fixes the previously-unused `_opts` parameter instead of suppressing it.
+export function initTracing(opts: { serviceName: string; endpoint?: string }): {
   enabled: boolean;
+  serviceName: string;
 } {
-  return { enabled: false };
+  // Real export only becomes possible once an endpoint is configured AND the OTel
+  // SDK is wired (M02+); until then this stays disabled regardless.
+  void opts.endpoint;
+  return { enabled: false, serviceName: opts.serviceName };
 }

@@ -130,6 +130,7 @@ describe('capability-gate interceptor on DELETE /v1/me (Yellow)', () => {
     const ctx = contextFromVerifiedClaims({ userId: USER_A, traceId: 'trace-5', headers: {} });
     const res = await redRoute(ctx, {});
     expect(res.status).toBe(403);
-    expect((res.body as ApiError).error.details?.['reason']).toBe('red_never_automated');
+    // res.body is already ApiError here (the HandlerResponse error branch) — no cast.
+    expect(res.body.error.details?.['reason']).toBe('red_never_automated');
   });
 });

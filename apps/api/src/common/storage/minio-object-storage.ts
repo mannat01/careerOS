@@ -1,5 +1,5 @@
 
-import { Client as MinioClient } from 'minio';
+import { Client as MinioClient, type BucketItem } from 'minio';
 import type { ObjectStorage } from './object-storage.js';
 
 /**
@@ -31,7 +31,9 @@ export class MinioObjectStorage implements ObjectStorage {
   async list(prefix: string): Promise<string[]> {
     const keys: string[] = [];
     const stream = this.client.listObjectsV2(this.bucket, prefix, true);
-    for await (const obj of stream) {
+    // Node stream async-iteration yields `any`; pin the item to minio's BucketItem
+    // so the name check below is type-safe (no-unsafe-member-access).
+    for await (const obj of stream as AsyncIterable<BucketItem>) {
       if (typeof obj.name === 'string') keys.push(obj.name);
     }
     return keys;

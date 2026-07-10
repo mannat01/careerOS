@@ -13,7 +13,9 @@ import type { RequestContext } from './request-context.js';
  * (fail-closed) when Clerk keys are absent.
  */
 export class ClerkAuthProvider implements AuthProvider {
-  async verify(_token: string): Promise<RequestContext | null> {
+  // Not `async`: the stub has nothing to await (require-await). The Promise return
+  // type is kept so the JWKS implementation slots in without an interface change.
+  verify(_token: string): Promise<RequestContext | null> {
     // STUB(M01-3b-2): Integrate @clerk/backend JWKS verification.
     // Until CLERK_SECRET_KEY is present, this provider is inactive.
     // When active, it should:
@@ -21,6 +23,6 @@ export class ClerkAuthProvider implements AuthProvider {
     //   2. Verify the token signature against Clerk's JWKS endpoint
     //   3. Look up the userId from the session's user ID
     //   4. Return RequestContext with the verified userId
-    return null;
+    return Promise.resolve(null);
   }
 }

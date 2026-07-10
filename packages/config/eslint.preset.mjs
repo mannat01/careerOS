@@ -21,11 +21,20 @@ import tseslint from 'typescript-eslint';
 
 export const base = tseslint.config(
   { ignores: ['**/dist/**', '**/.next/**', '**/node_modules/**', '**/*.config.*', '**/src_index_placeholder.ts'] },
-  // TODO(ci): enable type-aware lint (recommendedTypeChecked) once existing findings
-  // (no-redundant-type-constituents, no-unnecessary-type-assertion) are triaged.
-  ...tseslint.configs.recommended,
+  // Type-aware lint: strict rules see the real types (re-enabled after triaging the
+  // initial findings — see build log 2026-07-10).
+  ...tseslint.configs.recommendedTypeChecked,
   {
     files: ['**/*.ts', '**/*.tsx'],
+    languageOptions: {
+      parserOptions: {
+        // Flat-config type-aware setup: projectService discovers each package's
+        // tsconfig.json automatically (works across the monorepo without a
+        // hand-maintained `project` array).
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
     rules: {
       // No process.env outside packages/config (overridden by `allowEnv` there).
       'no-restricted-properties': ['error',

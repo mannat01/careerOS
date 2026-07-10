@@ -15,7 +15,7 @@ export class PrismaAuditSink implements AuditSink {
         data: {
           id: record.id,
           userId: record.userId,
-          actor: record.actor as 'user' | 'twin' | 'system',
+          actor: record.actor,
           action: record.action,
           target: record.target,
           reason: record.reason,

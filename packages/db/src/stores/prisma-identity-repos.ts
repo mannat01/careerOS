@@ -20,8 +20,8 @@ export class PrismaUserRepo implements UserRepo {
       id: row.id,
       email: row.email,
       authProviderId: row.authProviderId,
-      subscriptionTier: row.subscriptionTier as 'free' | 'pro',
-      status: row.status as 'active' | 'suspended' | 'deleted',
+      subscriptionTier: row.subscriptionTier,
+      status: row.status,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -51,18 +51,18 @@ export class PrismaUserSettingsRepo implements UserSettingsRepo {
       where: { userId: settings.userId },
       create: {
         userId: settings.userId,
-        autonomyDefaults: settings.autonomyDefaults as Prisma.InputJsonValue,
+        autonomyDefaults: settings.autonomyDefaults,
         quietHours: settings.quietHours as Prisma.InputJsonValue,
         briefingSchedule: settings.briefingSchedule as Prisma.InputJsonValue,
-        sourcePrefs: settings.sourcePrefs as Prisma.InputJsonValue,
-        dataUseOptins: settings.dataUseOptIns as Prisma.InputJsonValue,
+        sourcePrefs: settings.sourcePrefs,
+        dataUseOptins: settings.dataUseOptIns,
       },
       update: {
-        autonomyDefaults: settings.autonomyDefaults as Prisma.InputJsonValue,
+        autonomyDefaults: settings.autonomyDefaults,
         quietHours: settings.quietHours as Prisma.InputJsonValue,
         briefingSchedule: settings.briefingSchedule as Prisma.InputJsonValue,
-        sourcePrefs: settings.sourcePrefs as Prisma.InputJsonValue,
-        dataUseOptins: settings.dataUseOptIns as Prisma.InputJsonValue,
+        sourcePrefs: settings.sourcePrefs,
+        dataUseOptins: settings.dataUseOptIns,
       },
     });
     return {
