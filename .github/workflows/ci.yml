@@ -60,6 +60,8 @@ jobs:
         run: pnpm --filter @careeros/db exec tsx src/seed.ts
       - name: Integration tests (Prisma-backed stores against live Postgres)
         run: pnpm --filter @careeros/db test:integration
+      - name: e2e tests (booted NestJS app; Postgres+Redis; in-memory ObjectStorage fake)
+        run: pnpm --filter @careeros/api test:integration
       - name: Unit + integration + security + eval-gate suites
         run: pnpm -w test
       # Permanent gates: capability-gate + connector allow-list security suites and the

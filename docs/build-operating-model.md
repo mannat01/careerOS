@@ -32,12 +32,15 @@ On a fresh session: read `CLAUDE.md` → `docs/build-operating-model.md` (this f
 | 2026-07-08 | M01 starter kit (docker-compose, CI, eslint boundaries, Makefile) | Opus | ✅ YAML+preset validated | CI unproven until a real push | ✅ |
 | 2026-07-09 | M01 re-verified on user machine (VS Code + Cline + Fable via OmniRoute) | Fable | ✅ 80/80, both security suites | (unchanged — infra close-out next) | ✅ report reviewed |
 | 2026-07-09 | M01 Step 3a: initial `init_m01` migration + seed against live Postgres (compose pg/redis/minio all healthy; seed → 1 enabled source `greenhouse`; re-run `migrate deploy` = no-op) | Cline | ✅ 80/80 still green | redis-runtime/clerk/otel/nest-boot | _pending_ |
-| _next_ | M01 infra close-out (Cline runbook Step 3b–d) → then M02 core slice | Fable/Cline | _queued_ | redis-runtime/clerk/otel/nest-boot | _pending_ |
+| 2026-07-09 | M01 Step 3b: Prisma-backed stores + db integration suite against live Postgres; dev+clerk auth providers behind `resolveBearerToken`; per-user scoping tests; CI runs migrate deploy + seed + integration | Cline | ✅ 96 unit (DB-free) + 8 integration | clerk-live/otel/nest-boot | ✅ merged to main |
+| 2026-07-10 | **M01 Step 3c: NestJS booted + live M01 endpoints — M01 CLOSED.** Composition root (`buildDepsFromEnv`: Prisma stores, DevAuth, BullMQ export queue, MinIO-or-fake ObjectStorage), `BearerAuthGuard`, `MeController` (GET /v1/me, PATCH settings, Yellow DELETE with full hard-delete cascade, Green POST export), 9 supertest e2e wired into CI (in-memory storage fake — no MinIO in CI). Verified on docker pg+redis+minio: 96 unit + 8 db-int + 9 e2e green; typecheck/lint/madge clean; live curl demo passed (GET /v1/me 200 with minted token; DELETE w/o approval → 403 capability_denied; no auth → 401) | Cline | ✅ all suites green | clerk-live/otel/export-worker/live-ingestion/terraform → queued M02+ | _pending_ |
+| _next_ | M02 core slice | Fable/Cline | _queued_ | — | _pending_ |
 
 ### Follow-ups (queued)
 - Prisma migrations use snake_case table names (`source_registry` etc.) via `@@map`; raw SQL queries must use the mapped names.
 - Seed script (`packages/db/src/seed.ts`) is idempotent (upsert by `key`); keep it that way as sources are added.
-- CI runs lint + typecheck + tests only; migration deploy against a service container is not yet in CI (queue for M02).
+- CI now runs the full chain: madge → prisma generate → typecheck → lint → schema validate → migrate deploy → seed → db integration → api e2e → unit suites.
+- A `me-export` worker (consuming the BullMQ queue and writing the export artifact to object storage) is queued for M02.
 
 **Execution surface (current):** VS Code + Cline extension running Fable 5 via OmniRoute, on the user's machine (real infra available). Opus reviews at each 🛑 gate in `docs/cline-runbook.md`.
 **Doc-sync note:** these docs postdate `careeros-m01-plus-starterkit.zip` and must be added to the repo's `docs/`: build-operating-model.md, github-setup.md, milestone-02-workorder.md, omniroute-guide.md, cline-runbook.md.

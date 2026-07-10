@@ -6,16 +6,32 @@
   "main": "src/index.ts",
   "scripts": {
     "build": "tsc --noEmit",
+    "dev": "tsx src/main.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@careeros/capability-gate": "workspace:*",
     "@careeros/config": "workspace:*",
     "@careeros/contracts": "workspace:*",
+    "@careeros/db": "workspace:^",
     "@careeros/observability": "workspace:*",
+    "@nestjs/common": "^11.1.28",
+    "@nestjs/core": "^11.1.28",
+    "@nestjs/platform-express": "^11.1.28",
+    "bullmq": "^5.79.3",
     "jose": "^6.2.3",
+    "minio": "^8.0.7",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/supertest": "^7.2.0",
+    "supertest": "^7.2.2",
+    "tsx": "^4.23.0"
   }
 }

@@ -25,6 +25,13 @@ export const envSchema = z.object({
     z.string().min(1).startsWith('redis://', 'REDIS_URL must be a redis:// URL'),
   ),
   S3_BUCKET: z.preprocess(emptyToUndefined, z.string().min(1)),
+  /** Optional MinIO/S3 wiring — when absent, apps fall back to the in-memory ObjectStorage fake (CI). */
+  S3_ENDPOINT: z.preprocess(emptyToUndefined, z.string().url().optional()),
+  S3_ACCESS_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  S3_SECRET_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+
+  // HTTP
+  PORT: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().default(3001)),
 
   // Auth (managed provider — never roll our own; dev = locally-signed HS256 JWT)
   AUTH_PROVIDER: z.preprocess(emptyToUndefined, z.enum(['dev', 'clerk', 'workos']).default('dev')),
