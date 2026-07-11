@@ -135,15 +135,55 @@ export function normalizeEntity(raw: RawEntity): NormalizedEntity {
 }
 
 /**
- * PROVENANCE GATE (deterministic): keep only entities whose quote is a verbatim
- * substring of the ORIGINAL source text. A model that hallucinates an entity
- * cannot cite it, so this simultaneously blocks fabrication. Compared against
- * the raw source (pre-sanitization) so exact golden quotes — with their original
- * punctuation and line structure — match.
+ * PROVENANCE + FABRICATION GATE (deterministic), two layers:
+ *
+ *  1. QUOTE grounding — the entity's quote must be a verbatim substring of the
+ *     ORIGINAL source text. A model that hallucinates a fact usually fabricates
+ *     a supporting header/line to cite; that invented quote cannot ground
+ *     (e.g. a "Senior Accountant, …" experience header the resume never wrote).
+ *  2. FIELD grounding — the ASSERTED PROPER-NOUN fields (experience/education/
+ *     project NAME, experience TITLE, education CREDENTIAL/FIELD) must each
+ *     appear in the source text (whitespace-collapsed, case-insensitive). These
+ *     are copied-from-the-page facts, so a fabricated one has no anchor and is
+ *     dropped — blocking the sneaky cheat of citing a REAL sentence while
+ *     asserting an inflated proper noun (e.g. quoting "studying for the
+ *     Solutions Architect certification" while asserting an "AWS Certified
+ *     Solutions Architect" credential, or asserting a "Founder" title / a
+ *     "RoboCup champion" project the text never names).
+ *
+ * DELIBERATE EXEMPTIONS (grounding these would create false positives):
+ *  - SKILL NAME is a normalized/summarized label, NOT verbatim source text
+ *    ("Wired 30+ residential builds" → skill "Residential wiring"). Requiring it
+ *    verbatim would wrongly drop honest skills, so skill names are exempt; skill
+ *    inflation is instead bounded by `coerceEvidence` (unknown → 'claimed', so a
+ *    "familiar with" mention can never become 'demonstrated' competence).
+ *  - EVIDENCE tier and DATES are classifications, not source strings.
+ *
+ * Compared against the raw source (pre-sanitization) so exact golden quotes and
+ * proper nouns — with original punctuation — match.
  */
 export function groundEntities(entities: NormalizedEntity[], sourceText: string): NormalizedEntity[] {
-  return entities.filter((e) => sourceText.includes(e.provenance.quote));
+  const haystack = collapse(sourceText).toLowerCase();
+  const fieldGrounded = (v: string | undefined): boolean =>
+    v === undefined || haystack.includes(collapse(v).toLowerCase());
+
+  return entities.filter((e) => {
+    if (!sourceText.includes(e.provenance.quote)) return false;
+    // Skill names are summarized labels → exempt from verbatim name grounding.
+    const nameOk = e.kind === 'skill' || fieldGrounded(e.name);
+    return (
+      nameOk &&
+      fieldGrounded(e.title) &&
+      fieldGrounded(e.credential) &&
+      fieldGrounded(e.field)
+    );
+  });
+
+
 }
+
+
+
 
 /**
  * Deduplicate by (kind + case-insensitive name), keeping the first occurrence.
