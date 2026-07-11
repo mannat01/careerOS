@@ -17,8 +17,10 @@ export {
 export {
   importProfile,
   type ExtractionPort,
+  type MemoryEventPort,
   type ProfileImportDeps,
 } from './modules/profile/import.handlers.js';
+export { MemoryServiceEventAdapter } from './modules/profile/memory-adapter.js';
 export {
   InMemoryProfileRepo,
   type ProfileRepo,

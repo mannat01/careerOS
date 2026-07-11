@@ -19,9 +19,27 @@ export interface ExtractionPort {
   extract(resumeText: string): Promise<ParsedEntity[]>;
 }
 
+/**
+ * Episodic-memory port — the handler emits ONE MemoryEvent per import/edit so the
+ * four-tier memory keeps an append-only record of how the profile came to be.
+ * The handler depends on this narrow interface (never on @careeros/memory or
+ * @careeros/db directly), so it stays a pure DB-free function under test.
+ * Production binds it to MemoryService.recordEvent; tests bind a trivial fake.
+ */
+export interface MemoryEventPort {
+  recordProfileImport(input: {
+    userId: string;
+    profileId: string;
+    counts: ProfileImportResponse['counts'];
+    source: 'resume_text' | 'entities';
+  }): Promise<void>;
+}
+
 export interface ProfileImportDeps {
   extractor: ExtractionPort;
   profiles: ProfileRepo;
+  /** Optional: when wired, an episodic MemoryEvent is appended per import. */
+  memory?: MemoryEventPort;
 }
 
 /**
@@ -56,10 +74,24 @@ export async function importProfile(
 
   // Persist under the caller's profile (repo upserts the profile, scoped to userId).
   const result = await deps.profiles.importEntities(ctx.userId, entities);
+  const counts = countByKind(result.entities);
+
+  // Episodic memory (append-only): record that this import/edit happened. The
+  // event captures WHAT changed (counts + source), not the authoritative facts
+  // themselves — those live in the profile tier. Best-effort: a memory failure
+  // must not fail the import (the facts are already durably persisted).
+  if (deps.memory) {
+    await deps.memory.recordProfileImport({
+      userId: ctx.userId,
+      profileId: result.profileId,
+      counts,
+      source: parsed.data.resumeText !== undefined ? 'resume_text' : 'entities',
+    });
+  }
 
   return ok(profileImportResponseSchema.parse({
     profileId: result.profileId,
-    counts: countByKind(result.entities),
+    counts,
     entities: result.entities,
   }));
 }

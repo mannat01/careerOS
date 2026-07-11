@@ -50,6 +50,9 @@ importers:
       '@careeros/llm-gateway':
         specifier: workspace:*
         version: link:../../packages/llm-gateway
+      '@careeros/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
       '@careeros/observability':
         specifier: workspace:*
         version: link:../../packages/observability
@@ -188,6 +191,9 @@ importers:
       '@careeros/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@careeros/memory':
+        specifier: workspace:*
+        version: link:../memory
       '@prisma/client':
         specifier: ^6.16.2
         version: 6.16.2(prisma@6.16.2(typescript@5.9.3))(typescript@5.9.3)
@@ -224,7 +230,18 @@ importers:
         specifier: workspace:*
         version: link:../config
 
-  packages/memory: {}
+  packages/memory:
+    dependencies:
+      '@careeros/llm-gateway':
+        specifier: workspace:*
+        version: link:../llm-gateway
+    devDependencies:
+      '@careeros/config':
+        specifier: workspace:*
+        version: link:../config
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@20.19.43)
 
   packages/observability:
     devDependencies:

@@ -53,6 +53,14 @@ enum AuditActor {
   system
 }
 
+// database-schema.md §memory — MemoryEvent.type.
+enum MemoryEventType {
+  twin_action
+  user_decision
+  outcome
+  system
+}
+
 // ---------------- identity ----------------
 
 model User {
@@ -68,8 +76,10 @@ model User {
   profile        Profile?
   auditLogs      AuditLog[]
   approvalTokens ApprovalToken[]
+  memoryEvents   MemoryEvent[]
 
   @@map("users")
+
 }
 
 model UserSettings {
@@ -110,9 +120,11 @@ model Profile {
   projects    Project[]
   education   Education[]
   skillClaims SkillClaim[]
+  derivedInsights DerivedInsight[]
 
   @@index([userId])
   @@map("profiles")
+
 }
 
 model Experience {
@@ -277,4 +289,47 @@ model ApprovalToken {
 
   @@index([userId, expiresAt])
   @@map("approval_tokens")
+}
+
+// ---------------- memory (M02 — database-schema.md §memory) ----------------
+
+/// Episodic tier. APPEND-ONLY: no application code path updates or deletes rows;
+/// removal happens ONLY via account hard-delete cascade (database-schema.md §4,
+/// same immutability contract as AuditLog). Written on profile import/edit and on
+/// every Twin action / user decision. `payload` is opaque JSON; `rationale` is the
+/// why-it-happened note the semantic tier distills from.
+model MemoryEvent {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type         MemoryEventType
+  payload      Json
+  rationale    String?
+  autonomyTier String?         @map("autonomy_tier")
+  occurredAt   DateTime        @default(now()) @map("occurred_at")
+
+  @@index([userId, occurredAt])
+  @@map("memory_events")
+}
+
+/// Semantic tier. REGENERABLE + NON-AUTHORITATIVE: distilled from profile +
+/// episodic memory; safe to drop and rebuild (regenerate()). Never a source of
+/// truth — carries `sourceRefs` back to the authoritative rows/events it summarized,
+/// a `freshnessAt` staleness marker, and the `modelVersion` that produced it.
+model DerivedInsight {
+  id        String  @id @default(uuid()) @db.Uuid
+  profileId String  @map("profile_id") @db.Uuid
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  statement    String
+  sourceRefs   Json     @map("source_refs")
+  freshnessAt  DateTime @map("freshness_at")
+  modelVersion String?  @map("model_version")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([profileId])
+  @@map("derived_insights")
 }

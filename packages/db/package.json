@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@careeros/contracts": "workspace:*",
+    "@careeros/memory": "workspace:*",
     "@prisma/client": "^6.16.2"
   },
   "devDependencies": {

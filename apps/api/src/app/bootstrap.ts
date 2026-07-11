@@ -8,13 +8,17 @@ import {
   PrismaApprovalTokenStore,
   PrismaAuditSink,
   PrismaClient,
+  PrismaEpisodicStore,
+  PrismaProfileReader,
   PrismaProfileRepo,
+  PrismaSemanticStore,
   PrismaUserLifecycleRepo,
   PrismaUserRepo,
   PrismaUserSettingsRepo,
 } from '@careeros/db';
 import { createLlmGateway, AnthropicProvider } from '@careeros/llm-gateway';
 import { LlmExtractionAgent } from '@careeros/agents';
+import { MemoryService, FakeEmbedder, FakeLlmProvider } from '@careeros/memory';
 import { AppModule } from './app.module.js';
 import type { AppDeps } from './deps.js';
 import type { AuthProvider } from '../common/auth/auth-provider.js';
@@ -24,6 +28,7 @@ import { InMemoryObjectStorage, type ObjectStorage } from '../common/storage/obj
 import { MinioObjectStorage } from '../common/storage/minio-object-storage.js';
 import { BullMqExportQueue, type ExportQueue } from '../common/queue/export-queue.js';
 import { AgentExtractionAdapter } from '../modules/profile/extractor-adapter.js';
+import { MemoryServiceEventAdapter } from '../modules/profile/memory-adapter.js';
 
 
 /**
@@ -62,6 +67,18 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
   });
   const extractor = new AgentExtractionAdapter(new LlmExtractionAgent(gateway));
 
+  // Four-tier memory (architecture.md §6). Agents/handlers touch it ONLY through
+  // MemoryService; the Prisma stores are the sole code paths to the memory tables.
+  // Embeddings + distillation are STUB(M02) fakes (deterministic) until real
+  // providers are wired.
+  const memory = new MemoryService({
+    profile: new PrismaProfileReader(prisma),
+    episodic: new PrismaEpisodicStore(prisma),
+    semantic: new PrismaSemanticStore(prisma),
+    embedder: new FakeEmbedder(),
+    summarizer: new FakeLlmProvider(),
+  });
+
   return {
     authProvider,
     identity: overrides?.identity ?? {
@@ -72,6 +89,7 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     profile: overrides?.profile ?? {
       extractor,
       profiles: new PrismaProfileRepo(prisma),
+      memory: new MemoryServiceEventAdapter(memory),
     },
 
     gate: overrides?.gate ?? {

@@ -13,9 +13,20 @@ import {
   importProfile,
   InMemoryProfileRepo,
   type ExtractionPort,
+  type MemoryEventPort,
   type ProfileImportDeps,
   type RequestContext,
 } from '../src/index.js';
+
+/** Records the episodic events the handler emits, for assertion. */
+class RecordingMemory implements MemoryEventPort {
+  readonly events: Parameters<MemoryEventPort['recordProfileImport']>[0][] = [];
+  recordProfileImport(input: Parameters<MemoryEventPort['recordProfileImport']>[0]): Promise<void> {
+    this.events.push(input);
+    return Promise.resolve();
+  }
+}
+
 
 const USER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const USER_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -105,5 +116,44 @@ describe('POST /v1/profile/import handler', () => {
       (second.body as { profileId: string }).profileId,
     );
     expect(profiles.dump(USER_A)).toHaveLength(2);
+  });
+
+  it('emits ONE episodic MemoryEvent per import, scoped to the caller (resumeText path)', async () => {
+    const memory = new RecordingMemory();
+    const res = await importProfile(ctx(USER_A), { resumeText: 'a resume' }, { ...deps, memory });
+    expect(res.status).toBe(200);
+    expect(memory.events).toHaveLength(1);
+    const ev = memory.events[0]!;
+    expect(ev.userId).toBe(USER_A);
+    expect(ev.source).toBe('resume_text');
+    expect(ev.counts.experiences).toBe(1);
+    expect(ev.profileId).toBe((res.body as { profileId: string }).profileId);
+  });
+
+  it('records source=entities when the parsed payload is imported directly', async () => {
+    const memory = new RecordingMemory();
+    const skill: ParsedEntity = {
+      kind: 'skill',
+      name: 'TypeScript',
+      detail: 'demonstrated',
+      evidence: 'demonstrated',
+      provenance: { source: 'resume', quote: 'Built services in TypeScript' },
+    };
+    await importProfile(ctx(USER_A), { entities: [skill] }, { ...deps, memory });
+    expect(memory.events).toHaveLength(1);
+    expect(memory.events[0]!.source).toBe('entities');
+    expect(memory.events[0]!.counts.skillClaims).toBe(1);
+  });
+
+  it('does NOT emit a MemoryEvent when the payload is invalid (fail-closed)', async () => {
+    const memory = new RecordingMemory();
+    const res = await importProfile(ctx(USER_A), {}, { ...deps, memory });
+    expect(res.status).toBe(422);
+    expect(memory.events).toHaveLength(0);
+  });
+
+  it('memory is optional — import still succeeds when no memory port is wired', async () => {
+    const res = await importProfile(ctx(USER_A), { resumeText: 'a resume' }, deps);
+    expect(res.status).toBe(200);
   });
 });

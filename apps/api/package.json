@@ -19,6 +19,7 @@
     "@careeros/contracts": "workspace:*",
     "@careeros/db": "workspace:^",
     "@careeros/llm-gateway": "workspace:*",
+    "@careeros/memory": "workspace:*",
     "@careeros/observability": "workspace:*",
 
     "@nestjs/common": "^11.1.28",
