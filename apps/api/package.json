@@ -13,11 +13,14 @@
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
+    "@careeros/agents": "workspace:*",
     "@careeros/capability-gate": "workspace:*",
     "@careeros/config": "workspace:*",
     "@careeros/contracts": "workspace:*",
     "@careeros/db": "workspace:^",
+    "@careeros/llm-gateway": "workspace:*",
     "@careeros/observability": "workspace:*",
+
     "@nestjs/common": "^11.1.28",
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",

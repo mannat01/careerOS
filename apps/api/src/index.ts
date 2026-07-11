@@ -14,7 +14,19 @@ export {
   type UserRepo,
   type UserSettingsRepo,
 } from './modules/identity/repos.js';
+export {
+  importProfile,
+  type ExtractionPort,
+  type ProfileImportDeps,
+} from './modules/profile/import.handlers.js';
+export {
+  InMemoryProfileRepo,
+  type ProfileRepo,
+  type ProfileImportResult,
+} from './modules/profile/repos.js';
+export { AgentExtractionAdapter } from './modules/profile/extractor-adapter.js';
 export { type AuthProvider } from './common/auth/auth-provider.js';
+
 export { DevAuthProvider } from './common/auth/dev-auth-provider.js';
 export { ClerkAuthProvider } from './common/auth/clerk-auth-provider.js';
 export { resolveBearerToken } from './common/auth/auth-guard.js';

@@ -8,10 +8,13 @@ import {
   PrismaApprovalTokenStore,
   PrismaAuditSink,
   PrismaClient,
+  PrismaProfileRepo,
   PrismaUserLifecycleRepo,
   PrismaUserRepo,
   PrismaUserSettingsRepo,
 } from '@careeros/db';
+import { createLlmGateway, AnthropicProvider } from '@careeros/llm-gateway';
+import { LlmExtractionAgent } from '@careeros/agents';
 import { AppModule } from './app.module.js';
 import type { AppDeps } from './deps.js';
 import type { AuthProvider } from '../common/auth/auth-provider.js';
@@ -20,6 +23,8 @@ import { ClerkAuthProvider } from '../common/auth/clerk-auth-provider.js';
 import { InMemoryObjectStorage, type ObjectStorage } from '../common/storage/object-storage.js';
 import { MinioObjectStorage } from '../common/storage/minio-object-storage.js';
 import { BullMqExportQueue, type ExportQueue } from '../common/queue/export-queue.js';
+import { AgentExtractionAdapter } from '../modules/profile/extractor-adapter.js';
+
 
 /**
  * Composition root — the ONLY place where concrete implementations are chosen
@@ -46,6 +51,17 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
 
   const audit = createAuditClient({ sink: new PrismaAuditSink(prisma) });
 
+  // Extraction agent on the CHEAP tier (ADR-001). The AnthropicProvider is a
+  // STUB(M01) until network access exists; extraction runs live behind the
+  // FakeLlmProvider in tests via `overrides.profile`.
+  const gateway = createLlmGateway({
+    provider: new AnthropicProvider(env.ANTHROPIC_API_KEY ?? ''),
+
+    modelsByTier: { cheap: env.LLM_CHEAP_MODEL, frontier: env.LLM_FRONTIER_MODEL },
+    pricing: {},
+  });
+  const extractor = new AgentExtractionAdapter(new LlmExtractionAgent(gateway));
+
   return {
     authProvider,
     identity: overrides?.identity ?? {
@@ -53,6 +69,11 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
       settings: new PrismaUserSettingsRepo(prisma),
       lifecycle: new PrismaUserLifecycleRepo(prisma),
     },
+    profile: overrides?.profile ?? {
+      extractor,
+      profiles: new PrismaProfileRepo(prisma),
+    },
+
     gate: overrides?.gate ?? {
       secret: env.APPROVAL_TOKEN_SECRET,
       tokenStore: new PrismaApprovalTokenStore(prisma),

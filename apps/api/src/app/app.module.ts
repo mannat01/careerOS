@@ -1,8 +1,10 @@
 
 import { Module, type DynamicModule } from '@nestjs/common';
 import { MeController } from './me.controller.js';
+import { ProfileController } from './profile.controller.js';
 import { BearerAuthGuard } from './bearer-auth.guard.js';
 import { APP_DEPS, type AppDeps } from './deps.js';
+
 
 /**
  * AppModule.forRoot(deps) — the deps container is assembled by the composition
@@ -14,7 +16,8 @@ export class AppModule {
   static forRoot(deps: AppDeps): DynamicModule {
     return {
       module: AppModule,
-      controllers: [MeController],
+      controllers: [MeController, ProfileController],
+
       providers: [{ provide: APP_DEPS, useValue: deps }, BearerAuthGuard],
     };
   }

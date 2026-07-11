@@ -9,10 +9,14 @@
 import { describe, expect, it } from 'vitest';
 import { runExtractionEval } from '../src/harness.js';
 import { loadExtractionCases } from '../src/datasets.js';
-import { StubExtractionAgent } from '../src/stub-agents.js';
+import { createFixtureAgent } from '../src/fixture-agent.js';
 
-// STUB(M02): replace with the real extraction agent from packages/agents in Step 2.
-const currentAgent = new StubExtractionAgent();
+// Step 2: the REAL extraction agent (packages/agents) behind FakeLlmProvider.
+// The full pipeline (sanitize → prompt → parse → deterministic post-parse +
+// provenance grounding) runs for real; only the network LLM call is faked.
+const cases = loadExtractionCases();
+const currentAgent = createFixtureAgent(cases);
+
 
 describe('M02 eval gate — resume extraction', async () => {
   const result = await runExtractionEval(currentAgent, loadExtractionCases());

@@ -11,6 +11,12 @@
     "test": "vitest run",
     "eval": "vitest run --config vitest.eval.config.ts"
   },
+  "dependencies": {
+    "@careeros/agents": "workspace:*",
+    "@careeros/connectors": "workspace:*",
+    "@careeros/llm-gateway": "workspace:*"
+  },
+
   "devDependencies": {
     "@careeros/config": "workspace:*"
   }

@@ -32,6 +32,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@careeros/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
       '@careeros/capability-gate':
         specifier: workspace:*
         version: link:../../packages/capability-gate
@@ -44,6 +47,9 @@ importers:
       '@careeros/db':
         specifier: workspace:^
         version: link:../../packages/db
+      '@careeros/llm-gateway':
+        specifier: workspace:*
+        version: link:../../packages/llm-gateway
       '@careeros/observability':
         specifier: workspace:*
         version: link:../../packages/observability
@@ -93,12 +99,39 @@ importers:
   apps/workers: {}
 
   evals:
+    dependencies:
+      '@careeros/agents':
+        specifier: workspace:*
+        version: link:../packages/agents
+      '@careeros/connectors':
+        specifier: workspace:*
+        version: link:../packages/connectors
+      '@careeros/llm-gateway':
+        specifier: workspace:*
+        version: link:../packages/llm-gateway
     devDependencies:
       '@careeros/config':
         specifier: workspace:*
         version: link:../packages/config
 
-  packages/agents: {}
+  packages/agents:
+    dependencies:
+      '@careeros/connectors':
+        specifier: workspace:*
+        version: link:../connectors
+      '@careeros/llm-gateway':
+        specifier: workspace:*
+        version: link:../llm-gateway
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+    devDependencies:
+      '@careeros/config':
+        specifier: workspace:*
+        version: link:../config
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@20.19.43)
 
   packages/capability-gate:
     dependencies:

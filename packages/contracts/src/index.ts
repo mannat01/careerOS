@@ -28,3 +28,16 @@ export {
   type Opportunity,
   type SourceRegistryEntry,
 } from './opportunity.js';
+export {
+  provenanceSchema,
+  parsedEntitySchema,
+  profileImportRequestSchema,
+  importedEntitySchema,
+  profileImportResponseSchema,
+  type ProfileProvenance,
+  type ParsedEntity,
+  type ProfileImportRequest,
+  type ImportedEntity,
+  type ProfileImportResponse,
+} from './profile.js';
+

@@ -17,3 +17,5 @@ export { PrismaApprovalTokenStore } from './stores/prisma-approval-token-store.j
 export { PrismaAuditSink } from './stores/prisma-audit-sink.js';
 export { PrismaSourceRegistry } from './stores/prisma-source-registry.js';
 export { PrismaUserRepo, PrismaUserSettingsRepo, PrismaUserLifecycleRepo } from './stores/prisma-identity-repos.js';
+export { PrismaProfileRepo } from './stores/prisma-profile-repo.js';
+
