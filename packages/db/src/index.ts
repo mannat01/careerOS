@@ -23,4 +23,4 @@ export {
   PrismaEpisodicStore,
   PrismaSemanticStore,
 } from './stores/prisma-memory-stores.js';
-
+export { PrismaGraphStore } from './stores/prisma-graph-store.js';

@@ -22,6 +22,13 @@ export {
 } from './modules/profile/import.handlers.js';
 export { MemoryServiceEventAdapter } from './modules/profile/memory-adapter.js';
 export {
+  queryGraph,
+  GraphMemoryServiceAdapter,
+  type GraphQueryPort,
+  type GraphQueryDeps,
+  type GraphQueryResponse,
+} from './modules/cie/graph.handlers.js';
+export {
   InMemoryProfileRepo,
   type ProfileRepo,
   type ProfileImportResult,

@@ -9,6 +9,7 @@ import {
   PrismaAuditSink,
   PrismaClient,
   PrismaEpisodicStore,
+  PrismaGraphStore,
   PrismaProfileReader,
   PrismaProfileRepo,
   PrismaSemanticStore,
@@ -18,7 +19,8 @@ import {
 } from '@careeros/db';
 import { createLlmGateway, AnthropicProvider } from '@careeros/llm-gateway';
 import { LlmExtractionAgent } from '@careeros/agents';
-import { MemoryService, FakeEmbedder, FakeLlmProvider } from '@careeros/memory';
+import { MemoryService, GraphMemoryService, FakeEmbedder, FakeLlmProvider } from '@careeros/memory';
+import { GraphMemoryServiceAdapter } from '../modules/cie/graph.handlers.js';
 import { AppModule } from './app.module.js';
 import type { AppDeps } from './deps.js';
 import type { AuthProvider } from '../common/auth/auth-provider.js';
@@ -79,6 +81,12 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     summarizer: new FakeLlmProvider(),
   });
 
+  // Career Knowledge Graph (database-schema.md §cie). Agents/handlers touch it
+  // ONLY through GraphMemoryService; the PrismaGraphStore is the sole code path
+  // to the graph_nodes / graph_edges tables. Node embeddings use the same
+  // deterministic FakeEmbedder as the memory tiers (STUB(M02)).
+  const graph = new GraphMemoryService(new PrismaGraphStore(prisma), new FakeEmbedder());
+
   return {
     authProvider,
     identity: overrides?.identity ?? {
@@ -91,6 +99,7 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
       profiles: new PrismaProfileRepo(prisma),
       memory: new MemoryServiceEventAdapter(memory),
     },
+    cie: overrides?.cie ?? { graph: new GraphMemoryServiceAdapter(graph) },
 
     gate: overrides?.gate ?? {
       secret: env.APPROVAL_TOKEN_SECRET,

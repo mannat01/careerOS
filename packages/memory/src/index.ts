@@ -27,6 +27,23 @@ export {
   InMemoryEpisodicStore,
   InMemorySemanticStore,
 } from './fakes.js';
+export {
+  GraphMemoryService,
+  InMemoryGraphStore,
+  type GraphNode,
+  type GraphNodeInput,
+  type GraphEdge,
+  type GraphEdgeInput,
+  type GraphStore,
+  type GraphProfileInput,
+  type Subgraph,
+  type NeighborhoodQuery,
+  type NodeHit,
+  type NodeKind,
+  type EdgeType,
+  NODE_KINDS,
+  EDGE_TYPES,
+} from '../graph/index.js';
 export type {
   FactKind,
   ProfileFact,

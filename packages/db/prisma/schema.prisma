@@ -77,6 +77,8 @@ model User {
   auditLogs      AuditLog[]
   approvalTokens ApprovalToken[]
   memoryEvents   MemoryEvent[]
+  graphNodes     GraphNode[]
+  graphEdges     GraphEdge[]
 
   @@map("users")
 
@@ -332,4 +334,98 @@ model DerivedInsight {
 
   @@index([profileId])
   @@map("derived_insights")
+}
+
+// ---------------- CIE — Career Knowledge Graph (database-schema.md §cie) ----------------
+
+/// GraphNode.kind — the fixed enum from database-schema.md §cie.
+enum GraphNodeKind {
+  person
+  company
+  recruiter
+  interview
+  resume
+  project
+  certification
+  skill
+  industry
+  application
+  outcome
+  learning_resource
+  opportunity
+  goal
+}
+
+/// GraphEdge.type — the typed relationship enum from database-schema.md §cie.
+enum GraphEdgeType {
+  worked_at
+  requires_skill
+  has_skill
+  demonstrates
+  interviewed_with
+  led_to_outcome
+  builds_toward_goal
+  taught_by
+  competes_with
+  reports_to
+  located_in
+  targets
+  evidenced_by
+  studied_at
+}
+
+/// A Career Knowledge Graph node (database-schema.md §cie). `key` is the per-user
+/// natural dedupe key (e.g. `company:acme corp`) that makes upsert-from-profile
+/// idempotent. `refId` points back at the owning domain row when one exists.
+/// `embedding` is the node's pgvector vector for similarity search.
+model GraphNode {
+  id     String        @id @default(uuid()) @db.Uuid
+  userId String        @map("user_id") @db.Uuid
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  kind      GraphNodeKind
+  /// Natural dedupe key: `(userId, kind, key)` is unique per user.
+  key       String
+  /// Points back at the owning domain row (e.g. experience id, project id).
+  refId     String? @map("ref_id")
+  label     String
+  attrs     Json    @default("{}")
+  /// pgvector embedding for similarity search (hnsw index added in migration SQL).
+  embedding Unsupported("vector(1536)")?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  edgesFrom GraphEdge[] @relation("from_node")
+  edgesTo   GraphEdge[] @relation("to_node")
+
+  @@unique([userId, kind, key])
+  @@index([userId, kind])
+  @@map("graph_nodes")
+}
+
+/// A typed, directed relationship between two GraphNodes. Traversal is
+/// BIDIRECTIONAL — an edge is followable from either endpoint — so
+/// `(userId, from, type)` and `(userId, to, type)` are both indexed.
+model GraphEdge {
+  id     String       @id @default(uuid()) @db.Uuid
+  userId String       @map("user_id") @db.Uuid
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  fromNodeId String       @map("from_node_id") @db.Uuid
+  fromNode   GraphNode    @relation("from_node", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNodeId   String       @map("to_node_id") @db.Uuid
+  toNode     GraphNode    @relation("to_node", fields: [toNodeId], references: [id], onDelete: Cascade)
+  type       GraphEdgeType
+  weight     Float        @default(1)
+  attrs      Json         @default("{}")
+  provenance String
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, fromNodeId, toNodeId, type])
+  @@index([userId, fromNodeId, type])
+  @@index([userId, toNodeId, type])
+  @@map("graph_edges")
 }
