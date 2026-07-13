@@ -29,6 +29,15 @@ export {
   type GraphQueryResponse,
 } from './modules/cie/graph.handlers.js';
 export {
+  getState,
+  explainDimension,
+  recomputeState,
+  MemoryStateFactAdapter,
+  MemoryStateEvidenceAdapter,
+  MemoryStateEventAdapter,
+  type StateHandlerDeps,
+} from './modules/cie/state.handlers.js';
+export {
   InMemoryProfileRepo,
   type ProfileRepo,
   type ProfileImportResult,

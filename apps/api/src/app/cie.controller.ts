@@ -1,6 +1,12 @@
-import { Controller, Get, Inject, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { queryGraph, type GraphQueryDeps } from '../modules/cie/graph.handlers.js';
+import {
+  explainDimension,
+  getState,
+  recomputeState,
+  type StateHandlerDeps,
+} from '../modules/cie/state.handlers.js';
 import type { HandlerResponse } from '../common/errors/http-error.js';
 import { BearerAuthGuard, type AuthedRequest } from './bearer-auth.guard.js';
 import { APP_DEPS, type AppDeps } from './deps.js';
@@ -12,8 +18,10 @@ function send<T>(res: Response, r: HandlerResponse<T>): void {
 /**
  * /v1/cie — Career Intelligence Engine (M02+, api-spec.md).
  * Every route sits behind BearerAuthGuard; handlers receive ONLY the verified
- * RequestContext (never ids from body/query). The graph endpoint is Green
- * (read-only), so no capability gate is required.
+ * RequestContext (never ids from body/query), so all reads/writes are PER-USER
+ * scoped to the token owner. Graph + state reads are Green (read-only), so no
+ * capability gate is required; recompute is a self-scoped derive of the caller's
+ * own model, also Green.
  */
 @Controller('v1/cie')
 @UseGuards(BearerAuthGuard)
@@ -31,5 +39,34 @@ export class CieController {
   ): Promise<void> {
     const cie: GraphQueryDeps = this.deps.cie;
     send(res, await queryGraph(req.ctx, { node, depth, types }, cie));
+  }
+
+  /** GET /v1/cie/state — the caller's current Career State Model (≥12 dimensions). */
+  @Get('state')
+  async state(@Req() req: AuthedRequest, @Res() res: Response): Promise<void> {
+    const deps: StateHandlerDeps = this.deps.state;
+    send(res, await getState(req.ctx, deps));
+  }
+
+  /** GET /v1/cie/state/:dimension/explain — evidence + reasoning for one dimension. */
+  @Get('state/:dimension/explain')
+  async explain(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+    @Param('dimension') dimension: string,
+  ): Promise<void> {
+    const deps: StateHandlerDeps = this.deps.state;
+    send(res, await explainDimension(req.ctx, dimension, deps));
+  }
+
+  /** POST /v1/cie/state/recompute — recompute the model (optional change-hook body). */
+  @Post('state/recompute')
+  async recompute(
+    @Req() req: AuthedRequest,
+    @Body() body: unknown,
+    @Res() res: Response,
+  ): Promise<void> {
+    const deps: StateHandlerDeps = this.deps.state;
+    send(res, await recomputeState(req.ctx, body, deps));
   }
 }

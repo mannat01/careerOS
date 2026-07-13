@@ -4,6 +4,7 @@ import type { AuthProvider } from '../common/auth/auth-provider.js';
 import type { IdentityDeps } from '../modules/identity/me.handlers.js';
 import type { ProfileImportDeps } from '../modules/profile/import.handlers.js';
 import type { GraphQueryDeps } from '../modules/cie/graph.handlers.js';
+import type { StateHandlerDeps } from '../modules/cie/state.handlers.js';
 import type { ObjectStorage } from '../common/storage/object-storage.js';
 import type { ExportQueue } from '../common/queue/export-queue.js';
 
@@ -21,6 +22,7 @@ export interface AppDeps {
   identity: IdentityDeps;
   profile: ProfileImportDeps;
   cie: GraphQueryDeps;
+  state: StateHandlerDeps;
   gate: EnforceDeps;
   storage: ObjectStorage;
   exportQueue: ExportQueue;

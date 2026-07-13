@@ -20,7 +20,13 @@ import {
 import { createLlmGateway, AnthropicProvider } from '@careeros/llm-gateway';
 import { LlmExtractionAgent } from '@careeros/agents';
 import { MemoryService, GraphMemoryService, FakeEmbedder, FakeLlmProvider } from '@careeros/memory';
+import { CareerStateService, InMemoryStateStore, LlmStateUpdaterAgent } from '@careeros/cie-state';
 import { GraphMemoryServiceAdapter } from '../modules/cie/graph.handlers.js';
+import {
+  MemoryStateEventAdapter,
+  MemoryStateEvidenceAdapter,
+  MemoryStateFactAdapter,
+} from '../modules/cie/state.handlers.js';
 import { AppModule } from './app.module.js';
 import type { AppDeps } from './deps.js';
 import type { AuthProvider } from '../common/auth/auth-provider.js';
@@ -73,12 +79,29 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
   // MemoryService; the Prisma stores are the sole code paths to the memory tables.
   // Embeddings + distillation are STUB(M02) fakes (deterministic) until real
   // providers are wired.
+  const profileReader = new PrismaProfileReader(prisma);
   const memory = new MemoryService({
-    profile: new PrismaProfileReader(prisma),
+    profile: profileReader,
     episodic: new PrismaEpisodicStore(prisma),
     semantic: new PrismaSemanticStore(prisma),
     embedder: new FakeEmbedder(),
     summarizer: new FakeLlmProvider(),
+  });
+
+  // Career State Model (database-schema.md §cie). The StateUpdater runs on the
+  // FRONTIER tier (state synthesis is strategic reasoning) behind the same
+  // gateway; its deterministic guardrails (packages/cie/state) are what enforce
+  // the demonstrated-vs-inferred + zero-fabrication invariants, not the prompt.
+  // The service reaches memory ONLY through the ProfileReader / MemoryService
+  // seams below — never @careeros/db. The store is in-memory for now (M02);
+  // the Prisma-backed adapter honoring the same StateStore contract lands with
+  // the persisted career_state_* tables.
+  const stateService = new CareerStateService({
+    facts: new MemoryStateFactAdapter(profileReader),
+    evidence: new MemoryStateEvidenceAdapter(profileReader),
+    store: new InMemoryStateStore(),
+    events: new MemoryStateEventAdapter(memory),
+    agent: new LlmStateUpdaterAgent(gateway),
   });
 
   // Career Knowledge Graph (database-schema.md §cie). Agents/handlers touch it
@@ -100,6 +123,7 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
       memory: new MemoryServiceEventAdapter(memory),
     },
     cie: overrides?.cie ?? { graph: new GraphMemoryServiceAdapter(graph) },
+    state: overrides?.state ?? { service: stateService },
 
     gate: overrides?.gate ?? {
       secret: env.APPROVAL_TOKEN_SECRET,

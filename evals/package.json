@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@careeros/agents": "workspace:*",
+    "@careeros/cie-state": "workspace:*",
     "@careeros/connectors": "workspace:*",
     "@careeros/llm-gateway": "workspace:*"
   },
