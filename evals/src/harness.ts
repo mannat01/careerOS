@@ -17,9 +17,18 @@ import type {
   ExtractedEntity,
   ExtractionAgent,
   ExtractionCase,
+  JobDescription,
+  MatchScore,
+  ProfileFact,
+  ScoringAgent,
+  ScoringCase,
   StateModelAgent,
   StateModelCase,
+  TailoredResume,
+  TailoringAgent,
+  TailoringCase,
 } from './types.js';
+
 
 // ---------- helpers ----------
 
@@ -186,3 +195,235 @@ export async function runStateModelEval(
     passed: results.every((r) => r.passed),
   };
 }
+
+// ============================================================================
+// M03 — TAILORING scoring (property-based, never one "correct" resume).
+// A tailored variant passes a case iff ALL of:
+//   (a) ZERO FABRICATION — every bullet's factId resolves to a real profile
+//       fact, AND no `forbidden` inflation string appears in the rendered text;
+//   (b) RELEVANCE — the selected fact ids overlap the case's relevant set (the
+//       tailor surfaced evidence that covers the job's stated requirements);
+//   (c) ATS-SAFETY — the rendered output passes parse-safety heuristics;
+//   (d) HONEST-CLOSEST (adversarial only) — when the JD demands a skill the
+//       candidate lacks, at least one honest closest-real fact is surfaced
+//       instead of inventing the gap.
+// ============================================================================
+
+// ---------- ATS-safety heuristic ----------
+
+
+export interface AtsCheckResult {
+  passed: boolean;
+  warnings: string[];
+}
+
+/**
+ * ATS parse-safety heuristics on the RENDERED plain-text variant. A resume that
+ * trips these confuses applicant-tracking parsers. Deliberately simple and
+ * deterministic so it runs identically in the eval gate and unit tests.
+ */
+export function atsCheck(rendered: string): AtsCheckResult {
+  const warnings: string[] = [];
+  if (rendered.trim().length === 0) warnings.push('empty document');
+  // Tables/columns via tab or pipe layout break single-column parsers.
+  if (/\t/.test(rendered)) warnings.push('tab characters (multi-column layout)');
+  if (/\|/.test(rendered)) warnings.push('pipe characters (table layout)');
+  // HTML/markup leaks confuse text extractors.
+  if (/<[a-z/][^>]*>/i.test(rendered)) warnings.push('HTML/XML markup');
+  // Non-ASCII "decorative" glyphs (icons, box-drawing) are common parse hazards.
+  if (/[\u2500-\u257F\uE000-\uF8FF\u2022\u25CF\u25AA]/.test(rendered)) {
+    warnings.push('decorative/non-ASCII glyphs');
+  }
+  // Image/graphic references — ATS cannot read text inside images.
+  if (/\.(png|jpg|jpeg|gif|svg)\b/i.test(rendered)) warnings.push('image reference');
+  return { passed: warnings.length === 0, warnings };
+}
+
+export interface TailoringCaseResult {
+  caseId: string;
+  adversarial: boolean;
+  /** Bullet factIds that do NOT resolve to a real profile fact (fabrication). */
+  ungroundedFactIds: string[];
+  /** Forbidden inflation strings found in the rendered variant. */
+  fabrications: string[];
+  /** Overlap between selected facts and the case's relevant set. */
+  relevanceOverlap: number;
+  relevanceOk: boolean;
+  ats: AtsCheckResult;
+  /** Adversarial: did the variant surface ≥1 honest closest-real fact? */
+  honestEvidencePresent: boolean;
+  passed: boolean;
+}
+
+export function scoreTailoringCase(c: TailoringCase, produced: TailoredResume): TailoringCaseResult {
+  const factIds = new Set(c.profile.map((f) => f.id));
+
+  // (a) zero fabrication — structural: every bullet traces to a real fact.
+  const ungroundedFactIds = produced.bullets
+    .filter((b) => !factIds.has(b.factId))
+    .map((b) => b.factId || '(missing)');
+
+  // (a) zero fabrication — lexical: no forbidden inflation in the rendered text.
+  const haystack = norm(produced.rendered);
+  const fabrications = (c.forbidden ?? []).filter((f) => haystack.includes(norm(f)));
+
+  // (b) relevance — selected (grounded) facts overlap the relevant set.
+  const selected = new Set(produced.bullets.map((b) => b.factId));
+  const relevant = c.expectedRelevantFactIds;
+  const hit = relevant.filter((id) => selected.has(id)).length;
+  const relevanceOverlap = relevant.length === 0 ? 1 : hit / relevant.length;
+  // Bar: at least half of the genuinely-relevant evidence is surfaced.
+  const relevanceOk = relevanceOverlap >= 0.5;
+
+  // (c) ATS-safety of the rendered output.
+  const ats = atsCheck(produced.rendered);
+
+  // (d) honest-closest (adversarial): ≥1 of the closest-real facts is surfaced.
+  const honestClosest = c.honestClosestFactIds ?? [];
+  const honestEvidencePresent =
+    honestClosest.length === 0 ? true : honestClosest.some((id) => selected.has(id));
+
+  const passed =
+    ungroundedFactIds.length === 0 &&
+    fabrications.length === 0 &&
+    relevanceOk &&
+    ats.passed &&
+    honestEvidencePresent;
+
+  return {
+    caseId: c.id,
+    adversarial: c.adversarial ?? false,
+    ungroundedFactIds,
+    fabrications,
+    relevanceOverlap,
+    relevanceOk,
+    ats,
+    honestEvidencePresent,
+    passed,
+  };
+}
+
+export interface TailoringSuiteResult {
+  cases: TailoringCaseResult[];
+  fabricationCount: number;
+  /** Adversarial cases where a forbidden inflation leaked (the worst failure). */
+  adversarialFabrications: number;
+  passed: boolean;
+}
+
+export async function runTailoringEval(
+  agent: TailoringAgent,
+  cases: TailoringCase[],
+): Promise<TailoringSuiteResult> {
+  const results: TailoringCaseResult[] = [];
+  for (const c of cases) {
+    results.push(scoreTailoringCase(c, await agent.tailor(c.profile, c.job)));
+  }
+  return {
+    cases: results,
+    fabricationCount: results.reduce((n, r) => n + r.fabrications.length + r.ungroundedFactIds.length, 0),
+    adversarialFabrications: results
+      .filter((r) => r.adversarial)
+      .reduce((n, r) => n + r.fabrications.length + r.ungroundedFactIds.length, 0),
+    passed: results.every((r) => r.passed),
+  };
+}
+
+// ============================================================================
+// M03 — SCORING scoring (calibration + explanation grounding + reproducibility).
+// A match score passes a case iff ALL of:
+//   - overall lands inside the expected band (calibration, not exactness);
+//   - every required subscore key is present (never a bare number);
+//   - the explanation is non-empty AND grounded — it cites at least the
+//     required real fact ids and contains no forbidden fabrication;
+//   - identical inputs reproduce an identical score (checked by runScoringEval).
+// ============================================================================
+
+export interface ScoringCaseResult {
+  caseId: string;
+  bandOk: boolean;
+  overall: number;
+  missingSubscores: string[];
+  explanationPresent: boolean;
+  /** Required fact ids the explanation failed to cite. */
+  ungroundedExplanation: string[];
+  fabrications: string[];
+  reproducible: boolean;
+  passed: boolean;
+}
+
+export function scoreScoringCase(
+  c: ScoringCase,
+  produced: MatchScore,
+  reproduced?: MatchScore,
+): ScoringCaseResult {
+  const bandOk = produced.overall >= c.expectedBand.min && produced.overall <= c.expectedBand.max;
+
+  const presentKeys = new Set(produced.subscores.map((s) => s.key));
+  const missingSubscores = c.requiredSubscores.filter((k) => !presentKeys.has(k));
+
+  const explanationPresent = produced.explanation.trim().length > 0;
+
+  const citedRefs = new Set(produced.evidenceRefs);
+  const ungroundedExplanation = c.explanationMustCiteFactIds.filter((id) => !citedRefs.has(id));
+
+  const hay = norm(`${produced.explanation}\n${produced.subscores.map((s) => s.key).join(' ')}`);
+  const fabrications = (c.forbidden ?? []).filter((f) => hay.includes(norm(f)));
+
+  // Reproducibility: identical inputs → identical overall + subscores. When the
+  // caller supplies a second run, compare; otherwise treat as reproducible.
+  const reproducible = reproduced
+    ? reproduced.overall === produced.overall &&
+      JSON.stringify(reproduced.subscores) === JSON.stringify(produced.subscores)
+    : true;
+
+  const passed =
+    bandOk &&
+    missingSubscores.length === 0 &&
+    explanationPresent &&
+    ungroundedExplanation.length === 0 &&
+    fabrications.length === 0 &&
+    reproducible;
+
+  return {
+    caseId: c.id,
+    bandOk,
+    overall: produced.overall,
+    missingSubscores,
+    explanationPresent,
+    ungroundedExplanation,
+    fabrications,
+    reproducible,
+    passed,
+  };
+}
+
+export interface ScoringSuiteResult {
+  cases: ScoringCaseResult[];
+  fabricationCount: number;
+  nonReproducible: number;
+  passed: boolean;
+}
+
+export async function runScoringEval(
+  agent: ScoringAgent,
+  cases: ScoringCase[],
+): Promise<ScoringSuiteResult> {
+  const results: ScoringCaseResult[] = [];
+  for (const c of cases) {
+    // Two identical runs prove reproducibility for identical inputs.
+    const first = await agent.score(c.profile, c.job);
+    const second = await agent.score(c.profile, c.job);
+    results.push(scoreScoringCase(c, first, second));
+  }
+  return {
+    cases: results,
+    fabricationCount: results.reduce((n, r) => n + r.fabrications.length, 0),
+    nonReproducible: results.filter((r) => !r.reproducible).length,
+    passed: results.every((r) => r.passed),
+  };
+}
+
+// Re-export types used by callers that only import the harness.
+export type { JobDescription, ProfileFact };
+

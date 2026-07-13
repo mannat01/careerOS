@@ -55,7 +55,19 @@ No historical data exists. An agent's **first** deliverable is its hand-authored
 Stop and surface a question if: a spec contradicts another spec; an acceptance criterion isn't testable as written; an invariant would have to be weakened to proceed; or a `[Decision]` item from `docs/readiness-review.md` blocks you (LLM vendor strategy, source mix, pricing/free-tier gating). These are product calls, not yours to invent.
 
 ## 10. Current status
-- **M01 — Foundations: COMPLETE (2026-07-10). M02 ready** (see `docs/milestone-02.md` + `docs/milestone-02-workorder.md`).
+
+### Build log
+| Date | Milestone | Status | Notes |
+| --- | --- | --- | --- |
+| 2026-07-08 | M01 — Foundations | COMPLETE | Pure logic + interfaces; `pnpm -w test` green (80 tests). |
+| 2026-07-10 | M01 — Foundations | COMPLETE (real-infra) | NestJS booted against docker (pg+redis+minio); unit 96 / db 8 / e2e 9 green. |
+| 2026-07-13 | M02 — Identity, Memory, Graph, Career State Model | **COMPLETE** | Extraction eval 24/24 (incl. 3 zero-fabrication traps), state-model eval 8/8, unit 173+. **Onboarding UI (F02.5) deferred to the web-app effort — tracked follow-up.** |
+| 2026-07-13 | M03 — Resume Intelligence | IN PROGRESS | Step 1: authored `evals/{tailoring,scoring}/` golden sets (golden-first). Eval gates RED until Step 2 builds the tailor/scorer. |
+
+- **M03 — Resume Intelligence: IN PROGRESS (golden-first).** Step 1 authors the tailoring + scoring golden sets under `evals/{tailoring,scoring}/` (eval gates RED until Step 2 builds the tailor/scorer). See `docs/milestone-03.md`.
+- **M02 — Identity, Memory, Graph, Career State Model: COMPLETE (2026-07-13)** (onboarding UI deferred to the web-app effort — tracked follow-up). M03 ready (see `docs/milestone-03.md`).
+- **Tracked follow-up (deferred from M02):** Onboarding UI (F02.5 — import → reflect-back; `CareerStatePanel`, `ProvenanceTag`, `KnowledgeGraphExplorer`, `ConfidenceBadge`) is deferred to the web-app effort. The M02 backend (extraction, memory, graph, state model) is complete and gated; the UI is a presentation layer over already-green services.
+- **M01 — Foundations: COMPLETE (2026-07-10).**
 - **M01 record (2026-07-08, sandbox build — pure logic + interfaces, infra stubbed):**
   - DONE (implemented + tested, `pnpm -w test` green — 80 tests / 10 files):
     - `packages/config` — single zod env schema; only sanctioned `process.env` read.

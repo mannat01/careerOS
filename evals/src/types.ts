@@ -136,3 +136,126 @@ export interface DerivedDimension {
 export interface StateModelAgent {
   derive(profile: ProfileFact[]): Promise<DerivedDimension[]>;
 }
+
+// ============================================================================
+// M03 — RESUME INTELLIGENCE golden types (authored golden-first, before the
+// tailoring/scoring agents exist). They define THE BAR the Step-2 agents must
+// meet. Assertions are CHECKABLE PROPERTIES, never one "correct" resume:
+//   (a) zero fabrication — every tailored claim traces to a real ProfileFact;
+//   (b) relevance — selected facts overlap the job's stated requirements;
+//   (c) ATS-safety of the rendered output.
+// ============================================================================
+
+/** A parsed job description — the tailoring/scoring input alongside the profile. */
+export interface JobDescription {
+  title: string;
+  /** e.g. 'junior' | 'mid' | 'senior' | 'staff' when the JD states one. */
+  seniority?: string;
+  /** The job's STATED requirements — relevance is measured against these. */
+  requirements: string[];
+  /** Full JD text (untrusted source; sanitize before it reaches an LLM). */
+  text: string;
+}
+
+// ---------- tailoring (profile + job → tailored resume variant) ----------
+
+/**
+ * One bullet in a tailored variant. `factId` is its structural provenance —
+ * the real ProfileFact it traces to (the tailoring analogue of the extraction
+ * Provenance quote). A bullet whose factId does not resolve to a real profile
+ * fact is a fabrication.
+ */
+export interface TailoredBullet {
+  text: string;
+  factId: string;
+}
+
+/** The tailoring agent's output for a (profile, job) pair. */
+export interface TailoredResume {
+  bullets: TailoredBullet[];
+  /** ATS-safe plain-text rendering of the variant (what the renderer emits). */
+  rendered: string;
+}
+
+export interface TailoringAgent {
+  tailor(profile: ProfileFact[], job: JobDescription): Promise<TailoredResume>;
+}
+
+export interface TailoringCase {
+  id: string;
+  description: string;
+  profile: ProfileFact[];
+  job: JobDescription;
+  /**
+   * RELEVANCE key: profile fact ids that genuinely cover the job's stated
+   * requirements. A good tailoring selects facts that overlap THIS set — it
+   * surfaces the candidate's actually-relevant evidence, not filler.
+   */
+  expectedRelevantFactIds: string[];
+  /**
+   * PRESSURE-TO-FABRICATE key (adversarial): skills/seniority the JD demands
+   * that the candidate genuinely LACKS. None of these may appear in the variant
+   * as if held — the tailor must not invent them.
+   */
+  gaps?: string[];
+  /**
+   * The honest, closest-real evidence the tailor should surface INSTEAD of
+   * inventing a gap skill (e.g. adjacent tools, transferable work). At least one
+   * must be represented in the variant on adversarial cases.
+   */
+  honestClosestFactIds?: string[];
+  /**
+   * ZERO-FABRICATION guard: exact strings that must NEVER appear in the rendered
+   * variant (the concrete inflation a padding model would emit for the gap).
+   */
+  forbidden?: string[];
+  /** Marks a "pressure to fabricate" case. */
+  adversarial?: boolean;
+  /** Human note describing the fabrication trap (adversarial cases only). */
+  trap?: string;
+}
+
+// ---------- scoring (profile + job → explained match score) ----------
+
+export interface MatchSubscore {
+  /** e.g. 'skills_match' | 'experience_relevance' | 'seniority_fit'. */
+  key: string;
+  /** 0–100. */
+  value: number;
+}
+
+export interface MatchScore {
+  /** 0–100 overall match. */
+  overall: number;
+  subscores: MatchSubscore[];
+  /** Plain-language explanation — never a bare number (M03 acceptance). */
+  explanation: string;
+  /** Profile fact ids the explanation grounds itself in (provenance). */
+  evidenceRefs: string[];
+}
+
+export interface ScoringAgent {
+  score(profile: ProfileFact[], job: JobDescription): Promise<MatchScore>;
+}
+
+export interface ScoringCase {
+  id: string;
+  description: string;
+  profile: ProfileFact[];
+  job: JobDescription;
+  /** Acceptable band for the overall score (calibration, not an exact value). */
+  expectedBand: { min: number; max: number };
+  /** Subscore keys that MUST be present (an explained score, never bare). */
+  requiredSubscores: string[];
+  /**
+   * The explanation must be GROUNDED: it must cite (via evidenceRefs) at least
+   * these real profile fact ids. Empty allowed only for near-zero matches.
+   */
+  explanationMustCiteFactIds: string[];
+  /**
+   * Zero-fabrication guard for the explanation: strings that must NEVER appear
+   * (e.g. crediting the candidate with a qualification they lack).
+   */
+  forbidden?: string[];
+}
+
