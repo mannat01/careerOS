@@ -66,3 +66,12 @@ jobs:
         run: pnpm -w test
       # Permanent gates: capability-gate + connector allow-list security suites and the
       # zero-fabrication eval (once M03 lands) run inside `pnpm -w test` and MUST stay green.
+      - name: Eval gates (GREEN allowlist only — extraction + state-model zero-fabrication)
+        # BLOCKING merge gate. Runs ONLY the currently-green eval suites via the
+        # explicit allowlist in evals/vitest.eval-ci.config.ts. The M03
+        # tailoring/scoring gates are RED-by-design until Step 2 and are kept OUT
+        # of this subset on purpose. When an M03 eval turns green, add it to the
+        # GREEN_EVAL_SUITES allowlist in that config (one line) and it becomes a
+        # permanent gate here too.
+        run: pnpm --filter @careeros/evals eval:ci
+
