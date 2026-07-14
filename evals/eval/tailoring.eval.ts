@@ -3,19 +3,21 @@
  * selection, ATS-safe rendering — with adversarial "pressure to fabricate"
  * cases the resume must NOT satisfy by inventing the missing skill).
  *
- * Today the CURRENT agent is the deliberate stub → this gate is RED. Step 2
- * swaps in the real Tailor agent and must turn it green WITHOUT editing the
- * golden set.
+ * Step 2 swaps in the real Tailor agent behind a FakeLlmProvider and keeps this
+ * gate green WITHOUT editing the golden set.
  * Run: pnpm --filter @careeros/evals eval   (NOT part of `pnpm -w test`)
  */
 import { describe, expect, it } from 'vitest';
 import { runTailoringEval, scoreTailoringCase } from '../src/harness.js';
 import { loadTailoringCases } from '../src/datasets.js';
-import { StubTailoringAgent, fabricatorTailoringAgent } from '../src/resume-agents.js';
+import { fabricatorTailoringAgent } from '../src/resume-agents.js';
+import { createTailorFixtureAgent } from '../src/tailor-fixture-agent.js';
 
-// Step 2: replace with the REAL Tailor agent (behind FakeLlmProvider).
-const currentAgent = new StubTailoringAgent();
 const cases = loadTailoringCases();
+// Step 2: REAL Tailor pipeline behind FakeLlmProvider. The fake returns raw
+// proposals (including tl-11..14 fabrications); the deterministic guardrail must
+// strip them before render.
+const currentAgent = createTailorFixtureAgent(cases);
 
 describe('M03 eval gate — resume tailoring', async () => {
   const result = await runTailoringEval(currentAgent, cases);

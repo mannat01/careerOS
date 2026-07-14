@@ -20,6 +20,13 @@ import {
 import { createLlmGateway, AnthropicProvider } from '@careeros/llm-gateway';
 import { LlmExtractionAgent } from '@careeros/agents';
 import { MemoryService, GraphMemoryService, FakeEmbedder, FakeLlmProvider } from '@careeros/memory';
+import {
+  InMemoryResumeModelStore,
+  InMemoryResumeVariantStore,
+  LlmTailorAgent,
+  ResumeService,
+  SequentialIdGen,
+} from '@careeros/cie-resume';
 import { CareerStateService, InMemoryStateStore, LlmStateUpdaterAgent } from '@careeros/cie-state';
 import { GraphMemoryServiceAdapter } from '../modules/cie/graph.handlers.js';
 import {
@@ -27,6 +34,7 @@ import {
   MemoryStateEvidenceAdapter,
   MemoryStateFactAdapter,
 } from '../modules/cie/state.handlers.js';
+import { MemoryResumeFactAdapter } from '../modules/cie/resume.handlers.js';
 import { AppModule } from './app.module.js';
 import type { AppDeps } from './deps.js';
 import type { AuthProvider } from '../common/auth/auth-provider.js';
@@ -104,6 +112,18 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     agent: new LlmStateUpdaterAgent(gateway),
   });
 
+  // Resume Tailor (M03). The service reads structured profile facts only through
+  // the Memory/ProfileReader seam and persists draft models/variants in-memory
+  // until Prisma adapters land. Tailoring runs on the frontier tier behind the
+  // deterministic grounding guardrail in @careeros/cie-resume.
+  const resumeService = new ResumeService({
+    facts: new MemoryResumeFactAdapter(profileReader),
+    models: new InMemoryResumeModelStore(),
+    variants: new InMemoryResumeVariantStore(),
+    ids: new SequentialIdGen(),
+    agent: new LlmTailorAgent(gateway),
+  });
+
   // Career Knowledge Graph (database-schema.md §cie). Agents/handlers touch it
   // ONLY through GraphMemoryService; the PrismaGraphStore is the sole code path
   // to the graph_nodes / graph_edges tables. Node embeddings use the same
@@ -124,6 +144,7 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     },
     cie: overrides?.cie ?? { graph: new GraphMemoryServiceAdapter(graph) },
     state: overrides?.state ?? { service: stateService },
+    resume: overrides?.resume ?? { service: resumeService },
 
     gate: overrides?.gate ?? {
       secret: env.APPROVAL_TOKEN_SECRET,

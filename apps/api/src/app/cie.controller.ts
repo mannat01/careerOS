@@ -2,6 +2,11 @@ import { Body, Controller, Get, Inject, Param, Post, Query, Req, Res, UseGuards 
 import type { Response } from 'express';
 import { queryGraph, type GraphQueryDeps } from '../modules/cie/graph.handlers.js';
 import {
+  getResumeVariant,
+  tailorResume,
+  type ResumeHandlerDeps,
+} from '../modules/cie/resume.handlers.js';
+import {
   explainDimension,
   getState,
   recomputeState,
@@ -68,5 +73,28 @@ export class CieController {
   ): Promise<void> {
     const deps: StateHandlerDeps = this.deps.state;
     send(res, await recomputeState(req.ctx, body, deps));
+  }
+
+  /** POST /v1/cie/resumes/:id/tailor — derive a job-bound draft resume variant. */
+  @Post('resumes/:id/tailor')
+  async tailorResume(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+    @Param('id') resumeId: string,
+    @Body() body: unknown,
+  ): Promise<void> {
+    const deps: ResumeHandlerDeps = this.deps.resume;
+    send(res, await tailorResume(req.ctx, resumeId, body, deps));
+  }
+
+  /** GET /v1/cie/resumes/variants/:id — read one draft variant, scoped to caller. */
+  @Get('resumes/variants/:id')
+  async resumeVariant(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+    @Param('id') variantId: string,
+  ): Promise<void> {
+    const deps: ResumeHandlerDeps = this.deps.resume;
+    send(res, await getResumeVariant(req.ctx, variantId, deps));
   }
 }

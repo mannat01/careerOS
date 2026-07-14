@@ -38,6 +38,12 @@ export {
   type StateHandlerDeps,
 } from './modules/cie/state.handlers.js';
 export {
+  tailorResume,
+  getResumeVariant,
+  MemoryResumeFactAdapter,
+  type ResumeHandlerDeps,
+} from './modules/cie/resume.handlers.js';
+export {
   InMemoryProfileRepo,
   type ProfileRepo,
   type ProfileImportResult,
