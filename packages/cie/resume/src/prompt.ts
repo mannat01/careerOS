@@ -12,6 +12,7 @@
 import type { JobDescription, TailorProfileFact } from './model.js';
 
 export const TAILOR_PROMPT_VERSION = '1.0.0';
+export const MATCH_SCORER_PROMPT_VERSION = '1.0.0';
 
 export const TAILOR_SYSTEM_PROMPT = `You are a resume tailoring assistant. Given a candidate's structured profile facts (each with a stable id) and a target job description, produce a tailored resume as a set of bullets.
 
@@ -37,4 +38,38 @@ CANDIDATE PROFILE FACTS:
 ${factLines}
 
 Select, order, and (faithfully) rephrase the candidate's real facts for this job. Cite a factId on every bullet. Return the JSON object.`;
+}
+
+/**
+ * Match-scorer prompt — asks the FRONTIER tier for an honest 0–100 match with
+ * subscores + a grounded explanation. As with the tailor, the wording ASKS for
+ * honesty but the deterministic guardrail in io.ts is what ENFORCES it: under
+ * pressure a real model (and our probe FakeLlmProvider) will over-score and
+ * claim a match on a demanded-but-missing skill. Versioned — changing it
+ * requires the scoring eval to pass.
+ */
+export const MATCH_SCORER_SYSTEM_PROMPT = `You are a resume match scorer and explainer. Given a candidate's structured profile facts (each with a stable id) and a target job description, estimate an HONEST 0-100 match with subscores and a concise, plain-language explanation.
+
+RULES (the system enforces these deterministically; do not attempt to evade them):
+- Score against the job's REAL requirement coverage. Use ONLY the candidate's real facts and cite the fact ids you rely on.
+- Never claim a match on a demanded skill, seniority, domain, credential, location, or compensation the facts do not evidence. A demanded-but-missing requirement must LOWER the relevant subscore and be NAMED as a gap — never papered over.
+- A strong-but-adjacent signal (e.g. Vue when React is demanded) is a PARTIAL match, not a full one. An honest partial score beats a fabricated high one.
+- The explanation may cite only real evidence; it must never assert a qualification the candidate lacks.
+
+Return ONLY a JSON object: { "overall": 0, "subscores": [ { "key": "skills_match", "value": 0 } ], "explanation": "...", "evidenceRefs": ["f1"] }. No markdown.`;
+
+export function buildMatchScorerUserPrompt(facts: TailorProfileFact[], job: JobDescription): string {
+  const factLines = facts.map((f) => `- [${f.id}] (${f.kind}) ${f.summary}`).join('\n');
+  const reqLines = job.requirements.map((r) => `- ${r}`).join('\n');
+  return `TARGET JOB: ${job.title}${job.seniority ? ` (${job.seniority})` : ''}
+STATED REQUIREMENTS:
+${reqLines}
+
+JOB DESCRIPTION:
+${job.text}
+
+CANDIDATE PROFILE FACTS:
+${factLines}
+
+Return the JSON match score with overall, subscores, evidenceRefs, and a grounded explanation. Be honest about any demanded-but-missing requirement.`;
 }

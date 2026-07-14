@@ -17,10 +17,11 @@
  * the base model's `profileId` is the user, and a variant is only ever read back
  * for its owner.
  */
-import type { TailoringAgent, TailorVariantResult } from './agent.js';
+import type { ScoringAgent, TailoringAgent, TailorVariantResult } from './agent.js';
 import { toVariant } from './agent.js';
 import {
   type JobDescription,
+  type MatchScore,
   type ResumeModel,
   type ResumeVariant,
   type SelectedItem,
@@ -104,5 +105,33 @@ export class ResumeService {
   /** Read one variant back (per-user scoped; null when not the owner / not found). */
   async getVariant(userId: string, variantId: string): Promise<ResumeVariant | null> {
     return this.deps.variants.load(userId, variantId);
+  }
+}
+
+// ============================================================================
+// MatchScorerService — the application service that owns match scoring for a
+// (profile, job) pair. Same discipline as ResumeService: narrow ports, never
+// imports @careeros/db, PER-USER by construction (the userId comes from the
+// verified request context; the caller never supplies an id).
+//
+// The service reads the caller's real profile facts through the shared
+// `ResumeFactPort` (backed by MemoryService's ProfileReader in the app), calls
+// the `ScoringAgent` (LLM + deterministic guardrail), and returns the honest
+// MatchScore. Green action — no external side effect, safe to call without an
+// approval token.
+// ============================================================================
+
+export interface MatchScorerServiceDeps {
+  facts: ResumeFactPort;
+  agent: ScoringAgent;
+}
+
+export class MatchScorerService {
+  constructor(private readonly deps: MatchScorerServiceDeps) {}
+
+  /** Score the given job against the CALLER's real profile facts. */
+  async scoreJob(userId: string, job: JobDescription): Promise<MatchScore> {
+    const facts = await this.deps.facts.readResumeFacts(userId);
+    return this.deps.agent.score(facts, job);
   }
 }

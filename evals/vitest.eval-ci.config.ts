@@ -17,7 +17,7 @@ export const GREEN_EVAL_SUITES = [
   'eval/extraction.eval.ts', // M02 — resume extraction (24/24)
   'eval/state-model.eval.ts', // M02 — career state model (22/22)
   'eval/tailoring.eval.ts', // M03 — resume tailoring (14/14; tl-11..14 guardrailed)
-  // 'eval/scoring.eval.ts',    // M03 — RED until Step 2; add when green
+  'eval/scoring.eval.ts', // M03 — match scoring (9/9; groundMatchScore guardrail)
 ];
 
 export default defineConfig({ test: { include: GREEN_EVAL_SUITES } });

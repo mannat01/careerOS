@@ -3,7 +3,9 @@ import type { Response } from 'express';
 import { queryGraph, type GraphQueryDeps } from '../modules/cie/graph.handlers.js';
 import {
   getResumeVariant,
+  scoreMatch,
   tailorResume,
+  type MatchHandlerDeps,
   type ResumeHandlerDeps,
 } from '../modules/cie/resume.handlers.js';
 import {
@@ -96,5 +98,21 @@ export class CieController {
   ): Promise<void> {
     const deps: ResumeHandlerDeps = this.deps.resume;
     send(res, await getResumeVariant(req.ctx, variantId, deps));
+  }
+
+  /**
+   * POST /v1/cie/match — honest, grounded MatchScore for a job description
+   * against the CALLER's profile facts. Per-user by construction (userId flows
+   * from the verified RequestContext). Green (read-only derive; no external
+   * send), so no capability-gate token is required.
+   */
+  @Post('match')
+  async scoreMatch(
+    @Req() req: AuthedRequest,
+    @Body() body: unknown,
+    @Res() res: Response,
+  ): Promise<void> {
+    const deps: MatchHandlerDeps = this.deps.match;
+    send(res, await scoreMatch(req.ctx, body, deps));
   }
 }

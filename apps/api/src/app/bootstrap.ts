@@ -23,7 +23,9 @@ import { MemoryService, GraphMemoryService, FakeEmbedder, FakeLlmProvider } from
 import {
   InMemoryResumeModelStore,
   InMemoryResumeVariantStore,
+  LlmMatchScorerAgent,
   LlmTailorAgent,
+  MatchScorerService,
   ResumeService,
   SequentialIdGen,
 } from '@careeros/cie-resume';
@@ -116,12 +118,21 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
   // the Memory/ProfileReader seam and persists draft models/variants in-memory
   // until Prisma adapters land. Tailoring runs on the frontier tier behind the
   // deterministic grounding guardrail in @careeros/cie-resume.
+  const resumeFacts = new MemoryResumeFactAdapter(profileReader);
   const resumeService = new ResumeService({
-    facts: new MemoryResumeFactAdapter(profileReader),
+    facts: resumeFacts,
     models: new InMemoryResumeModelStore(),
     variants: new InMemoryResumeVariantStore(),
     ids: new SequentialIdGen(),
     agent: new LlmTailorAgent(gateway),
+  });
+
+  // Match Scorer / Explainer (M03). Shares the profile-facts port with Tailor,
+  // runs on the frontier tier, and the deterministic `groundMatchScore`
+  // guardrail is what enforces the honest-band / no-fabrication invariants.
+  const matchScorerService = new MatchScorerService({
+    facts: resumeFacts,
+    agent: new LlmMatchScorerAgent(gateway),
   });
 
   // Career Knowledge Graph (database-schema.md §cie). Agents/handlers touch it
@@ -145,6 +156,7 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     cie: overrides?.cie ?? { graph: new GraphMemoryServiceAdapter(graph) },
     state: overrides?.state ?? { service: stateService },
     resume: overrides?.resume ?? { service: resumeService },
+    match: overrides?.match ?? { service: matchScorerService },
 
     gate: overrides?.gate ?? {
       secret: env.APPROVAL_TOKEN_SECRET,

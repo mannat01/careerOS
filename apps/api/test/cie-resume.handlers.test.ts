@@ -7,13 +7,17 @@ import { describe, expect, it } from 'vitest';
 import {
   InMemoryResumeModelStore,
   InMemoryResumeVariantStore,
+  MatchScorerService,
   ResumeService,
   SequentialIdGen,
   atsCheck,
   computeDiff,
+  groundMatchScore,
   renderVariant,
   type JobDescription,
+  type MatchScore,
   type ResumeFactPort,
+  type ScoringAgent,
   type TailorProfileFact,
   type TailorVariantResult,
   type TailoringAgent,
@@ -22,7 +26,9 @@ import {
 import {
   contextFromVerifiedClaims,
   getResumeVariant,
+  scoreMatch,
   tailorResume,
+  type MatchHandlerDeps,
   type RequestContext,
   type ResumeHandlerDeps,
 } from '../src/index.js';
@@ -140,5 +146,100 @@ describe('GET /v1/cie/resumes/variants/:id', () => {
 
     expect((await getResumeVariant(ctx(USER_A), id, deps)).status).toBe(200);
     expect((await getResumeVariant(ctx(USER_B), id, deps)).status).toBe(404);
+  });
+});
+
+// ============================================================================
+// POST /v1/cie/match — honest, grounded MatchScore
+//
+// Fixture ScoringAgent = the REAL `groundMatchScore` guardrail fed the exact
+// integrity-probe raw proposal a "pressure to inflate" LLM emits (95/100 +
+// fabricated evidenceRef). The handler must return an honest score computed
+// from the CALLER's real profile facts — proving both grounding and per-user
+// scoping (a different user gets a different score off their own facts).
+// ============================================================================
+class GroundedFixtureScoringAgent implements ScoringAgent {
+  score(profile: TailorProfileFact[], job: JobDescription): Promise<MatchScore> {
+    const proposal = {
+      overall: 95,
+      subscores: [{ key: 'skills_match' as const, value: 95 }],
+      explanation: 'Overall 95/100. Strong match on every stated requirement.',
+      evidenceRefs: [...(profile[0] ? [profile[0].id] : []), 'f-fabricated'],
+    };
+    return Promise.resolve(groundMatchScore(proposal, profile, job));
+  }
+}
+
+function buildMatchDeps(): { deps: MatchHandlerDeps; facts: FakeFactPort } {
+  const facts = new FakeFactPort();
+  const service = new MatchScorerService({ facts, agent: new GroundedFixtureScoringAgent() });
+  return { deps: { service }, facts };
+}
+
+describe('POST /v1/cie/match', () => {
+  it('returns an honest, grounded MatchScore: fabrications stripped, gap named, subscores present', async () => {
+    const { deps, facts } = buildMatchDeps();
+    // A weak-match barista profile vs a Senior Backend Engineer role.
+    facts.byUser.set(USER_A, [
+      fact('f1', 'Barista at Ridge Coffee, 2023; cash handling, scheduling'),
+      fact('f2', 'B.S. Biology, SUNY Albany', 'education'),
+    ]);
+
+    const res = await scoreMatch(
+      ctx(USER_A),
+      {
+        title: 'Senior Backend Engineer',
+        seniority: 'senior',
+        requirements: ['Python', 'distributed systems', '5+ years backend'],
+        text: 'Senior Backend Engineer with 5+ years and distributed-systems depth.',
+      },
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    const score = res.body as MatchScore;
+    // Guardrail lands the score in the honest weak band.
+    expect(score.overall).toBeLessThanOrEqual(25);
+    // The fabricated evidenceRef the "LLM" proposed is stripped.
+    expect(score.evidenceRefs).not.toContain('f-fabricated');
+    // Every surviving ref is one of the caller's real facts.
+    for (const ref of score.evidenceRefs) expect(['f1', 'f2']).toContain(ref);
+    // Gap is named (never papered over).
+    expect(score.explanation.toLowerCase()).toContain('python');
+    // Required subscore keys are all present.
+    const keys = new Set(score.subscores.map((s) => s.key));
+    expect(keys.has('skills_match')).toBe(true);
+    expect(keys.has('experience_relevance')).toBe(true);
+    expect(keys.has('seniority_fit')).toBe(true);
+  });
+
+  it('is per-user scoped: user B\'s score comes off user B\'s facts, not user A\'s', async () => {
+    const { deps, facts } = buildMatchDeps();
+    // Strong match on user B — a real backend engineer.
+    facts.byUser.set(USER_A, [fact('f1', 'Barista at Ridge Coffee, 2023')]);
+    facts.byUser.set(USER_B, [
+      fact('f1', 'Senior Backend Engineer at Netgrid, 2018 to present (7 yrs); Python distributed systems'),
+      fact('f2', 'Python — demonstrated (Netgrid, 7 yrs)', 'skill'),
+      fact('f3', 'Distributed systems — demonstrated (Netgrid)', 'skill'),
+    ]);
+
+    const job = {
+      title: 'Senior Backend Engineer',
+      seniority: 'senior',
+      requirements: ['Python', 'distributed systems', '5+ years backend'],
+      text: 'Senior Backend Engineer with 5+ years and distributed-systems depth.',
+    };
+    const resA = await scoreMatch(ctx(USER_A), job, deps);
+    const resB = await scoreMatch(ctx(USER_B), job, deps);
+
+    expect((resA.body as MatchScore).overall).toBeLessThanOrEqual(25);
+    expect((resB.body as MatchScore).overall).toBeGreaterThanOrEqual(70);
+  });
+
+  it('returns validation_failed when the payload has no job text', async () => {
+    const { deps } = buildMatchDeps();
+    const res = await scoreMatch(ctx(USER_A), { title: 'Frontend Engineer' }, deps);
+    expect(res.status).toBe(422);
+    expect(res.body).toMatchObject({ error: { code: 'validation_failed' } });
   });
 });

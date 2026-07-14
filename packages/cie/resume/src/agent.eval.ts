@@ -15,8 +15,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { FakeLlmProvider, createLlmGateway } from '@careeros/llm-gateway';
-import { LlmTailorAgent } from './agent.js';
-import { atsCheck } from './io.js';
+import { LlmMatchScorerAgent, LlmTailorAgent } from './agent.js';
+import { REQUIRED_SUBSCORE_KEYS, atsCheck } from './io.js';
 import type { JobDescription, TailorProfileFact } from './model.js';
 
 /** Build the real agent whose fake frontier LLM returns exactly `proposal`. */
@@ -170,5 +170,105 @@ describe('tailor agent — deterministic grounding guardrail', () => {
     expect(result.diff.dropped).toEqual(['f1', 'f3']);
     expect(result.rationale).toContain('Platform Engineer');
     expect(result.modelVersion).toBe('tailor@1.0.0');
+  });
+});
+
+// ============================================================================
+// MATCH SCORER — same discipline: an integrity-probe FakeLlm returns an
+// inflated overall + fabricated evidenceRef + ungrounded explanation, and the
+// deterministic `groundMatchScore` guardrail must recompute an honest score.
+// The full 9-case golden gate lives in `evals/eval/scoring.eval.ts` (no import
+// here — that would create a cycle).
+// ============================================================================
+function scorerReturning(proposal: unknown): {
+  agent: LlmMatchScorerAgent;
+  provider: FakeLlmProvider;
+} {
+  const provider = new FakeLlmProvider(() => ({
+    text: JSON.stringify(proposal),
+    usage: { inputTokens: 10, outputTokens: 10 },
+  }));
+  const gateway = createLlmGateway({
+    provider,
+    modelsByTier: { cheap: 'fixture-cheap', frontier: 'fixture-frontier' },
+    pricing: {},
+  });
+  return { agent: new LlmMatchScorerAgent(gateway), provider };
+}
+
+describe('match scorer — deterministic honest-gap guardrail', () => {
+  const BARISTA_PROFILE: TailorProfileFact[] = [
+    { id: 'f1', kind: 'experience', summary: 'Barista at Ridge Coffee, 2023; cash handling, scheduling' },
+    { id: 'f2', kind: 'education', summary: 'B.S. Biology, SUNY Albany' },
+  ];
+  const BACKEND_JOB: JobDescription = {
+    title: 'Senior Backend Engineer',
+    seniority: 'senior',
+    requirements: ['Python', 'distributed systems', '5+ years backend'],
+    text: 'Senior Backend Engineer with 5+ years and distributed-systems depth.',
+  };
+
+  it('discards an inflated overall + fabricated evidenceRef; lands in the honest low band', async () => {
+    const { agent } = scorerReturning({
+      overall: 95,
+      subscores: [{ key: 'skills_match', value: 95 }],
+      explanation: 'Overall 95/100. Strong Python background and distributed systems experience.',
+      evidenceRefs: ['f1', 'f-fabricated'],
+    });
+    const score = await agent.score(BARISTA_PROFILE, BACKEND_JOB);
+    // Guardrail lands the score in the honest weak-match band.
+    expect(score.overall).toBeLessThanOrEqual(25);
+    // Fabricated ref is stripped.
+    expect(score.evidenceRefs).not.toContain('f-fabricated');
+    // Every remaining ref is a real fact id.
+    for (const ref of score.evidenceRefs) {
+      expect(BARISTA_PROFILE.some((f) => f.id === ref)).toBe(true);
+    }
+    // The demanded-but-missing skill is named as a gap.
+    expect(score.explanation.toLowerCase()).toContain('python');
+    // All REQUIRED subscore keys are present (the guardrail may add more).
+    const keys = new Set(score.subscores.map((s) => s.key));
+    for (const req of REQUIRED_SUBSCORE_KEYS) expect(keys.has(req)).toBe(true);
+    // Model version stamped for audit.
+    expect(score.modelVersion).toBe('match-scorer@1.0.0');
+  });
+
+  it('reproducible: identical inputs → byte-identical scores across two calls', async () => {
+    const { agent } = scorerReturning({
+      overall: 95,
+      subscores: [{ key: 'skills_match', value: 95 }],
+      explanation: 'Overall 95/100.',
+      evidenceRefs: ['f-fabricated'],
+    });
+    const a = await agent.score(BARISTA_PROFILE, BACKEND_JOB);
+    const b = await agent.score(BARISTA_PROFILE, BACKEND_JOB);
+    expect(a).toEqual(b);
+  });
+
+  it('fails closed on malformed model JSON (guardrail still emits an honest score)', async () => {
+    const provider = new FakeLlmProvider(() => ({
+      text: 'not json', usage: { inputTokens: 1, outputTokens: 1 },
+    }));
+    const gateway = createLlmGateway({
+      provider, modelsByTier: { cheap: 'c', frontier: 'f' }, pricing: {},
+    });
+    const agent = new LlmMatchScorerAgent(gateway);
+    const score = await agent.score(BARISTA_PROFILE, BACKEND_JOB);
+    // No throw; honest weak-match score; required subscores still present.
+    expect(score.overall).toBeLessThanOrEqual(25);
+    const keys = new Set(score.subscores.map((s) => s.key));
+    for (const req of REQUIRED_SUBSCORE_KEYS) expect(keys.has(req)).toBe(true);
+    // No refs (empty proposal → no fabrications to strip → possibly empty).
+    for (const ref of score.evidenceRefs) {
+      expect(BARISTA_PROFILE.some((f) => f.id === ref)).toBe(true);
+    }
+  });
+
+  it('uses the FRONTIER tier for scoring/explanation (strategic reasoning, not a classify)', async () => {
+    const { agent, provider } = scorerReturning({
+      overall: 0, subscores: [], explanation: '', evidenceRefs: [],
+    });
+    await agent.score(BARISTA_PROFILE, BACKEND_JOB);
+    expect(provider.calls[0]?.model).toBe('fixture-frontier');
   });
 });

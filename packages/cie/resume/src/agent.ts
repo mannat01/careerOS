@@ -22,16 +22,25 @@
  * lint overlay).
  */
 import type { LlmGateway } from '@careeros/llm-gateway';
-import { TAILOR_SYSTEM_PROMPT, buildTailorUserPrompt } from './prompt.js';
+import {
+  MATCH_SCORER_SYSTEM_PROMPT,
+  TAILOR_SYSTEM_PROMPT,
+  buildMatchScorerUserPrompt,
+  buildTailorUserPrompt,
+} from './prompt.js';
 import {
   atsCheck,
   groundBullets,
+  groundMatchScore,
+  rawMatchScoreProposalSchema,
   rawTailorProposalSchema,
   renderVariant,
 } from './io.js';
 import {
+  MATCH_SCORER_MODEL_VERSION,
   RESUME_MODEL_VERSION,
   type JobDescription,
+  type MatchScore,
   type ResumeDiff,
   type ResumeVariant,
   type TailorProfileFact,
@@ -169,6 +178,62 @@ export function toVariant(
     atsCheck: result.atsCheck,
     modelVersion: result.modelVersion,
   };
+}
+
+// ============================================================================
+// MATCH SCORER / EXPLAINER skill-agent.
+//
+// Same shape as the Tailor: build prompt → frontier LLM call → parse (fail-closed)
+// → DETERMINISTIC guardrail. The guardrail (`groundMatchScore`) is where the
+// M03 acceptance actually lives: the model's proposal is DISCARDED and the
+// score/subscores/explanation are RECOMPUTED from the real profile facts vs the
+// job's real requirements. Under the integrity probe the FakeLlmProvider
+// over-scores and cites a fabricated evidence ref — the guardrail defeats every
+// one, generically, without a blocklist of specific lies.
+//
+// Reproducibility: identical inputs → identical score (the LLM proposal is
+// ignored; the guardrail is pure). Version stamp on every score for audit.
+// ============================================================================
+
+/** Structurally matches evals/src/types.ts `ScoringAgent` (kept decoupled to avoid a cycle). */
+export interface ScoringAgent {
+  score(profile: TailorProfileFact[], job: JobDescription): Promise<MatchScore>;
+}
+
+export class LlmMatchScorerAgent implements ScoringAgent {
+  constructor(private readonly gateway: LlmGateway) {}
+
+  /**
+   * Produce an honest, grounded MatchScore. Steps: prompt → frontier call →
+   * parse (fail-closed) → `groundMatchScore` (recomputes from real facts +
+   * requirements — the proposal's numbers/refs are IGNORED).
+   */
+  async score(profile: TailorProfileFact[], job: JobDescription): Promise<MatchScore> {
+    const messages = [
+      { role: 'system' as const, content: MATCH_SCORER_SYSTEM_PROMPT },
+      { role: 'user' as const, content: buildMatchScorerUserPrompt(profile, job) },
+    ];
+
+    // Frontier tier: match scoring/explanation is strategic reasoning, not a
+    // cheap classify (CLAUDE.md §3.6; per-user coverage is what earns the tier).
+    const response = await this.gateway.complete({
+      tier: 'frontier',
+      messages,
+      maxTokens: 2048,
+      temperature: 0,
+    });
+
+    const parsed = rawMatchScoreProposalSchema.safeParse(safeJsonParse(response.text));
+    // Fail-closed: malformed output → still recompute from the real facts. The
+    // guardrail ignores the proposal's numbers anyway, so a bad JSON is
+    // structurally equivalent to a "no proposal" case — same honest score.
+    const proposal = parsed.success
+      ? parsed.data
+      : { overall: 0, subscores: [], explanation: '', evidenceRefs: [] };
+
+    const scored = groundMatchScore(proposal, profile, job);
+    return { ...scored, modelVersion: scored.modelVersion ?? MATCH_SCORER_MODEL_VERSION };
+  }
 }
 
 /** JSON.parse that returns null instead of throwing (fail-closed boundary). */

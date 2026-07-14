@@ -15,6 +15,9 @@
 
 export const RESUME_MODEL_VERSION = 'tailor@1.0.0';
 
+/** Version stamp for the match scorer/explainer — deterministic + reproducible. */
+export const MATCH_SCORER_MODEL_VERSION = 'match-scorer@1.0.0';
+
 /**
  * A structured profile fact as it exists AFTER extraction — the Tailor's input
  * surface. Mirrors the evals' `ProfileFact` and memory's projection 1:1 so the
@@ -63,6 +66,44 @@ export interface TailoredResume {
 export interface AtsCheck {
   passed: boolean;
   warnings: string[];
+}
+
+/**
+ * One facet of a match score (0–100). The scorer always exposes the demanded
+ * facets — skills/experience/seniority/domain/comp/location/trajectory — so a
+ * score is a decomposition, never a bare number.
+ */
+export interface MatchSubscore {
+  /** e.g. 'skills_match' | 'seniority_fit' | 'domain_fit'. */
+  key: string;
+  /** 0–100. */
+  value: number;
+}
+
+/**
+ * The Scorer/Explainer's OUTPUT for a (profile, job) pair. Structurally matches
+ * `evals/src/types.ts` `MatchScore` so the golden gate consumes it directly.
+ *
+ * INTEGRITY INVARIANTS (enforced deterministically in io.ts, not by the prompt):
+ *  - `overall` reflects REAL requirement coverage — a demanded-but-missing skill
+ *    lowers the relevant subscore and is named in the explanation, never papered
+ *    over;
+ *  - `explanation` is plain-language and GROUNDED — it may cite only real
+ *    evidence (`evidenceRefs` are real profile fact ids), never a claimed match
+ *    on a skill the candidate lacks;
+ *  - a score NEVER travels without its explanation (never a bare number).
+ */
+export interface MatchScore {
+  /** 0–100 overall match. */
+  overall: number;
+  /** Always includes the demanded facets — a score is never a bare number. */
+  subscores: MatchSubscore[];
+  /** Plain-language explanation — never a bare number (M03 acceptance). */
+  explanation: string;
+  /** Real profile fact ids the explanation grounds itself in (provenance). */
+  evidenceRefs: string[];
+  /** Version stamp — identical inputs + version → identical score. */
+  modelVersion?: string;
 }
 
 /** One ordered, optionally-rephrased fact reference inside a ResumeModel. */

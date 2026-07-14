@@ -40,8 +40,10 @@ export {
 export {
   tailorResume,
   getResumeVariant,
+  scoreMatch,
   MemoryResumeFactAdapter,
   type ResumeHandlerDeps,
+  type MatchHandlerDeps,
 } from './modules/cie/resume.handlers.js';
 export {
   InMemoryProfileRepo,

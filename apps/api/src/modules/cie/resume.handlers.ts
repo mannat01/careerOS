@@ -9,6 +9,8 @@
 import type { ProfileFact as MemoryProfileFact, ProfileReader } from '@careeros/memory';
 import type {
   JobDescription,
+  MatchScore,
+  MatchScorerService,
   ResumeFactPort,
   ResumeService,
   ResumeVariant,
@@ -41,6 +43,11 @@ function toTailorKind(kind: MemoryProfileFact['kind']): TailorProfileFact['kind'
 
 export interface ResumeHandlerDeps {
   service: ResumeService;
+}
+
+/** Deps for the /v1/cie/match endpoint — a MatchScorerService is all it needs. */
+export interface MatchHandlerDeps {
+  service: MatchScorerService;
 }
 
 // ---------- POST /v1/cie/resumes/:id/tailor ----------
@@ -79,6 +86,31 @@ export async function getResumeVariant(
     });
   }
   return ok(variant);
+}
+
+// ---------- POST /v1/cie/match — honest, grounded MatchScore for a job ----------
+//
+// Per-user by construction: the userId comes from the verified RequestContext,
+// never from the body. Green action (no external side effect, no capability
+// gate). The deterministic `groundMatchScore` guardrail inside the Scorer
+// service is what earns the safety story — no matter what the LLM proposes,
+// the reply's numbers/refs/explanation are RECOMPUTED from the caller's real
+// profile facts vs the job's real requirements.
+
+export async function scoreMatch(
+  ctx: RequestContext,
+  body: unknown,
+  deps: MatchHandlerDeps,
+): Promise<HandlerResponse<MatchScore>> {
+  const parsed = parseTailorBody(body); // reuses the same job-payload shape as tailor.
+  if (!parsed) {
+    return errorResponse('validation_failed', 'Expected a job description payload.', {
+      details: { expected: '{ title, requirements, text, seniority? }' },
+      traceId: ctx.traceId,
+    });
+  }
+  const score = await deps.service.scoreJob(ctx.userId, parsed.job);
+  return ok(score);
 }
 
 function parseTailorBody(body: unknown): { job: JobDescription; opportunityId: string | null } | null {

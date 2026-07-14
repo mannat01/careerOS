@@ -3,19 +3,27 @@
  * present, a grounded plain-language explanation, and reproducibility for
  * identical inputs).
  *
- * The CURRENT agent is the deliberate stub → this gate is RED. Step 2 swaps in
- * the real Scorer/Explainer and must turn it green WITHOUT editing the golden
- * set.
- * Run: pnpm --filter @careeros/evals eval   (NOT part of `pnpm -w test`)
+ * Step 2: the CURRENT agent is the REAL LlmMatchScorerAgent behind a
+ * FakeLlmProvider that ACTIVELY commits the sins the golden set forbids — an
+ * inflated overall (95), a fabricated evidenceRef ("f-fabricated"), and an
+ * explanation that credits the candidate with the exact `forbidden` inflation
+ * per case. The deterministic `groundMatchScore` guardrail must recompute the
+ * honest score from the real facts vs the real requirements and drop every
+ * fabrication. Turning this green proves the guardrail, not a hand-fed answer.
+ *
+ * Run: pnpm --filter @careeros/evals eval        (all suites)
+ *      pnpm --filter @careeros/evals eval:ci     (GREEN allowlist — this suite)
  */
 import { describe, expect, it } from 'vitest';
 import { runScoringEval } from '../src/harness.js';
 import { loadScoringCases } from '../src/datasets.js';
-import { StubScoringAgent } from '../src/resume-agents.js';
+import { createScoringFixtureAgent } from '../src/scoring-fixture-agent.js';
 
-// Step 2: replace with the REAL Scorer agent (behind FakeLlmProvider).
-const currentAgent = new StubScoringAgent();
 const cases = loadScoringCases();
+// REAL Scorer/Explainer pipeline behind FakeLlmProvider. The fake returns raw,
+// over-scored, ungrounded proposals; the deterministic groundMatchScore
+// guardrail must recompute an honest score before this gate can pass.
+const currentAgent = createScoringFixtureAgent(cases);
 
 describe('M03 eval gate — match scoring', async () => {
   const result = await runScoringEval(currentAgent, cases);
