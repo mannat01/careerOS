@@ -181,7 +181,7 @@ export class PrismaApplicationStore implements ApplicationStorePortShape {
 
       if (command.statusChange) {
         const sc = command.statusChange;
-        data.status = sc.to as ApplicationStatus;
+        data.status = sc.to;
         if (sc.setAppliedAt) data.appliedAt = new Date();
         // Read the current status inside the tx to record an accurate `fromStatus`,
         // then append ONE immutable timeline row for this transition.
@@ -190,11 +190,12 @@ export class PrismaApplicationStore implements ApplicationStorePortShape {
           create: {
             id: randomUUID(),
             fromStatus: current?.status ?? null,
-            toStatus: sc.to as ApplicationStatus,
-            actor: sc.actor as AuditActor,
+            toStatus: sc.to,
+            actor: sc.actor,
             note: sc.note ?? null,
           },
         };
+
       }
 
       await tx.application.update({ where: { id }, data });
@@ -236,8 +237,9 @@ export class PrismaApplicationStore implements ApplicationStorePortShape {
       id: row.id,
       opportunityId: row.opportunityId,
       resumeVariantId: row.resumeVariantId,
-      status: row.status as ApplicationStatusLike,
+      status: row.status,
       notes: row.notes,
+
       followUpAt: row.followUpAt ? row.followUpAt.toISOString() : null,
       appliedAt: row.appliedAt ? row.appliedAt.toISOString() : null,
       createdAt: row.createdAt.toISOString(),
@@ -250,10 +252,11 @@ export class PrismaApplicationStore implements ApplicationStorePortShape {
       ...this.toApplication(row),
       timeline: timeline.map((t) => ({
         id: t.id,
-        fromStatus: t.fromStatus ? (t.fromStatus as ApplicationStatusLike) : null,
-        toStatus: t.toStatus as ApplicationStatusLike,
-        actor: t.actor as ApplicationActorLike,
+        fromStatus: t.fromStatus ?? null,
+        toStatus: t.toStatus,
+        actor: t.actor,
         note: t.note,
+
         at: t.at.toISOString(),
       })),
     };
