@@ -139,9 +139,10 @@ describe('Prisma-backed stores (live Postgres)', () => {
   // ---------------- SourceRegistry (read-only) ----------------
 
   describe('PrismaSourceRegistry', () => {
-    itIfDb('reads the seeded greenhouse source', async () => {
+    itIfDb('reads the seeded M04 allow-list (greenhouse + lever + usajobs)', async () => {
       const registry = new PrismaSourceRegistry(prisma);
 
+      // Greenhouse (M01 seed)
       const byKey = await registry.getByKey('greenhouse');
       expect(byKey).not.toBeNull();
       expect(byKey!.key).toBe('greenhouse');
@@ -152,10 +153,24 @@ describe('Prisma-backed stores (live Postgres)', () => {
       expect(byHost).not.toBeNull();
       expect(byHost!.key).toBe('greenhouse');
 
+      // M04 additions — Lever + USAJobs (ADR-002 launch source set).
+      const lever = await registry.getByKey('lever');
+      expect(lever).not.toBeNull();
+      expect(lever!.enabled).toBe(true);
+      expect(lever!.hosts).toContain('api.lever.co');
+      expect(await registry.findEnabledByHost('api.lever.co')).not.toBeNull();
+
+      const usajobs = await registry.getByKey('usajobs');
+      expect(usajobs).not.toBeNull();
+      expect(usajobs!.enabled).toBe(true);
+      expect(usajobs!.hosts).toContain('data.usajobs.gov');
+      expect(await registry.findEnabledByHost('data.usajobs.gov')).not.toBeNull();
+
       const enabled = await registry.listEnabled();
-      expect(enabled).toHaveLength(1);
-      expect(enabled[0]!.key).toBe('greenhouse');
+      const enabledKeys = enabled.map((s) => s.key).sort();
+      expect(enabledKeys).toEqual(['greenhouse', 'lever', 'usajobs']);
     });
+
 
     itIfDb('returns null for unknown key', async () => {
       const registry = new PrismaSourceRegistry(prisma);

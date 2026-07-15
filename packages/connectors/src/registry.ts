@@ -63,3 +63,43 @@ export const M01_SOURCE_REGISTRY_SEED: readonly SourceRegistryEntry[] = [
     mapping: null,
   },
 ];
+
+/**
+ * ADR-002: M04 launch source set — Greenhouse + Lever public ATS APIs plus the
+ * USAJobs government open feed. All three are free, no-contract, no-scraping.
+ * The connector allow-list is EXACTLY these keys; anything else is blocked at
+ * the guarded-fetch layer with `source_not_allowed` (milestone-04 acceptance).
+ *
+ * Rate policies are conservative M04 defaults; the ingestion worker enforces
+ * them per-source via Redis (STUB(M01) — actual enforcement lands with the
+ * worker wiring).
+ */
+export const M04_SOURCE_REGISTRY_SEED: readonly SourceRegistryEntry[] = [
+  {
+    key: 'greenhouse',
+    type: 'ats_public',
+    enabled: true,
+    hosts: ['boards-api.greenhouse.io'],
+    ratePolicy: { requestsPerMinute: 30 },
+    mapping: null,
+  },
+  {
+    key: 'lever',
+    type: 'ats_public',
+    enabled: true,
+    hosts: ['api.lever.co'],
+    ratePolicy: { requestsPerMinute: 30 },
+    mapping: null,
+  },
+  {
+    key: 'usajobs',
+    type: 'gov_feed',
+    enabled: true,
+    hosts: ['data.usajobs.gov'],
+    // USAJobs publishes 500 req/min for authenticated clients; we throttle
+    // hard for hygiene (they're a government feed we don't want to hammer).
+    ratePolicy: { requestsPerMinute: 20 },
+    mapping: null,
+  },
+];
+

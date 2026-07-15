@@ -38,10 +38,15 @@ describe('M01 Prisma schema (authored, database-schema.md)', () => {
 });
 
 describe('SourceRegistry seed (ADR-002)', () => {
-  it('has exactly one enabled source: greenhouse', () => {
+  it('M04 launch set: exactly three enabled sources — greenhouse + lever + usajobs', () => {
     const enabled = SOURCE_REGISTRY_SEED.filter((s) => s.enabled);
-    expect(enabled).toHaveLength(1);
-    expect(enabled[0]?.key).toBe('greenhouse');
-    expect(enabled[0]?.hosts).toEqual(['boards-api.greenhouse.io']);
+    const byKey = new Map(enabled.map((s) => [s.key, s]));
+    expect([...byKey.keys()].sort()).toEqual(['greenhouse', 'lever', 'usajobs']);
+    expect(byKey.get('greenhouse')?.hosts).toEqual(['boards-api.greenhouse.io']);
+    expect(byKey.get('lever')?.hosts).toEqual(['api.lever.co']);
+    expect(byKey.get('usajobs')?.hosts).toEqual(['data.usajobs.gov']);
+    // ADR-002: every enabled source ships with a rate policy (M04 §Deliverables).
+    for (const s of enabled) expect(s.ratePolicy).toBeTruthy();
   });
 });
+

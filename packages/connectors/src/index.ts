@@ -1,6 +1,7 @@
 export {
   InMemorySourceRegistry,
   M01_SOURCE_REGISTRY_SEED,
+  M04_SOURCE_REGISTRY_SEED,
   SourceNotAllowedError,
   type SourceRegistry,
 } from './registry.js';
@@ -20,3 +21,25 @@ export {
   GreenhouseConnector,
   type GreenhouseConnectorOptions,
 } from './greenhouse/adapter.js';
+export {
+  LEVER_API_HOST,
+  LEVER_SOURCE_KEY,
+  LeverConnector,
+  type LeverConnectorOptions,
+} from './lever/adapter.js';
+export {
+  USAJOBS_API_HOST,
+  USAJOBS_SOURCE_KEY,
+  UsaJobsConnector,
+  type UsaJobsConnectorOptions,
+} from './usajobs/adapter.js';
+export {
+  IngestionService,
+  extractRequiredSkills,
+  type IngestedOpportunity,
+  type IngestResult,
+  type IngestionServiceOptions,
+  type OpportunityGraphSink,
+  type OpportunityStore,
+} from './ingest.js';
+

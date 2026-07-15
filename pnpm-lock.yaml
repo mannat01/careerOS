@@ -236,6 +236,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@careeros/connectors':
+        specifier: workspace:*
+        version: link:../connectors
       '@careeros/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -252,9 +255,6 @@ importers:
       '@careeros/config':
         specifier: workspace:*
         version: link:../config
-      '@careeros/connectors':
-        specifier: workspace:*
-        version: link:../connectors
       '@careeros/observability':
         specifier: workspace:*
         version: link:../observability

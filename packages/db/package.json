@@ -14,6 +14,7 @@
     "schema:validate": "node scripts/validate-schema.mjs"
   },
   "dependencies": {
+    "@careeros/connectors": "workspace:*",
     "@careeros/contracts": "workspace:*",
     "@careeros/memory": "workspace:*",
     "@prisma/client": "^6.16.2"
@@ -21,8 +22,8 @@
   "devDependencies": {
     "@careeros/capability-gate": "workspace:*",
     "@careeros/config": "workspace:*",
-    "@careeros/connectors": "workspace:*",
     "@careeros/observability": "workspace:*",
+
     "@prisma/prisma-schema-wasm": "6.16.0-7.1c57fdcd7e44b29b9313256c76699e91c3ac3c43",
     "prisma": "^6.16.2",
     "tsx": "^4.23.0"

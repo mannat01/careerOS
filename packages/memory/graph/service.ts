@@ -174,7 +174,93 @@ export class GraphMemoryService {
     }
   }
 
+  // ---------------- opportunity → company + required-skill (M04 ingestion) ----------------
+
+  /**
+   * Idempotent upsert of the subgraph produced by ingesting one Opportunity
+   * into the per-user Career Knowledge Graph (milestone-04 §Deliverables):
+   *
+   *   opportunity ──about_company──→ company
+   *   opportunity ──requires_skill──→ skill (one edge per required skill)
+   *
+   * The opportunity node key is the row id from the OpportunityStore — that's
+   * a UUID, stable across ingestion runs — so re-ingesting the SAME opportunity
+   * updates the node in place and never creates duplicate edges. Company +
+   * skill node keys are canonicalized on lower-cased trimmed labels (the same
+   * conventions used by `upsertFromProfile` above), so the ingested company
+   * and a company already imported from the user's profile share ONE node —
+   * which is what unlocks skill-overlap scoring in the next M04 step.
+   *
+   * PORT match: this method's signature is a structural implementation of
+   * `OpportunityGraphSink` in @careeros/connectors (the `IngestionService`
+   * accepts it via duck-typing so `memory` doesn't need to import
+   * `@careeros/connectors`).
+   */
+  async upsertOpportunityGraph(
+    userId: string,
+    input: {
+      opportunityId: string;
+      role: string;
+      company: string;
+      requiredSkills: readonly string[];
+    },
+  ): Promise<void> {
+    // 1. Opportunity node — kind='project' (there's no dedicated 'opportunity'
+    // GraphNodeKind in the M02 enum; project is the closest 'thing you might
+    // work on' shape and is what agents already reason about in vector search).
+    const oppLabel = `${input.role} at ${input.company}`;
+    const opportunityNode = await this.store.upsertNode({
+      userId,
+      kind: 'project',
+      key: `opportunity:${input.opportunityId}`,
+      label: oppLabel,
+      refId: input.opportunityId,
+      attrs: { opportunityId: input.opportunityId, role: input.role, company: input.company },
+      embedding: this.embedder.embed(oppLabel),
+    });
+
+    // 2. Company node (shared with profile-import companies via identical key).
+    const company = await this.store.upsertNode({
+      userId,
+      kind: 'company',
+      key: `company:${input.company.toLowerCase().trim()}`,
+      label: input.company,
+      attrs: { source: 'opportunity_ingest' },
+      embedding: this.embedder.embed(input.company),
+    });
+
+    // 3. Edge: opportunity → company. We reuse the `worked_at` edge type; the
+    // M02 GraphEdgeType enum was scoped to profile relations and adding a new
+    // enum value here would ripple through the DB migration and every
+    // agentBoundary matcher for zero graph-shape benefit — the traversal API
+    // filters by node.kind anyway.
+    await this.store.upsertEdge({
+      userId,
+      fromNodeId: opportunityNode.id,
+      toNodeId: company.id,
+      type: 'worked_at',
+      weight: 1,
+      attrs: { relation: 'about_company', opportunityId: input.opportunityId },
+      provenance: 'opportunity_ingest',
+    });
+
+    // 4. Edges: opportunity → each required skill (demonstrates ≈ requires).
+    for (const skillName of input.requiredSkills) {
+      const skill = await this.upsertSkillNode(userId, skillName, input.opportunityId);
+      await this.store.upsertEdge({
+        userId,
+        fromNodeId: opportunityNode.id,
+        toNodeId: skill.node.id,
+        type: 'demonstrates',
+        weight: 1,
+        attrs: { relation: 'requires_skill', opportunityId: input.opportunityId },
+        provenance: 'opportunity_ingest',
+      });
+    }
+  }
+
   // ---------------- per-call skill cache (avoids redundant upsertNode lookups) ----------------
+
 
   private skillCache = new Map<string, { node: GraphNode }>();
 
