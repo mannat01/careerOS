@@ -29,6 +29,26 @@ export {
   type SourceRegistryEntry,
 } from './opportunity.js';
 export {
+  applicationStatusSchema,
+  applicationActorSchema,
+  applicationCreateRequestSchema,
+  applicationPatchRequestSchema,
+  applicationFollowUpRequestSchema,
+  applicationTimelineEntrySchema,
+  applicationSchema,
+  applicationDetailSchema,
+  applicationFollowUpSchema,
+  type ApplicationStatus,
+  type ApplicationActor,
+  type ApplicationCreateRequest,
+  type ApplicationPatchRequest,
+  type ApplicationFollowUpRequest,
+  type ApplicationTimelineEntry,
+  type Application,
+  type ApplicationDetail,
+  type ApplicationFollowUp,
+} from './application.js';
+export {
   provenanceSchema,
   parsedEntitySchema,
   profileImportRequestSchema,

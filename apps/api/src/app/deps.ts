@@ -7,6 +7,7 @@ import type { GraphQueryDeps } from '../modules/cie/graph.handlers.js';
 import type { MatchHandlerDeps, ResumeHandlerDeps } from '../modules/cie/resume.handlers.js';
 import type { StateHandlerDeps } from '../modules/cie/state.handlers.js';
 import type { OpportunityHandlerDeps } from '../modules/opportunity/opportunity.handlers.js';
+import type { ApplicationHandlerDeps } from '../modules/application/application.handlers.js';
 
 import type { ObjectStorage } from '../common/storage/object-storage.js';
 import type { ExportQueue } from '../common/queue/export-queue.js';
@@ -29,6 +30,7 @@ export interface AppDeps {
   resume: ResumeHandlerDeps;
   match: MatchHandlerDeps;
   opportunity: OpportunityHandlerDeps;
+  application: ApplicationHandlerDeps;
   gate: EnforceDeps;
 
   storage: ObjectStorage;

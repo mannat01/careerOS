@@ -61,6 +61,21 @@ enum MemoryEventType {
   system
 }
 
+// database-schema.md §application — the fixed pipeline, in order.
+// saved → drafting → ready → applied → screening → interviewing → offer → closed.
+// `closed` is reachable from any non-terminal state (drop / reject at any stage).
+enum ApplicationStatus {
+  saved
+  drafting
+  ready
+  applied
+  screening
+  interviewing
+  offer
+  closed
+}
+
+
 // ---------------- identity ----------------
 
 model User {
@@ -79,8 +94,10 @@ model User {
   memoryEvents   MemoryEvent[]
   graphNodes     GraphNode[]
   graphEdges     GraphEdge[]
+  applications   Application[]
 
   @@map("users")
+
 
 }
 
@@ -273,7 +290,83 @@ model MatchScore {
   @@map("match_scores")
 }
 
+// ---------------- application pipeline (per-user CRM — database-schema.md §application) ----------------
+
+/// A per-user Application: the CRM record binding ONE user to ONE opportunity as
+/// they move it through the fixed status pipeline (saved…closed). PER-USER scoped —
+/// `(user_id, opportunity_id)` is UNIQUE, so a user tracks a given opportunity once;
+/// users A and B keep independent applications for the SAME global opportunity.
+///
+/// `resume_variant_id` optionally links a tailored resume variant. It is a plain
+/// string (no FK) because resume variants are not yet a persisted Prisma table
+/// (M03 stores them in-memory) — the column is forward-compatible for when they are.
+///
+/// `applied_at` is set ONLY on the human-in-the-loop transition to `applied`
+/// (the explicit "I submitted this" user action); it is never written by an agent.
+model Application {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  opportunityId   String  @map("opportunity_id") @db.Uuid
+  resumeVariantId String? @map("resume_variant_id")
+
+  status    ApplicationStatus @default(saved)
+  notes     String?
+  followUpAt DateTime?        @map("follow_up_at")
+  /// Timestamp of the explicit user submit (the applied transition); null until then.
+  appliedAt DateTime?         @map("applied_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  timeline  ApplicationTimelineEntry[]
+  followUps ApplicationFollowUp[]
+
+  @@unique([userId, opportunityId])
+  @@index([userId, status])
+  @@map("applications")
+}
+
+/// APPEND-ONLY status-change history for an Application (database-schema.md
+/// §application). One row per meaningful transition, recording where it came from
+/// (`from_status`, null on create), where it went (`to_status`), WHO drove it
+/// (`actor`), and an optional note. Rows are removed solely by the parent cascade.
+model ApplicationTimelineEntry {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  fromStatus ApplicationStatus? @map("from_status")
+  toStatus   ApplicationStatus  @map("to_status")
+  actor      AuditActor
+  note       String?
+  at         DateTime           @default(now())
+
+  @@index([applicationId, at])
+  @@map("application_timeline")
+}
+
+/// An INTERNAL follow-up reminder for an Application (Green; no external send ever
+/// leaves the system — architecture.md autonomy tiers). Just a due date + note the
+/// user sees inside the app; `done` flips when acknowledged.
+model ApplicationFollowUp {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  dueAt DateTime @map("due_at")
+  note  String?
+  done  Boolean  @default(false)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([applicationId, dueAt])
+  @@map("application_follow_ups")
+}
+
 // ---------------- connectors ----------------
+
 
 
 model SourceRegistry {

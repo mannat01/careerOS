@@ -19,6 +19,8 @@ import {
   PrismaUserLifecycleRepo,
   PrismaUserRepo,
   PrismaUserSettingsRepo,
+  PrismaApplicationStore,
+  PrismaOpportunityExists,
 } from '@careeros/db';
 
 import { createLlmGateway, AnthropicProvider } from '@careeros/llm-gateway';
@@ -41,6 +43,7 @@ import {
   MemoryStateFactAdapter,
 } from '../modules/cie/state.handlers.js';
 import { MemoryResumeFactAdapter } from '../modules/cie/resume.handlers.js';
+import { ApplicationMemoryServiceAdapter } from '../modules/application/memory-adapter.js';
 import { AppModule } from './app.module.js';
 import type { AppDeps } from './deps.js';
 import type { AuthProvider } from '../common/auth/auth-provider.js';
@@ -169,6 +172,15 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
       matchStore: new PrismaMatchScoreStore(prisma),
       profiles: new PrismaProfileResolver(prisma),
       scorer: matchScorerService,
+    },
+    // M04 Stage 4 application pipeline (CRM). The store is the sole @careeros/db
+    // seam; the memory adapter appends ONE episodic MemoryEvent per meaningful
+    // status change. The applied-only-by-user invariant lives in the pure
+    // status-machine the handler runs before any write.
+    application: overrides?.application ?? {
+      store: new PrismaApplicationStore(prisma),
+      opportunities: new PrismaOpportunityExists(prisma),
+      memory: new ApplicationMemoryServiceAdapter(memory),
     },
 
     gate: overrides?.gate ?? {

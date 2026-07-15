@@ -61,6 +61,29 @@ export {
   type ProfileResolver,
 } from './modules/opportunity/opportunity.handlers.js';
 export {
+  createApplication,
+  getApplication,
+  listApplications,
+  patchApplication,
+  scheduleFollowUp,
+  resolveActor,
+  type ApplicationHandlerDeps,
+  type ApplicationStorePort,
+  type ApplicationUpdateCommand,
+  type ApplicationMemoryPort,
+  type OpportunityExistsPort,
+} from './modules/application/application.handlers.js';
+export {
+  APPLICATION_PIPELINE,
+  checkTransition,
+  isStructurallyValidTransition,
+  isMeaningfulStatusChange,
+  type TransitionCheck,
+  type TransitionDenyReason,
+  type TransitionIntent,
+} from './modules/application/status-machine.js';
+export { ApplicationMemoryServiceAdapter } from './modules/application/memory-adapter.js';
+export {
   InMemoryProfileRepo,
   type ProfileRepo,
   type ProfileImportResult,

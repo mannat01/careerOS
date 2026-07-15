@@ -39,5 +39,17 @@ export {
   type MatchSubscoreLike,
 } from './stores/prisma-match-score-store.js';
 export { PrismaProfileResolver, type ProfileResolverPort } from './stores/prisma-profile-resolver.js';
+export {
+  PrismaApplicationStore,
+  PrismaOpportunityExists,
+  type ApplicationStorePortShape,
+  type ApplicationLike,
+  type ApplicationDetailLike,
+  type ApplicationTimelineEntryLike,
+  type ApplicationFollowUpLike,
+  type ApplicationUpdateCommandLike,
+  type ApplicationStatusLike,
+  type ApplicationActorLike,
+} from './stores/prisma-application-store.js';
 
 
