@@ -123,11 +123,14 @@ model Profile {
   education   Education[]
   skillClaims SkillClaim[]
   derivedInsights DerivedInsight[]
+  matchScores     MatchScore[]
 
   @@index([userId])
   @@map("profiles")
 
 }
+
+
 
 model Experience {
   id        String  @id @default(uuid()) @db.Uuid
@@ -232,12 +235,46 @@ model Opportunity {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  matchScores MatchScore[]
+
   @@unique([sourceKey, sourceRef])
   @@index([dedupKey])
   @@map("opportunities")
 }
 
+
+/// A discovery-time (profile, opportunity) MatchScore (database-schema.md §opportunity).
+/// The scorer's honest, grounded output: `overall` (0–100) + `subscores` (jsonb) +
+/// a plain-language `explanation` (never a bare number) + `evidenceRefs` (jsonb: the
+/// real profile fact ids the explanation grounds itself in) + a `modelVersion` stamp.
+///
+/// UNIQUE `(profile_id, opportunity_id, model_version)` — 1:many OVER model versions
+/// (each version a reproducible row for audit); the app reads the LATEST version for
+/// display. Per-user by construction: `profile_id` binds the score to one user's
+/// profile, so users A and B get DIFFERENT MatchScore rows for the SAME opportunity.
+model MatchScore {
+  id            String      @id @default(uuid()) @db.Uuid
+  profileId     String      @map("profile_id") @db.Uuid
+  profile       Profile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  opportunityId String      @map("opportunity_id") @db.Uuid
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  overall      Int
+  subscores    Json
+  explanation  String
+  evidenceRefs Json    @map("evidence_refs")
+  modelVersion String  @map("model_version")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([profileId, opportunityId, modelVersion])
+  @@index([opportunityId])
+  @@map("match_scores")
+}
+
 // ---------------- connectors ----------------
+
 
 model SourceRegistry {
   id      String     @id @default(uuid()) @db.Uuid

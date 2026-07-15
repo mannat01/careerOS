@@ -25,4 +25,19 @@ export {
 } from './stores/prisma-memory-stores.js';
 export { PrismaGraphStore } from './stores/prisma-graph-store.js';
 export { PrismaOpportunityStore } from './stores/prisma-opportunity-store.js';
+export {
+  PrismaOpportunityReadStore,
+  type OpportunityDetail,
+  type OpportunityFilters,
+  type OpportunityListItem,
+  type OpportunityPage,
+} from './stores/prisma-opportunity-read-store.js';
+export {
+  PrismaMatchScoreStore,
+  type MatchScoreLike,
+  type MatchScoreStorePort,
+  type MatchSubscoreLike,
+} from './stores/prisma-match-score-store.js';
+export { PrismaProfileResolver, type ProfileResolverPort } from './stores/prisma-profile-resolver.js';
+
 

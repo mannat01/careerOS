@@ -46,10 +46,26 @@ export {
   type MatchHandlerDeps,
 } from './modules/cie/resume.handlers.js';
 export {
+  listOpportunities,
+  getOpportunity,
+  getOpportunityMatch,
+  opportunityToJob,
+  type OpportunityDetail,
+  type OpportunityFilters,
+  type OpportunityHandlerDeps,
+  type OpportunityListItem,
+  type OpportunityMatch,
+  type OpportunityPage,
+  type OpportunityReadPort,
+  type MatchScoreStore,
+  type ProfileResolver,
+} from './modules/opportunity/opportunity.handlers.js';
+export {
   InMemoryProfileRepo,
   type ProfileRepo,
   type ProfileImportResult,
 } from './modules/profile/repos.js';
+
 export { AgentExtractionAdapter } from './modules/profile/extractor-adapter.js';
 export { type AuthProvider } from './common/auth/auth-provider.js';
 

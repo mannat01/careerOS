@@ -10,13 +10,17 @@ import {
   PrismaClient,
   PrismaEpisodicStore,
   PrismaGraphStore,
+  PrismaMatchScoreStore,
+  PrismaOpportunityReadStore,
   PrismaProfileReader,
   PrismaProfileRepo,
+  PrismaProfileResolver,
   PrismaSemanticStore,
   PrismaUserLifecycleRepo,
   PrismaUserRepo,
   PrismaUserSettingsRepo,
 } from '@careeros/db';
+
 import { createLlmGateway, AnthropicProvider } from '@careeros/llm-gateway';
 import { LlmExtractionAgent } from '@careeros/agents';
 import { MemoryService, GraphMemoryService, FakeEmbedder, FakeLlmProvider } from '@careeros/memory';
@@ -157,8 +161,18 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     state: overrides?.state ?? { service: stateService },
     resume: overrides?.resume ?? { service: resumeService },
     match: overrides?.match ?? { service: matchScorerService },
+    // M04 discovery reads + discovery-time scoring. The read + match stores are
+    // the sole @careeros/db seams; the REUSED M03 MatchScorerService produces the
+    // honest, grounded MatchScore, persisted per (profile, opportunity, model).
+    opportunity: overrides?.opportunity ?? {
+      read: new PrismaOpportunityReadStore(prisma),
+      matchStore: new PrismaMatchScoreStore(prisma),
+      profiles: new PrismaProfileResolver(prisma),
+      scorer: matchScorerService,
+    },
 
     gate: overrides?.gate ?? {
+
       secret: env.APPROVAL_TOKEN_SECRET,
       tokenStore: new PrismaApprovalTokenStore(prisma),
       audit,
