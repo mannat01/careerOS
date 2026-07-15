@@ -27,11 +27,15 @@ import type {
   TailoredResume,
   TailoringAgent,
   TailoringCase,
+  DecisionAgent,
+  DecisionCase,
+  DecisionContract,
+  OfferComparisonAgent,
+  OfferComparisonCase,
+  OfferComparison,
 } from './types.js';
 
-
 // ---------- helpers ----------
-
 const norm = (s: string): string => s.trim().toLowerCase();
 
 /** Primary name of an expected entity, per kind. */
@@ -60,7 +64,6 @@ function entityText(e: ExtractedEntity): string {
 }
 
 // ---------- extraction scoring ----------
-
 export interface ExtractionCaseResult {
   caseId: string;
   expectedCount: number;
@@ -126,7 +129,6 @@ export async function runExtractionEval(
 }
 
 // ---------- state-model scoring ----------
-
 export interface DimensionCheckResult {
   dimension: string;
   missing: string[];
@@ -210,8 +212,6 @@ export async function runStateModelEval(
 // ============================================================================
 
 // ---------- ATS-safety heuristic ----------
-
-
 export interface AtsCheckResult {
   passed: boolean;
   warnings: string[];
@@ -424,6 +424,181 @@ export async function runScoringEval(
   };
 }
 
+// ============================================================================
+// M05 — DECISION-SUPPORT scoring (evidence grounded, honest recommendation,
+// calibrated confidence, optionality considered).
+// A decision contract passes a case iff ALL of:
+//   (a) EVIDENCE GROUNDED — every evidence ref resolves to a real profile/graph/state fact;
+//   (b) HONEST RECOMMENDATION — follows from the evidence, never papers over a real gap;
+//   (c) CALIBRATED CONFIDENCE — lower when evidence is thin/conflicting;
+//   (d) OPTIONALITY CONSIDERED — includes note when relevant.
+// ============================================================================
+
+export interface DecisionCaseResult {
+  caseId: string;
+  evidenceGrounded: boolean;
+  honestRecommendation: boolean;
+  calibratedConfidence: boolean;
+  optionalityConsidered: boolean;
+  fabrications: string[];
+  uncalibrated: boolean;
+  passed: boolean;
+}
+
+export function scoreDecisionCase(c: DecisionCase, produced: DecisionContract): DecisionCaseResult {
+  // (a) Evidence grounded: every evidence ref resolves to a real fact
+  const profileIds = new Set(c.profile.map(f => f.id));
+  const stateModelIds = new Set(c.stateModel.flatMap(d => d.evidenceRefs));
+  const allFactIds = new Set([...profileIds, ...stateModelIds]);
+  
+  const ungroundedEvidence = produced.evidenceRefs.filter(ref => !allFactIds.has(ref));
+  const evidenceGrounded = ungroundedEvidence.length === 0;
+
+  // (b) Honest recommendation: follows from evidence, doesn't paper over gaps
+  const honestRecommendation = c.expected.recommendation === produced.recommendation;
+  
+  // (c) Calibrated confidence: within expected band
+  const calibratedConfidence = 
+    produced.confidence >= c.expected.confidence.min && 
+    produced.confidence <= c.expected.confidence.max;
+  
+  // (d) Optionality considered: note present when expected
+  const optionalityConsidered = 
+    (c.expected.optionalityNote !== undefined) === (produced.optionalityNote !== undefined);
+
+  // Fabrication check: forbidden strings in reasoning/recommendation
+  const haystack = norm(`${produced.reasoning} ${produced.recommendation}`);
+  const fabrications = (c.forbidden ?? []).filter(f => haystack.includes(norm(f)));
+  
+  // Uncalibrated check (separate from calibratedConfidence for reporting)
+  const uncalibrated = !calibratedConfidence;
+
+  const passed = 
+    evidenceGrounded && 
+    honestRecommendation && 
+    calibratedConfidence && 
+    optionalityConsidered && 
+    fabrications.length === 0;
+
+  return {
+    caseId: c.id,
+    evidenceGrounded,
+    honestRecommendation,
+    calibratedConfidence,
+    optionalityConsidered,
+    fabrications,
+    uncalibrated,
+    passed,
+  };
+}
+
+export interface DecisionSuiteResult {
+  cases: DecisionCaseResult[];
+  fabricationCount: number;
+  adversarialFabrications: number;
+  uncalibratedCount: number;
+  passed: boolean;
+}
+
+export async function runDecisionEval(
+  agent: DecisionAgent,
+  cases: DecisionCase[],
+): Promise<DecisionSuiteResult> {
+  const results: DecisionCaseResult[] = [];
+  for (const c of cases) {
+    const contract = await agent.decide(
+      c.profile,
+      c.stateModel,
+      c.opportunity,
+      c.question
+    );
+    results.push(scoreDecisionCase(c, contract));
+  }
+  
+  return {
+    cases: results,
+    fabricationCount: results.reduce((n, r) => n + r.fabrications.length, 0),
+    adversarialFabrications: results
+      .filter(r => r.fabrications.length > 0 && r.caseId.startsWith('ds-0'))
+      .reduce((n, r) => n + r.fabrications.length, 0),
+    uncalibratedCount: results.filter(r => r.uncalibrated).length,
+    passed: results.every(r => r.passed),
+  };
+}
+
+// ============================================================================
+// M05 — OFFER COMPARISON scoring (objective ranking, weights match, explanation cites real data).
+// An offer comparison passes a case iff ALL of:
+//   (a) OBJECTIVE MULTI-FACTOR RANKING — reflects the user's real stated values/goals;
+//   (b) WEIGHTS MATCH USER INPUT — no invented preferences, weights sum to 1;
+//   (c) EXPLANATION CITES REAL OFFER DATA — every factor references actual offer attributes;
+//   (d) NO FABRICATED OFFER DETAILS — forbidden strings catch padding attempts.
+// ============================================================================
+
+export interface OfferComparisonCaseResult {
+  caseId: string;
+  objectiveRanking: boolean;
+  weightsMatch: boolean;
+  explanationCitesData: boolean;
+  noFabricatedDetails: boolean;
+  passed: boolean;
+}
+
+export function scoreOfferComparisonCase(
+  c: OfferComparisonCase, 
+  produced: OfferComparison
+): OfferComparisonCaseResult {
+  // (a) Objective ranking: matches expected order
+  const objectiveRanking = JSON.stringify(produced.ranking) === JSON.stringify(c.expected.ranking);
+  
+  // (b) Weights match: same keys and values as input
+  const weightsMatch = Object.keys(c.candidateValues.weights).every(key => 
+    c.candidateValues.weights[key] === produced.weights[key]
+  );
+  
+  // (c) Explanation cites real data: references actual offer attributes
+  const offerIds = new Set(c.offers.map(o => o.id));
+  const explanationCitesData = c.expected.evidenceRefs.every(id => offerIds.has(id));
+  
+  // (d) No fabricated details: forbidden strings not in explanation
+  const haystack = norm(produced.explanation);
+  const noFabricatedDetails = !(c.forbidden ?? []).some(f => haystack.includes(norm(f)));
+  
+  const passed = objectiveRanking && weightsMatch && explanationCitesData && noFabricatedDetails;
+  
+  return {
+    caseId: c.id,
+    objectiveRanking,
+    weightsMatch,
+    explanationCitesData,
+    noFabricatedDetails,
+    passed,
+  };
+}
+
+export interface OfferComparisonSuiteResult {
+  cases: OfferComparisonCaseResult[];
+  passed: boolean;
+}
+
+export async function runOfferComparisonEval(
+  agent: OfferComparisonAgent,
+  cases: OfferComparisonCase[],
+): Promise<OfferComparisonSuiteResult> {
+  const results: OfferComparisonCaseResult[] = [];
+  for (const c of cases) {
+    const comparison = await agent.compare(
+      c.candidateValues,
+      c.offers
+    );
+    results.push(scoreOfferComparisonCase(c, comparison));
+  }
+  
+  return {
+    cases: results,
+    passed: results.every(r => r.passed),
+  };
+}
+
 // Re-export types used by callers that only import the harness.
 export type { JobDescription, ProfileFact };
-

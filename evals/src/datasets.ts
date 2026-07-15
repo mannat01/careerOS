@@ -6,7 +6,16 @@ import { stateModelCases } from '../state-model/cases.js';
 import { tailoringStandardCases } from '../tailoring/cases-standard.js';
 import { tailoringAdversarialCases } from '../tailoring/cases-adversarial.js';
 import { scoringCases } from '../scoring/cases.js';
-import type { ExtractionCase, ScoringCase, StateModelCase, TailoringCase } from './types.js';
+import { decisionCases } from '../decision/cases.js';
+import { offerComparisonCases } from '../offers/cases.js';
+import type { 
+  ExtractionCase, 
+  ScoringCase, 
+  StateModelCase, 
+  TailoringCase,
+  DecisionCase,
+  OfferComparisonCase 
+} from './types.js';
 
 export function loadExtractionCases(): ExtractionCase[] {
   return [...standardCases1, ...standardCases2, ...adversarialCases];
@@ -24,5 +33,15 @@ export function loadTailoringCases(): TailoringCase[] {
 
 export function loadScoringCases(): ScoringCase[] {
   return [...scoringCases];
+}
+
+// ---------- M05 decision-support golden sets ----------
+
+export function loadDecisionCases(): DecisionCase[] {
+  return [...decisionCases];
+}
+
+export function loadOfferComparisonCases(): OfferComparisonCase[] {
+  return [...offerComparisonCases];
 }
 

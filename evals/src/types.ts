@@ -259,3 +259,172 @@ export interface ScoringCase {
   forbidden?: string[];
 }
 
+// ============================================================================
+// M05 — DECISION SUPPORT golden types (authored golden-first, before the
+// reasoner agent exists). They define THE BAR the Step-2 reasoner must meet.
+// Assertions are CHECKABLE PROPERTIES:
+//   (a) evidence grounded — every evidence ref resolves to a real profile/graph/state fact;
+//   (b) honest recommendation — follows from the evidence, never papers over a real gap;
+//   (c) calibrated confidence — lower when evidence is thin/conflicting;
+//   (d) optionality considered.
+// ============================================================================
+
+/**
+ * A decision case: profile + state model + a decision question / opportunity.
+ * The reasoner must return a structured contract with evidence, reasoning,
+ * confidence, assumptions, recommendation, and optionality note.
+ */
+export interface DecisionCase {
+  id: string;
+  description: string;
+  profile: ProfileFact[];
+  stateModel: DerivedDimension[];
+  opportunity?: JobDescription;
+  question: string;
+  expected: ExpectedDecisionContract;
+  /**
+   * ZERO-FABRICATION guard: strings that must NEVER appear in the recommendation
+   * or reasoning (e.g. fabricated evidence, overconfident claims).
+   */
+  forbidden?: string[];
+  /** Marks an adversarial case (e.g. underqualified, thin evidence, values conflict). */
+  adversarial?: boolean;
+  /** Human note describing the trap (adversarial cases only). */
+  trap?: string;
+}
+
+export interface ExpectedDecisionContract {
+  /**
+   * Alternatives considered by the reasoner (e.g. apply, wait, negotiate).
+   * Must be grounded in the profile/state/opportunity.
+   */
+  alternatives: string[];
+  /**
+   * Evidence supporting the decision, with refs to real profile/graph/state facts.
+   * Every ref must resolve to an existing fact.
+   */
+  evidenceRefs: string[];
+  /**
+   * Reasoning that logically connects evidence to the recommendation.
+   * Must not contradict the evidence or introduce fabricated claims.
+   */
+  reasoning: string;
+  /**
+   * Confidence level (0-1) calibrated to evidence strength.
+   * Must be lower when evidence is thin/conflicting.
+   */
+  confidence: { min: number; max: number };
+  /**
+   * Assumptions made during reasoning (e.g. "assuming the role requires X").
+   * Must be explicit and reasonable.
+   */
+  assumptions: string[];
+  /**
+   * Final recommendation (e.g. "apply", "wait", "negotiate").
+   * Must follow logically from evidence and reasoning.
+   */
+  recommendation: string;
+  /**
+   * Note about optionality (e.g. "consider applying in 6 months when you have more X").
+   * Must be present when relevant.
+   */
+  optionalityNote?: string;
+}
+
+export interface DecisionContract {
+  alternatives: string[];
+  evidenceRefs: string[];
+  reasoning: string;
+  confidence: number;
+  assumptions: string[];
+  recommendation: string;
+  optionalityNote?: string;
+}
+
+export interface DecisionAgent {
+  decide(
+    profile: ProfileFact[],
+    stateModel: DerivedDimension[],
+    opportunity: JobDescription | undefined,
+    question: string
+  ): Promise<DecisionContract>;
+}
+
+// ---------- offer comparison (values/goals + offers → ranked comparison) ----------
+
+/**
+ * An offer comparison case: candidate values/goals + 2–3 offers.
+ * The reasoner must return an objective multi-factor ranking.
+ */
+export interface OfferComparisonCase {
+  id: string;
+  description: string;
+  candidateValues: {
+    /** User's stated career goals (e.g. "reach Staff level in 3 years"). */
+    goals: string[];
+    /** User's stated values (e.g. "remote work", "impactful projects"). */
+    values: string[];
+    /** Weights for each value (0-1, sum to 1) reflecting importance. */
+    weights: Record<string, number>;
+  };
+  offers: {
+    id: string;
+    title: string;
+    company: string;
+    /** Key attributes of the offer (e.g. salary, remote, growth opportunities). */
+    attributes: Record<string, string>;
+  }[];
+  /** Human note describing the fabrication trap (adversarial cases only). */
+  trap?: string;
+  /** Marks an adversarial case (e.g. thin evidence, fabricated preferences). */
+  adversarial?: boolean;
+  /** Strings that must NEVER appear in the offer comparison output (fabrication guard). */
+  forbidden?: string[];
+  expected: ExpectedOfferComparison;
+}
+
+export interface ExpectedOfferComparison {
+  /**
+   * Objective ranking of offers (highest to lowest).
+   * Must reflect the user's stated values and weights.
+   */
+  ranking: string[];
+  /**
+   * Weights used in the ranking, which must match the user's stated weights.
+   * No invented preferences allowed.
+   */
+  weights: Record<string, number>;
+  /**
+   * Explanation of the ranking, citing real offer data for each factor.
+   * Must not fabricate offer details.
+   */
+  explanation: string;
+  /**
+   * References to real offer attributes used in the explanation.
+   * Every factor must cite real data.
+   */
+  evidenceRefs: string[];
+}
+
+export interface OfferComparison {
+  ranking: string[];
+  weights: Record<string, number>;
+  explanation: string;
+  evidenceRefs: string[];
+}
+
+export interface OfferComparisonAgent {
+  compare(
+    candidateValues: {
+      goals: string[];
+      values: string[];
+      weights: Record<string, number>;
+    },
+    offers: {
+      id: string;
+      title: string;
+      company: string;
+      attributes: Record<string, string>;
+    }[]
+  ): Promise<OfferComparison>;
+}
