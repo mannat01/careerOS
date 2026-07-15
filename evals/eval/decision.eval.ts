@@ -11,14 +11,17 @@
 import { describe, expect, it } from 'vitest';
 import { runDecisionEval, scoreDecisionCase } from '../src/harness.js';
 import { loadDecisionCases } from '../src/datasets.js';
-import { StubDecisionAgent, sycophantDecisionAgent } from '../src/decision-agents.js';
+import { sycophantDecisionAgent } from '../src/decision-agents.js';
+import { createDecisionFixtureAgent } from '../src/decision-fixture-agent.js';
 
 const cases = loadDecisionCases();
-// Step 1 (golden-first): NO reasoner exists yet. The current agent is a
-// deliberate stub → this gate is RED-by-design. Step 2 will swap in the real
-// reasoner (behind FakeLlmProvider) and must turn it green WITHOUT editing the
-// golden set.
-const currentAgent = new StubDecisionAgent();
+// Step 2: the REAL LlmStrategicReasonerAgent runs behind a FakeLlmProvider. The
+// fake ACTIVELY proposes the forbidden fabrications (staff experience for the
+// underqualified case, backend expertise for the thin-evidence case, remote
+// flexibility for the values conflict) with inflated 0.95 confidence — the
+// deterministic `groundContract` guardrail must relocate/drop/downgrade every
+// one. The golden set is frozen; the guardrail is what makes this gate GREEN.
+const currentAgent = createDecisionFixtureAgent(cases);
 
 
 describe('M05 eval gate — decision support', async () => {

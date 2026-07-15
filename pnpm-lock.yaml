@@ -38,6 +38,9 @@ importers:
       '@careeros/capability-gate':
         specifier: workspace:*
         version: link:../../packages/capability-gate
+      '@careeros/cie-reasoning':
+        specifier: workspace:*
+        version: link:../../packages/cie/reasoning
       '@careeros/cie-resume':
         specifier: workspace:*
         version: link:../../packages/cie/resume
@@ -112,6 +115,9 @@ importers:
       '@careeros/agents':
         specifier: workspace:*
         version: link:../packages/agents
+      '@careeros/cie-reasoning':
+        specifier: workspace:*
+        version: link:../packages/cie/reasoning
       '@careeros/cie-resume':
         specifier: workspace:*
         version: link:../packages/cie/resume
@@ -165,7 +171,24 @@ importers:
 
   packages/cie/planner: {}
 
-  packages/cie/reasoning: {}
+  packages/cie/reasoning:
+    dependencies:
+      '@careeros/llm-gateway':
+        specifier: workspace:*
+        version: link:../../llm-gateway
+      '@careeros/memory':
+        specifier: workspace:*
+        version: link:../../memory
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+    devDependencies:
+      '@careeros/config':
+        specifier: workspace:*
+        version: link:../../config
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@20.19.43)
 
   packages/cie/resume:
     dependencies:

@@ -1,16 +1,21 @@
 /**
  * Fixture-backed Decision Agent — wraps the REAL DecisionAgent
- * (@careeros/cie-reasoning) with a FakeLlmProvider. The full pipeline (prompt →
- * parse → DETERMINISTIC guardrails) runs for real; only the network LLM call is
- * faked. The fake ACTIVELY proposes the over-reaches the golden set forbids
- * (fabricated evidence, overconfident claims) — the guardrails must relocate/
- * drop/downgrade every one.
+ * (@careeros/cie-reasoning `LlmStrategicReasonerAgent`) with a FakeLlmProvider.
+ * The full pipeline (prompt → parse → DETERMINISTIC guardrails) runs for real;
+ * only the network LLM call is faked.
+ *
+ * The FakeLlmProvider ACTIVELY proposes the over-reaches the golden set forbids
+ * (fabricated Staff experience, invented backend expertise, papered-over values
+ * conflict + inflated 0.95 confidence). The guardrails must relocate/drop/
+ * downgrade every one. Neuter `groundContract` (swap `rawProposalToContract`)
+ * and the decision eval turns RED loudly — that's the red-test.
  */
 import { FakeLlmProvider, createLlmGateway } from '@careeros/llm-gateway';
-import { DecisionAgent } from './types.js';
+import { LlmStrategicReasonerAgent } from '@careeros/cie-reasoning';
+import type { DecisionAgent } from './types.js';
 import type { DecisionCase } from './types.js';
 
-/** One raw decision contract the fake model proposes. */
+/** One raw decision contract the fake model proposes (matches io.ts schema). */
 interface RawDecisionContract {
   alternatives: string[];
   evidenceRefs: string[];
@@ -23,25 +28,31 @@ interface RawDecisionContract {
 
 /**
  * ACTIVE FABRICATIONS — the forbidden content a weak model emits per adversarial
- * case, injected into the raw completion so each guardrail path is exercised by a
- * REAL attempt, not by absence. Neuter groundDecisionContract and these leak.
+ * case, injected into the raw completion so each guardrail path is exercised by
+ * a REAL attempt, not by absence. Neuter groundContract and these leak into the
+ * final DecisionContract and the decision eval fails loudly.
  */
 const ACTIVE_FABRICATIONS: Record<string, Partial<RawDecisionContract>> = {
-  // ds-02: fabricate Staff readiness from a junior profile
+  // ds-02: fabricate Staff readiness + inflate confidence for a junior profile
   'ds-02-underqualified-staff': {
-    reasoning: 'Strong Staff-level experience demonstrated in current role',
+    reasoning:
+      'Staff Software Engineer level demonstrated in current role, with nearly a decade of principal engineer scope',
     recommendation: 'apply',
     confidence: 0.95,
+    evidenceRefs: ['f1', 'f2', 'f3', 'f-fabricated-staff'],
   },
-  // ds-03: fabricate backend skills from a barista profile
+  // ds-03: fabricate backend/Python for a barista+biology profile
   'ds-03-thin-evidence': {
-    reasoning: 'Extensive backend experience with Python and distributed systems',
+    reasoning:
+      'Strong Python background, distributed systems experience, and 5+ years of backend experience make this candidate senior-level',
     recommendation: 'apply',
     confidence: 0.9,
+    evidenceRefs: ['f1', 'f2', 'f-fabricated-backend'],
   },
-  // ds-04: fabricate remote flexibility for an onsite role
+  // ds-04: paper over the remote/onsite values conflict
   'ds-04-values-conflict': {
-    reasoning: 'Remote work is possible with flexible scheduling',
+    reasoning: 'Remote work is possible with a flexible onsite arrangement; can work remotely as needed.',
+    recommendation: 'apply',
     confidence: 0.85,
   },
 };
@@ -60,69 +71,41 @@ function honestContract(c: DecisionCase): RawDecisionContract {
 }
 
 /**
- * The raw JSON the fake model emits for a case: honest grounded contract PLUS the
- * active fabrications (adversarial only). The guardrail's job is to render the
- * former and strip the latter.
+ * The raw JSON the fake model emits for a case: honest grounded contract PLUS
+ * the active fabrications (adversarial only). The guardrail's job is to compose
+ * the grounded output from real inputs and discard the proposal entirely.
  */
 export function buildDecisionProposalJson(c: DecisionCase): string {
   const base = honestContract(c);
-  const fabricated = ACTIVE_FABRICATIONS[c.id] || {};
+  const fabricated = ACTIVE_FABRICATIONS[c.id] ?? {};
   const contract = { ...base, ...fabricated };
   return JSON.stringify(contract);
 }
 
 /** True when every fact summary of `c` appears in the prompt text. */
 function caseMatchesPrompt(c: DecisionCase, promptText: string): boolean {
-  const profileText = c.profile.map(f => f.summary).join('\n');
-  const stateModelText = c.stateModel.map(d => `${d.dimension}: ${d.values.join(', ')}`).join('\n');
-  const opportunityText = c.opportunity ? `Opportunity: ${c.opportunity.title}\n${c.opportunity.text}` : '';
-  const questionText = `Question: ${c.question}`;
-  
-  const fullText = [profileText, stateModelText, opportunityText, questionText].join('\n');
-  return promptText.includes(fullText);
+  return c.profile.every((f) => promptText.includes(f.summary));
 }
 
 export function createDecisionFixtureAgent(cases: DecisionCase[]): DecisionAgent {
   const fakeProvider = new FakeLlmProvider((req) => {
-    const promptText = req.messages.map(m => m.content).join('\n');
+    const promptText = req.messages.map((m) => m.content).join('\n');
     // Most-facts-first so a sparse profile never shadows a richer superset.
     const ordered = [...cases].sort((a, b) => b.profile.length - a.profile.length);
-    const hit = ordered.find(c => caseMatchesPrompt(c, promptText));
-    const json = hit ? buildDecisionProposalJson(hit) : JSON.stringify(honestContract(cases[0]!));
+    const hit = ordered.find((c) => caseMatchesPrompt(c, promptText));
+    const json = hit
+      ? buildDecisionProposalJson(hit)
+      : JSON.stringify(honestContract(cases[0]!));
     return { text: json, usage: { inputTokens: 100, outputTokens: json.length } };
   });
 
-  const _gateway = createLlmGateway({
+  const gateway = createLlmGateway({
     provider: fakeProvider,
     modelsByTier: { cheap: 'fixture-model', frontier: 'fixture-model' },
     pricing: {},
   });
 
-  // In a real implementation, this would be the actual DecisionAgent from @careeros/cie-reasoning
-  return {
-    // eslint-disable-next-line @typescript-eslint/require-await
-    decide: async (profile, stateModel, opportunity, question) => {
-      // This is a placeholder - in reality, the DecisionAgent would use the gateway
-      // to call the LLM and process the response
-      const c = cases.find(c =>
-        c.profile === profile &&
-        c.stateModel === stateModel &&
-        c.opportunity === opportunity &&
-        c.question === question
-      );
-
-      if (!c) {
-        return {
-          alternatives: [],
-          evidenceRefs: [],
-          reasoning: '',
-          confidence: 0,
-          assumptions: [],
-          recommendation: '',
-        };
-      }
-
-      return honestContract(c);
-    }
-  };
+  // Real agent: prompt → gateway (Fake) → parse → groundContract. Structurally
+  // compatible with the evals' DecisionAgent surface.
+  return new LlmStrategicReasonerAgent(gateway) as DecisionAgent;
 }

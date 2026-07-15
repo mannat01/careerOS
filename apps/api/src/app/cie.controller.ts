@@ -14,6 +14,7 @@ import {
   recomputeState,
   type StateHandlerDeps,
 } from '../modules/cie/state.handlers.js';
+import { decide, type DecideHandlerDeps } from '../modules/cie/decide.handlers.js';
 import type { HandlerResponse } from '../common/errors/http-error.js';
 import { BearerAuthGuard, type AuthedRequest } from './bearer-auth.guard.js';
 import { APP_DEPS, type AppDeps } from './deps.js';
@@ -114,5 +115,25 @@ export class CieController {
   ): Promise<void> {
     const deps: MatchHandlerDeps = this.deps.match;
     send(res, await scoreMatch(req.ctx, body, deps));
+  }
+
+  /**
+   * POST /v1/cie/decide — advisory Green Strategic-Reasoner endpoint (M05).
+   * Returns the full structured DecisionContract (alternatives, evidence,
+   * reasoning, calibrated confidence, assumptions, recommendation, optionality
+   * note) — never a bare verdict. Per-user by construction (userId from ctx).
+   * ADVISORY only: acting on the recommendation stays Yellow/Red at other
+   * endpoints, unchanged. The deterministic `groundContract` guardrail inside
+   * the reasoner ensures evidence + recommendation + confidence are always
+   * derived from the caller's real profile + real state model.
+   */
+  @Post('decide')
+  async decide(
+    @Req() req: AuthedRequest,
+    @Body() body: unknown,
+    @Res() res: Response,
+  ): Promise<void> {
+    const deps: DecideHandlerDeps = this.deps.decide;
+    send(res, await decide(req.ctx, body, deps));
   }
 }

@@ -36,7 +36,12 @@ import {
   SequentialIdGen,
 } from '@careeros/cie-resume';
 import { CareerStateService, InMemoryStateStore, LlmStateUpdaterAgent } from '@careeros/cie-state';
+import { LlmStrategicReasonerAgent, StrategicReasonerService } from '@careeros/cie-reasoning';
 import { GraphMemoryServiceAdapter } from '../modules/cie/graph.handlers.js';
+import {
+  MemoryReasonerFactAdapter,
+  StateServiceReasonerAdapter,
+} from '../modules/cie/decide.handlers.js';
 import {
   MemoryStateEventAdapter,
   MemoryStateEvidenceAdapter,
@@ -142,6 +147,18 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     agent: new LlmMatchScorerAgent(gateway),
   });
 
+  // Strategic Reasoner (M05). Advisory Green: derives a grounded DecisionContract
+  // from the caller's real profile + real state model. Reads via the narrow
+  // ReasonerFactPort / ReasonerStatePort seams (Memory/ProfileReader +
+  // CareerStateService) — never @careeros/db from the agent boundary. Runs on
+  // the frontier tier; the deterministic `groundContract` guardrail is what
+  // enforces evidence-grounded + honest + calibrated invariants.
+  const strategicReasonerService = new StrategicReasonerService({
+    facts: new MemoryReasonerFactAdapter(profileReader),
+    state: new StateServiceReasonerAdapter(stateService),
+    agent: new LlmStrategicReasonerAgent(gateway),
+  });
+
   // Career Knowledge Graph (database-schema.md §cie). Agents/handlers touch it
   // ONLY through GraphMemoryService; the PrismaGraphStore is the sole code path
   // to the graph_nodes / graph_edges tables. Node embeddings use the same
@@ -164,6 +181,7 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     state: overrides?.state ?? { service: stateService },
     resume: overrides?.resume ?? { service: resumeService },
     match: overrides?.match ?? { service: matchScorerService },
+    decide: overrides?.decide ?? { service: strategicReasonerService },
     // M04 discovery reads + discovery-time scoring. The read + match stores are
     // the sole @careeros/db seams; the REUSED M03 MatchScorerService produces the
     // honest, grounded MatchScore, persisted per (profile, opportunity, model).
