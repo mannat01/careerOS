@@ -84,6 +84,18 @@ export {
 } from './modules/application/status-machine.js';
 export { ApplicationMemoryServiceAdapter } from './modules/application/memory-adapter.js';
 export {
+  runTwinTurn,
+  TWIN_MODEL_VERSION,
+  DEFAULT_TWIN_MEMORY_BUDGET_TOKENS,
+  type TwinEvent,
+  type TwinHandlerDeps,
+  type TwinMemoryPort,
+  type TwinProfilePort,
+  type TwinReasonerPort,
+  type TwinTurnInput,
+} from './modules/twin/twin.handlers.js';
+export { detectYellowIntent } from './modules/twin/yellow-intent.js';
+export {
   InMemoryProfileRepo,
   type ProfileRepo,
   type ProfileImportResult,

@@ -5,6 +5,7 @@ import { ProfileController } from './profile.controller.js';
 import { CieController } from './cie.controller.js';
 import { OpportunityController } from './opportunity.controller.js';
 import { ApplicationController } from './application.controller.js';
+import { TwinController } from './twin.controller.js';
 import { BearerAuthGuard } from './bearer-auth.guard.js';
 
 import { APP_DEPS, type AppDeps } from './deps.js';
@@ -20,7 +21,7 @@ export class AppModule {
   static forRoot(deps: AppDeps): DynamicModule {
     return {
       module: AppModule,
-      controllers: [MeController, ProfileController, CieController, OpportunityController, ApplicationController],
+      controllers: [MeController, ProfileController, CieController, OpportunityController, ApplicationController, TwinController],
 
 
       providers: [{ provide: APP_DEPS, useValue: deps }, BearerAuthGuard],

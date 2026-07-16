@@ -54,6 +54,12 @@ import {
 } from '../modules/cie/state.handlers.js';
 import { MemoryResumeFactAdapter } from '../modules/cie/resume.handlers.js';
 import { ApplicationMemoryServiceAdapter } from '../modules/application/memory-adapter.js';
+import type {
+  TwinHandlerDeps,
+  TwinMemoryPort,
+  TwinProfilePort,
+  TwinReasonerPort,
+} from '../modules/twin/twin.handlers.js';
 import { AppModule } from './app.module.js';
 import type { AppDeps } from './deps.js';
 import type { AuthProvider } from '../common/auth/auth-provider.js';
@@ -215,6 +221,15 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
       opportunities: new PrismaOpportunityExists(prisma),
       memory: new ApplicationMemoryServiceAdapter(memory),
     },
+    // M05 Step 4 Twin conversational surface. All three ports are thin
+    // adapters over EXISTING services — no new @careeros/db imports here,
+    // no new stores. The narrow-port shapes live in twin.handlers.ts.
+    twin: overrides?.twin ?? buildTwinDeps({
+      memory,
+      profileResolver: new PrismaProfileResolver(prisma),
+      reasoner: strategicReasonerService,
+      audit,
+    }),
 
     gate: overrides?.gate ?? {
 
@@ -224,6 +239,35 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     },
     storage,
     exportQueue,
+  };
+}
+
+/**
+ * Twin-deps helper. Adapts the concrete MemoryService, ProfileResolver, and
+ * StrategicReasonerService onto the narrow ports the Twin handler depends on.
+ * Keeps ports one-method-wide + Prisma imports confined to this file.
+ */
+function buildTwinDeps(input: {
+  memory: MemoryService;
+  profileResolver: PrismaProfileResolver;
+  reasoner: StrategicReasonerService;
+  audit: ReturnType<typeof createAuditClient>;
+}): TwinHandlerDeps {
+  const memoryPort: TwinMemoryPort = {
+    retrieve: (task) => input.memory.retrieve(task),
+  };
+  const profilePort: TwinProfilePort = {
+    resolveProfileId: (userId) => input.profileResolver.resolveProfileId(userId),
+  };
+  const reasonerPort: TwinReasonerPort = {
+    decide: (userId, question, opportunity) =>
+      input.reasoner.decide(userId, question, opportunity),
+  };
+  return {
+    memory: memoryPort,
+    profiles: profilePort,
+    reasoner: reasonerPort,
+    audit: input.audit,
   };
 }
 
