@@ -19,6 +19,7 @@ export const GREEN_EVAL_SUITES = [
   'eval/tailoring.eval.ts', // M03 — resume tailoring (14/14; tl-11..14 guardrailed)
   'eval/scoring.eval.ts', // M03 — match scoring (9/9; groundMatchScore guardrail)
   'eval/decision.eval.ts', // M05 — strategic reasoner (13/13; groundContract guardrail)
+  'eval/offers.eval.ts', // M05 — offer comparison (6/6 golden + 3 adversarial; groundOfferComparison guardrail)
 ];
 
 export default defineConfig({ test: { include: GREEN_EVAL_SUITES } });

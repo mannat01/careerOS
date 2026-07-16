@@ -15,6 +15,7 @@ import {
   type StateHandlerDeps,
 } from '../modules/cie/state.handlers.js';
 import { decide, type DecideHandlerDeps } from '../modules/cie/decide.handlers.js';
+import { decideOffers, type DecideOffersHandlerDeps } from '../modules/cie/decide-offers.handlers.js';
 import type { HandlerResponse } from '../common/errors/http-error.js';
 import { BearerAuthGuard, type AuthedRequest } from './bearer-auth.guard.js';
 import { APP_DEPS, type AppDeps } from './deps.js';
@@ -135,5 +136,24 @@ export class CieController {
   ): Promise<void> {
     const deps: DecideHandlerDeps = this.deps.decide;
     send(res, await decide(req.ctx, body, deps));
+  }
+
+  /**
+   * POST /v1/cie/decide/offers — advisory Green Offer-Comparison endpoint
+   * (M05 Stage-5). Returns an OBJECTIVE multi-factor ranking of the caller's
+   * REAL offers weighted by their REAL stated preferences, with per-factor
+   * evidence + a grounded explanation. Per-user by construction (userId from
+   * ctx). ADVISORY only: accepting an offer stays Yellow/Red elsewhere. The
+   * deterministic `groundOfferComparison` guardrail inside the reasoner
+   * discards any LLM-invented perk, invented weight key, or phantom offer id.
+   */
+  @Post('decide/offers')
+  async decideOffers(
+    @Req() req: AuthedRequest,
+    @Body() body: unknown,
+    @Res() res: Response,
+  ): Promise<void> {
+    const deps: DecideOffersHandlerDeps = this.deps.decideOffers;
+    send(res, await decideOffers(req.ctx, body, deps));
   }
 }

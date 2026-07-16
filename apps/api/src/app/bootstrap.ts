@@ -36,7 +36,12 @@ import {
   SequentialIdGen,
 } from '@careeros/cie-resume';
 import { CareerStateService, InMemoryStateStore, LlmStateUpdaterAgent } from '@careeros/cie-state';
-import { LlmStrategicReasonerAgent, StrategicReasonerService } from '@careeros/cie-reasoning';
+import {
+  LlmOfferComparisonAgent,
+  LlmStrategicReasonerAgent,
+  OfferComparisonService,
+  StrategicReasonerService,
+} from '@careeros/cie-reasoning';
 import { GraphMemoryServiceAdapter } from '../modules/cie/graph.handlers.js';
 import {
   MemoryReasonerFactAdapter,
@@ -159,6 +164,15 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     agent: new LlmStrategicReasonerAgent(gateway),
   });
 
+  // Offer Comparison (M05 Stage-5). Advisory Green: derives an objective,
+  // grounded OfferComparison from the caller's REAL stated values + REAL
+  // offers. Runs on the frontier tier; the deterministic
+  // `groundOfferComparison` guardrail is what enforces
+  // no-invented-preferences / no-fabricated-perks / no-phantom-refs.
+  const offerComparisonService = new OfferComparisonService({
+    agent: new LlmOfferComparisonAgent(gateway),
+  });
+
   // Career Knowledge Graph (database-schema.md §cie). Agents/handlers touch it
   // ONLY through GraphMemoryService; the PrismaGraphStore is the sole code path
   // to the graph_nodes / graph_edges tables. Node embeddings use the same
@@ -182,6 +196,7 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     resume: overrides?.resume ?? { service: resumeService },
     match: overrides?.match ?? { service: matchScorerService },
     decide: overrides?.decide ?? { service: strategicReasonerService },
+    decideOffers: overrides?.decideOffers ?? { service: offerComparisonService },
     // M04 discovery reads + discovery-time scoring. The read + match stores are
     // the sole @careeros/db seams; the REUSED M03 MatchScorerService produces the
     // honest, grounded MatchScore, persisted per (profile, opportunity, model).

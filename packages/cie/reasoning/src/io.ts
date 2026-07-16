@@ -232,7 +232,7 @@ function decide(
   opportunity: ReasonerOpportunity | undefined,
   coverage: { ratio: number; covered: string[]; missing: string[] },
 ): Verdict {
-  const hay = coverageHaystack(profile, stateModel);
+  const _hay = coverageHaystack(profile, stateModel);
   const jobHay = opportunity
     ? norm(`${opportunity.title} ${opportunity.text} ${opportunity.requirements.join(' ')}`)
     : '';

@@ -107,5 +107,5 @@ export function createDecisionFixtureAgent(cases: DecisionCase[]): DecisionAgent
 
   // Real agent: prompt → gateway (Fake) → parse → groundContract. Structurally
   // compatible with the evals' DecisionAgent surface.
-  return new LlmStrategicReasonerAgent(gateway) as DecisionAgent;
+  return new LlmStrategicReasonerAgent(gateway) satisfies DecisionAgent;
 }

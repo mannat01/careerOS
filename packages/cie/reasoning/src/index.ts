@@ -37,3 +37,35 @@ export {
   type ReasonerFactPort,
   type ReasonerStatePort,
 } from './service.js';
+
+// ---------- offer comparison surface (M05 Stage-5) ----------
+
+export {
+  OFFER_COMPARISON_MODEL_VERSION,
+  type CandidateOffer,
+  type CandidateValues,
+  type OfferComparison,
+} from './offer-model.js';
+
+export {
+  OFFER_COMPARISON_SYSTEM_PROMPT,
+  OFFER_COMPARISON_PROMPT_VERSION,
+  buildOfferComparisonUserPrompt,
+} from './offer-prompt.js';
+
+export {
+  rawOfferComparisonProposalSchema,
+  groundOfferComparison,
+  rawProposalToOfferComparison,
+  type RawOfferComparisonProposal,
+} from './offer-io.js';
+
+export {
+  LlmOfferComparisonAgent,
+  type OfferComparisonAgent,
+} from './offer-agent.js';
+
+export {
+  OfferComparisonService,
+  type OfferComparisonServiceDeps,
+} from './offer-service.js';

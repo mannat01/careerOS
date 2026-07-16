@@ -5,6 +5,7 @@ import type { IdentityDeps } from '../modules/identity/me.handlers.js';
 import type { ProfileImportDeps } from '../modules/profile/import.handlers.js';
 import type { GraphQueryDeps } from '../modules/cie/graph.handlers.js';
 import type { DecideHandlerDeps } from '../modules/cie/decide.handlers.js';
+import type { DecideOffersHandlerDeps } from '../modules/cie/decide-offers.handlers.js';
 import type { MatchHandlerDeps, ResumeHandlerDeps } from '../modules/cie/resume.handlers.js';
 import type { StateHandlerDeps } from '../modules/cie/state.handlers.js';
 import type { OpportunityHandlerDeps } from '../modules/opportunity/opportunity.handlers.js';
@@ -31,6 +32,7 @@ export interface AppDeps {
   resume: ResumeHandlerDeps;
   match: MatchHandlerDeps;
   decide: DecideHandlerDeps;
+  decideOffers: DecideOffersHandlerDeps;
   opportunity: OpportunityHandlerDeps;
   application: ApplicationHandlerDeps;
   gate: EnforceDeps;
