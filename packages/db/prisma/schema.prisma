@@ -75,6 +75,44 @@ enum ApplicationStatus {
   closed
 }
 
+// database-schema.md §briefing — BriefingRun.trigger.
+enum BriefingTrigger {
+  scheduled
+  manual
+}
+
+// database-schema.md §briefing — BriefingRun.status. `partial` = one or more
+// steps failed but the run composed something useful (never blank).
+enum BriefingStatus {
+  queued
+  running
+  partial
+  complete
+  failed
+}
+
+// database-schema.md §briefing — BriefingItem.kind. Advisory Green artifacts.
+enum BriefingItemKind {
+  opportunity
+  tailored_resume
+  draft
+  prep
+  gap
+  note
+  focus
+  suggestion
+}
+
+// database-schema.md §briefing — BriefingItem.state. Items are proposed;
+// nothing acts. A Yellow item is surfaced as proposed, never executed.
+enum BriefingItemState {
+  proposed
+  approved
+  edited
+  skipped
+  failed
+}
+
 
 // ---------------- identity ----------------
 
@@ -95,6 +133,7 @@ model User {
   graphNodes     GraphNode[]
   graphEdges     GraphEdge[]
   applications   Application[]
+  briefingRuns   BriefingRun[]
 
   @@map("users")
 
@@ -532,6 +571,60 @@ model GraphNode {
   @@unique([userId, kind, key])
   @@index([userId, kind])
   @@map("graph_nodes")
+}
+
+// ---------------- briefing (M05 Stage-5 Step-5 — database-schema.md §briefing) ----------------
+
+/// The audit backbone for a composed briefing. Records per-step status + cost +
+/// trace_id in `steps` (jsonb) so a partial run (one step failed) is a first-class
+/// outcome — the run is NEVER blank. Idempotent + resilient: a failing step is
+/// flagged + retryable while the whole composes what it could. PER-USER by
+/// construction (`user_id` cascade).
+model BriefingRun {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  trigger    BriefingTrigger
+  status     BriefingStatus  @default(queued)
+  /// Inputs that shaped this run (e.g. filters, top-N). Opaque JSON.
+  inputs     Json            @default("{}")
+  /// Per-step status/cost/trace_id records — the audit trail on the run itself.
+  steps      Json            @default("[]")
+  costTotal  Float           @default(0) @map("cost_total")
+  startedAt  DateTime        @default(now()) @map("started_at")
+  finishedAt DateTime?       @map("finished_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items BriefingItem[]
+
+  @@index([userId, startedAt(sort: Desc)])
+  @@map("briefing_runs")
+}
+
+/// One advisory Green artifact composed into a briefing. `kind` is what the item
+/// represents (opportunity | gap | focus | suggestion | …). `state` is `proposed`
+/// — nothing acts. A Yellow item is surfaced as proposed, never executed.
+model BriefingItem {
+  id            String       @id @default(uuid()) @db.Uuid
+  briefingRunId String       @map("briefing_run_id") @db.Uuid
+  run           BriefingRun  @relation(fields: [briefingRunId], references: [id], onDelete: Cascade)
+
+  kind          BriefingItemKind
+  /// Optional ref to the source domain row (opportunity id, application id, etc.).
+  refId         String?           @map("ref_id")
+  /// The autonomy tier this item WOULD require if acted on (green|yellow|red).
+  autonomyTier  String            @default("green") @map("autonomy_tier")
+  state         BriefingItemState @default(proposed)
+  /// The composed content the UI renders (title/summary/evidence/etc.).
+  payload       Json              @default("{}")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([briefingRunId])
+  @@map("briefing_items")
 }
 
 /// A typed, directed relationship between two GraphNodes. Traversal is

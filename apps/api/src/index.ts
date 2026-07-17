@@ -96,6 +96,22 @@ export {
 } from './modules/twin/twin.handlers.js';
 export { detectYellowIntent } from './modules/twin/yellow-intent.js';
 export {
+  runManualBriefing,
+  getBriefing,
+  getLatestBriefing,
+  type BriefingHandlerDeps,
+  type BriefingItem,
+  type BriefingItemKind,
+  type BriefingItemState,
+  type BriefingRun,
+  type BriefingRunDetail,
+  type BriefingRunStatus,
+  type BriefingStepOverrides,
+  type BriefingStepRecord,
+  type BriefingStorePort,
+  type BriefingTrigger,
+} from './modules/briefing/briefing.handlers.js';
+export {
   InMemoryProfileRepo,
   type ProfileRepo,
   type ProfileImportResult,

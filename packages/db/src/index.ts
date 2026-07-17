@@ -40,6 +40,18 @@ export {
 } from './stores/prisma-match-score-store.js';
 export { PrismaProfileResolver, type ProfileResolverPort } from './stores/prisma-profile-resolver.js';
 export {
+  PrismaBriefingStore,
+  type BriefingItemLike,
+  type BriefingItemKindLike,
+  type BriefingItemStateLike,
+  type BriefingRunDetailLike,
+  type BriefingRunLike,
+  type BriefingStatusLike,
+  type BriefingStepRecordLike,
+  type BriefingStorePortShape,
+  type BriefingTriggerLike,
+} from './stores/prisma-briefing-store.js';
+export {
   PrismaApplicationStore,
   PrismaOpportunityExists,
   type ApplicationStorePortShape,

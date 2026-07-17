@@ -11,6 +11,7 @@ import type { StateHandlerDeps } from '../modules/cie/state.handlers.js';
 import type { OpportunityHandlerDeps } from '../modules/opportunity/opportunity.handlers.js';
 import type { ApplicationHandlerDeps } from '../modules/application/application.handlers.js';
 import type { TwinHandlerDeps } from '../modules/twin/twin.handlers.js';
+import type { BriefingHandlerDeps } from '../modules/briefing/briefing.handlers.js';
 
 import type { ObjectStorage } from '../common/storage/object-storage.js';
 import type { ExportQueue } from '../common/queue/export-queue.js';
@@ -43,6 +44,13 @@ export interface AppDeps {
    * `approval_required` and NEVER executed from this path.
    */
   twin: TwinHandlerDeps;
+  /**
+   * M05 Stage-5 Step-5 — manual Briefing orchestrator. Composes scored
+   * opportunities + gaps + a StrategicReasoner focus summary; every step is
+   * recorded (status/cost/traceId) on the BriefingRun and mirrored to audit.
+   * A failing step yields a partial briefing — never blank.
+   */
+  briefing: BriefingHandlerDeps;
   gate: EnforceDeps;
 
   storage: ObjectStorage;

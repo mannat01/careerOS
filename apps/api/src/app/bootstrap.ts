@@ -21,6 +21,7 @@ import {
   PrismaUserSettingsRepo,
   PrismaApplicationStore,
   PrismaOpportunityExists,
+  PrismaBriefingStore,
 } from '@careeros/db';
 
 import { createLlmGateway, AnthropicProvider } from '@careeros/llm-gateway';
@@ -220,6 +221,20 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
       store: new PrismaApplicationStore(prisma),
       opportunities: new PrismaOpportunityExists(prisma),
       memory: new ApplicationMemoryServiceAdapter(memory),
+    },
+    // M05 Stage-5 Step-5 manual Briefing orchestrator. Reuses the existing
+    // scored-opportunity + state-model + strategic-reasoner services — the only
+    // NEW @careeros/db seam is the PrismaBriefingStore for BriefingRun/Item.
+    // Idempotent + resilient: a failing step yields a partial briefing (never
+    // blank). Advisory Green throughout: items are `proposed`.
+    briefing: overrides?.briefing ?? {
+      store: new PrismaBriefingStore(prisma),
+      opportunities: new PrismaOpportunityReadStore(prisma),
+      profiles: new PrismaProfileResolver(prisma),
+      scorer: matchScorerService,
+      reasoner: strategicReasonerService,
+      state: stateService,
+      audit,
     },
     // M05 Step 4 Twin conversational surface. All three ports are thin
     // adapters over EXISTING services — no new @careeros/db imports here,
