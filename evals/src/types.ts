@@ -428,3 +428,160 @@ export interface OfferComparisonAgent {
     }[]
   ): Promise<OfferComparison>;
 }
+
+// ============================================================================
+// M06 — CAREER STRATEGY PLANNER golden types (authored golden-first, before
+// the planner agent exists). They define THE BAR the Step-2 planner must meet.
+// Assertions are CHECKABLE PROPERTIES, never one "correct" plan:
+//   (a) GROUNDING — every plan action links to a real gap/goal/skill/node
+//       (no invented goals, no ungrounded actions);
+//   (b) LADDERING — actions ladder to a stated goal; shorter horizons are
+//       concrete/action-level, longer horizons directional/optionality-oriented;
+//   (c) each action carries rationale + expected impact + confidence + the
+//       metric/node it advances;
+//   (d) ADAPTIVITY — regenerate ONLY on a material change (architecture.md §4A)
+//       with an explained diff; sub-threshold changes must NOT thrash the plan.
+// ============================================================================
+
+export type PlanHorizon = '30d' | '90d' | '1y' | '3y' | '5y';
+
+/** A goal the user has EXPLICITLY stated. Plans may only ladder to these. */
+export interface StatedGoal {
+  id: string;
+  statement: string;
+  /** Optional user-stated timeframe (e.g. '18 months'). */
+  timeframe?: string;
+}
+
+/** A node in the career graph a plan action can advance. */
+export interface PlanGraphNode {
+  id: string;
+  kind: 'skill' | 'project' | 'cert' | 'role' | 'person';
+  label: string;
+  /** The metric this node moves when advanced (e.g. 'production K8s deploys'). */
+  metric?: string;
+}
+
+/** A REAL identified gap between current state and a target. Actions must trace here. */
+export interface SkillGap {
+  id: string;
+  skill: string;
+  /** The graph node this gap corresponds to (must resolve). */
+  nodeId: string;
+  description: string;
+}
+
+/** An optional research signal feeding the planner (sanctioned sources only). */
+export interface ResearchSignal {
+  id: string;
+  summary: string;
+  impact: 'high' | 'low';
+}
+
+/** The planner's full input: profile + state model + stated goals + graph (+ research). */
+export interface PlannerInput {
+  profile: ProfileFact[];
+  stateModel: DerivedDimension[];
+  goals: StatedGoal[];
+  graph: PlanGraphNode[];
+  gaps: SkillGap[];
+  research?: ResearchSignal;
+}
+
+/**
+ * One action in a horizon plan. `goalId` is its LADDERING provenance (a stated
+ * goal), `targetNodeId` its GROUNDING provenance (a real graph node), and
+ * `gapId` (when present) the real gap it closes. An action whose refs do not
+ * resolve is a fabrication.
+ */
+export interface PlanAction {
+  id: string;
+  title: string;
+  /** The STATED goal this action ladders to. Must resolve to a real StatedGoal. */
+  goalId: string;
+  /** The graph node this action advances. Must resolve to a real PlanGraphNode. */
+  targetNodeId: string;
+  /** The real gap this action closes, when it targets one. Must resolve if present. */
+  gapId?: string;
+  /** The metric this action moves (must agree with the target node's metric). */
+  metric: string;
+  rationale: string;
+  expectedImpact: string;
+  /** 0–1 confidence for this action. */
+  confidence: number;
+  /** Shorter horizons must be 'concrete'; 3y/5y must be 'directional'. */
+  kind: 'concrete' | 'directional';
+}
+
+export interface HorizonPlan {
+  horizon: PlanHorizon;
+  objective: string;
+  actions: PlanAction[];
+}
+
+/** The full 30d/90d/1y/3y/5y plan set plus the single "today's move". */
+export interface StrategyPlanSet {
+  plans: HorizonPlan[];
+  /** MUST be a single real action drawn from the active 30-day plan. */
+  todaysMove: { actionId: string; justification: string };
+}
+
+/**
+ * A change event fed to the planner AFTER an initial plan exists. Material
+ * changes (per architecture.md §4A) MUST regenerate with an explanation;
+ * sub-threshold changes must NOT regenerate (no thrash).
+ */
+export type PlanChangeEvent =
+  | { type: 'goal-added'; goal: StatedGoal }
+  | { type: 'goal-removed'; goalId: string }
+  | { type: 'state-confidence-shift'; dimension: string; delta: number }
+  | { type: 'required-skill-edge'; skill: string; targetRoleCount: number }
+  | { type: 'research-finding'; impact: 'high' | 'low'; summary: string }
+  | { type: 'cosmetic-edit'; description: string };
+
+export interface ReplanResult {
+  regenerated: boolean;
+  /** Required when regenerated. */
+  planSet?: StrategyPlanSet;
+  /** The explained diff ("moved X earlier because …"). Required when regenerated. */
+  explanation?: string;
+}
+
+export interface PlannerAgent {
+  plan(input: PlannerInput): Promise<StrategyPlanSet>;
+  replan(input: PlannerInput, prior: StrategyPlanSet, change: PlanChangeEvent): Promise<ReplanResult>;
+}
+
+/** A plan-generation golden case: input → property assertions on the plan set. */
+export interface PlannerCase {
+  id: string;
+  description: string;
+  input: PlannerInput;
+  expected: {
+    /** Every one of these stated goals must have ≥1 action laddering to it. */
+    mustAddressGoalIds: string[];
+    /** Every one of these real gaps must be targeted by a 30d or 90d action. */
+    mustTargetGapIds: string[];
+  };
+  /**
+   * ZERO-FABRICATION guard: strings that must NEVER appear anywhere in the plan
+   * (invented goals, hype-driven ungrounded actions, fake "quick wins").
+   */
+  forbidden?: string[];
+  /** Marks a "pressure to fabricate" case. */
+  adversarial?: boolean;
+  /** Human note describing the trap (adversarial cases only). */
+  trap?: string;
+}
+
+/** An adaptivity golden case: baseline input + a change → regenerate or hold. */
+export interface PlannerAdaptivityCase {
+  id: string;
+  description: string;
+  input: PlannerInput;
+  change: PlanChangeEvent;
+  /** Per the §4A material-change definition. Sub-threshold ⇒ false (no thrash). */
+  expectRegeneration: boolean;
+  /** Human note describing what makes the change material / sub-threshold. */
+  trap?: string;
+}

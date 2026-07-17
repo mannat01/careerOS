@@ -5,13 +5,15 @@
  * that fails these checks cannot be trusted to gate the agents.
  */
 import { describe, expect, it } from 'vitest';
-import { loadExtractionCases, loadStateModelCases, loadDecisionCases, loadOfferComparisonCases } from '../src/datasets.js';
-import type { ResumeFormat, ExtractionCase, StateModelCase, DecisionCase, OfferComparisonCase, ExpectedEntity, ProfileFact } from '../src/types.js';
+import { loadExtractionCases, loadStateModelCases, loadDecisionCases, loadOfferComparisonCases, loadPlannerCases, loadPlannerAdaptivityCases } from '../src/datasets.js';
+import type { ResumeFormat, ExtractionCase, StateModelCase, DecisionCase, OfferComparisonCase, ExpectedEntity, ProfileFact, PlannerCase, PlannerAdaptivityCase } from '../src/types.js';
 
 const extraction: ExtractionCase[] = loadExtractionCases();
 const stateModel: StateModelCase[] = loadStateModelCases();
 const decision: DecisionCase[] = loadDecisionCases();
 const offerComparison: OfferComparisonCase[] = loadOfferComparisonCases();
+const planner: PlannerCase[] = loadPlannerCases();
+const plannerAdaptivity: PlannerAdaptivityCase[] = loadPlannerAdaptivityCases();
 
 describe('extraction golden set', () => {
   it('has 12–20 cases', () => {
@@ -146,6 +148,118 @@ describe('offer comparison golden set', () => {
       for (const ref of c.expected.evidenceRefs) {
         expect(offerIds.has(ref), `${c.id}: dangling evidence ref ${ref}`).toBe(true);
       }
+    }
+  });
+});
+
+describe('planner golden set (M06)', () => {
+  it('has 8–12 cases with unique ids', () => {
+    expect(planner.length).toBeGreaterThanOrEqual(8);
+    expect(planner.length).toBeLessThanOrEqual(12);
+    expect(new Set(planner.map((c) => c.id)).size).toBe(planner.length);
+  });
+
+  it('includes 3–4 adversarial cases, each with forbidden strings and a trap note', () => {
+    const adv = planner.filter((c) => c.adversarial);
+    expect(adv.length).toBeGreaterThanOrEqual(3);
+    expect(adv.length).toBeLessThanOrEqual(4);
+    for (const c of adv) {
+      expect(c.forbidden?.length ?? 0, `${c.id} needs forbidden strings`).toBeGreaterThan(0);
+      expect(c.trap, `${c.id} needs a trap description`).toBeTruthy();
+    }
+  });
+
+  it('every case has ≥1 STATED goal, ≥1 graph node, and ≥1 real gap (grounding surface exists)', () => {
+    for (const c of planner) {
+      expect(c.input.goals.length, `${c.id} needs stated goals`).toBeGreaterThan(0);
+      expect(c.input.graph.length, `${c.id} needs graph nodes`).toBeGreaterThan(0);
+      expect(c.input.gaps.length, `${c.id} needs identified gaps`).toBeGreaterThan(0);
+    }
+  });
+
+  it('every gap resolves to a real graph node (no dangling gap→node refs)', () => {
+    for (const c of planner) {
+      const nodeIds = new Set(c.input.graph.map((n) => n.id));
+      for (const g of c.input.gaps) {
+        expect(nodeIds.has(g.nodeId), `${c.id}: gap ${g.id} → dangling node ${g.nodeId}`).toBe(true);
+      }
+    }
+  });
+
+  it('expected assertions reference only real goal/gap ids in the same case', () => {
+    for (const c of planner) {
+      const goalIds = new Set(c.input.goals.map((g) => g.id));
+      const gapIds = new Set(c.input.gaps.map((g) => g.id));
+      for (const id of c.expected.mustAddressGoalIds) {
+        expect(goalIds.has(id), `${c.id}: mustAddress dangling goal ${id}`).toBe(true);
+      }
+      for (const id of c.expected.mustTargetGapIds) {
+        expect(gapIds.has(id), `${c.id}: mustTarget dangling gap ${id}`).toBe(true);
+      }
+    }
+  });
+
+  it('forbidden strings never collide with a stated goal, graph label, or gap skill (the trap must not contradict the label)', () => {
+    for (const c of planner) {
+      const legit = [
+        ...c.input.goals.map((g) => g.statement.toLowerCase()),
+        ...c.input.graph.map((n) => n.label.toLowerCase()),
+        ...c.input.gaps.map((g) => g.skill.toLowerCase()),
+      ];
+      for (const f of c.forbidden ?? []) {
+        for (const l of legit) {
+          expect(l.includes(f.toLowerCase()), `${c.id}: forbidden "${f}" collides with legit input "${l}"`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('unique ids across profile facts, goals, graph nodes, and gaps within each case', () => {
+    for (const c of planner) {
+      const ids = [
+        ...c.input.profile.map((f) => f.id),
+        ...c.input.goals.map((g) => g.id),
+        ...c.input.graph.map((n) => n.id),
+        ...c.input.gaps.map((g) => g.id),
+      ];
+      expect(new Set(ids).size, `${c.id}: duplicate ids across input collections`).toBe(ids.length);
+    }
+  });
+});
+
+describe('planner adaptivity golden set (M06 / §4A)', () => {
+  it('has 6–10 cases with unique ids', () => {
+    expect(plannerAdaptivity.length).toBeGreaterThanOrEqual(6);
+    expect(plannerAdaptivity.length).toBeLessThanOrEqual(10);
+    expect(new Set(plannerAdaptivity.map((c) => c.id)).size).toBe(plannerAdaptivity.length);
+  });
+
+  it('covers every §4A material trigger (goal add, confidence ≥0.2, skill edge on ≥2 roles, high-impact research)', () => {
+    const material = plannerAdaptivity.filter((c) => c.expectRegeneration).map((c) => c.change.type);
+    expect(material).toContain('goal-added');
+    expect(material).toContain('state-confidence-shift');
+    expect(material).toContain('required-skill-edge');
+    expect(material).toContain('research-finding');
+  });
+
+  it('includes ≥3 sub-threshold (no-thrash) cases', () => {
+    expect(plannerAdaptivity.filter((c) => !c.expectRegeneration).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('expectRegeneration labels agree with the §4A thresholds encoded in the change payloads', () => {
+    for (const c of plannerAdaptivity) {
+      const ch = c.change;
+      const material =
+        ch.type === 'goal-added' || ch.type === 'goal-removed'
+          ? true
+          : ch.type === 'state-confidence-shift'
+            ? Math.abs(ch.delta) >= 0.2
+            : ch.type === 'required-skill-edge'
+              ? ch.targetRoleCount >= 2
+              : ch.type === 'research-finding'
+                ? ch.impact === 'high'
+                : false;
+      expect(c.expectRegeneration, `${c.id}: label disagrees with §4A for ${ch.type}`).toBe(material);
     }
   });
 });

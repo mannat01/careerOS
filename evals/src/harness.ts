@@ -33,6 +33,14 @@ import type {
   OfferComparisonAgent,
   OfferComparisonCase,
   OfferComparison,
+  PlanAction,
+  PlanChangeEvent,
+  PlanHorizon,
+  PlannerAdaptivityCase,
+  PlannerAgent,
+  PlannerCase,
+  ReplanResult,
+  StrategyPlanSet,
 } from './types.js';
 
 // ---------- helpers ----------
@@ -597,6 +605,271 @@ export async function runOfferComparisonEval(
   return {
     cases: results,
     passed: results.every(r => r.passed),
+  };
+}
+
+// ============================================================================
+// M06 — STRATEGY PLANNER scoring (property-based, never one "correct" plan).
+// A plan set passes a case iff ALL of:
+//   (a) COMPLETE HORIZONS — all five (30d/90d/1y/3y/5y) present exactly once;
+//   (b) GROUNDING — every action's goalId resolves to a STATED goal, its
+//       targetNodeId to a real graph node, and its gapId (when present) to a
+//       real gap. An unresolvable ref is a fabrication (invented goal /
+//       ungrounded action);
+//   (c) LADDERING — every mustAddress goal has ≥1 action laddering to it, and
+//       every mustTarget gap is attacked inside the 30d/90d window; 30d/90d
+//       actions are 'concrete', 3y/5y actions are 'directional' (1y may be
+//       either);
+//   (d) JUSTIFIED — every action carries non-empty rationale + expectedImpact,
+//       confidence in [0,1], and a metric that agrees with its target node;
+//   (e) TODAY'S MOVE — a SINGLE real action drawn from the active 30-day plan;
+//   (f) ZERO FABRICATION — no `forbidden` string appears anywhere in the plan.
+// ============================================================================
+
+export const PLAN_HORIZONS: PlanHorizon[] = ['30d', '90d', '1y', '3y', '5y'];
+const SHORT_HORIZONS: PlanHorizon[] = ['30d', '90d'];
+const LONG_HORIZONS: PlanHorizon[] = ['3y', '5y'];
+
+/** §4A material-change predicate — the single source of truth for the eval. */
+export function isMaterialChange(change: PlanChangeEvent): boolean {
+  switch (change.type) {
+    case 'goal-added':
+    case 'goal-removed':
+      return true;
+    case 'state-confidence-shift':
+      return Math.abs(change.delta) >= 0.2;
+    case 'required-skill-edge':
+      return change.targetRoleCount >= 2;
+    case 'research-finding':
+      return change.impact === 'high';
+    case 'cosmetic-edit':
+      return false;
+  }
+}
+
+/** Text surface scanned for forbidden fabrications in a plan set. */
+function planSetText(set: StrategyPlanSet): string {
+  const actionText = (a: PlanAction): string =>
+    [a.title, a.rationale, a.expectedImpact, a.metric].join(' ');
+  return [
+    ...set.plans.map((p) => [p.objective, ...p.actions.map(actionText)].join('\n')),
+    set.todaysMove.justification,
+  ].join('\n');
+}
+
+export interface PlannerCaseResult {
+  caseId: string;
+  adversarial: boolean;
+  /** Missing or duplicated horizons (must be exactly 30d/90d/1y/3y/5y). */
+  horizonViolations: string[];
+  /** Actions whose goalId is NOT a stated goal (invented goals). */
+  inventedGoalActions: string[];
+  /** Actions whose targetNodeId does not resolve to a real graph node. */
+  ungroundedNodeActions: string[];
+  /** Actions whose gapId does not resolve to a real gap. */
+  ungroundedGapActions: string[];
+  /** Stated goals from mustAddressGoalIds with zero actions laddering to them. */
+  unaddressedGoals: string[];
+  /** Gaps from mustTargetGapIds not attacked inside the 30d/90d window. */
+  untargetedGaps: string[];
+  /** Actions with the wrong concreteness for their horizon. */
+  ladderShapeViolations: string[];
+  /** Actions missing rationale / expectedImpact / metric or out-of-range confidence. */
+  unjustifiedActions: string[];
+  /** True iff todaysMove.actionId resolves to an action in the 30d plan. */
+  todaysMoveOk: boolean;
+  /** Forbidden strings that appeared anywhere in the plan (fabrications). */
+  fabrications: string[];
+  passed: boolean;
+}
+
+export function scorePlannerCase(c: PlannerCase, produced: StrategyPlanSet): PlannerCaseResult {
+  const goalIds = new Set(c.input.goals.map((g) => g.id));
+  const nodeById = new Map(c.input.graph.map((n) => [n.id, n]));
+  const gapIds = new Set(c.input.gaps.map((g) => g.id));
+
+  // (a) complete horizons — all five, exactly once.
+  const got = produced.plans.map((p) => p.horizon);
+  const horizonViolations: string[] = [];
+  for (const h of PLAN_HORIZONS) {
+    const n = got.filter((x) => x === h).length;
+    if (n === 0) horizonViolations.push(`missing:${h}`);
+    if (n > 1) horizonViolations.push(`duplicate:${h}`);
+  }
+  for (const h of got) if (!PLAN_HORIZONS.includes(h)) horizonViolations.push(`unknown:${h}`);
+
+  const allActions = produced.plans.flatMap((p) => p.actions.map((a) => ({ horizon: p.horizon, a })));
+
+  // (b) grounding — goalId / targetNodeId / gapId must all resolve.
+  const inventedGoalActions = allActions
+    .filter(({ a }) => !goalIds.has(a.goalId))
+    .map(({ a }) => `${a.id}→goal:${a.goalId || '(missing)'}`);
+  const ungroundedNodeActions = allActions
+    .filter(({ a }) => !nodeById.has(a.targetNodeId))
+    .map(({ a }) => `${a.id}→node:${a.targetNodeId || '(missing)'}`);
+  const ungroundedGapActions = allActions
+    .filter(({ a }) => a.gapId !== undefined && !gapIds.has(a.gapId))
+    .map(({ a }) => `${a.id}→gap:${a.gapId}`);
+
+  // (c) laddering — every required goal addressed; every required gap attacked early.
+  const ladderedGoalIds = new Set(allActions.filter(({ a }) => goalIds.has(a.goalId)).map(({ a }) => a.goalId));
+  const unaddressedGoals = c.expected.mustAddressGoalIds.filter((g) => !ladderedGoalIds.has(g));
+
+  const earlyGapIds = new Set(
+    allActions
+      .filter(({ horizon, a }) => SHORT_HORIZONS.includes(horizon) && a.gapId !== undefined)
+      .map(({ a }) => a.gapId as string),
+  );
+  const untargetedGaps = c.expected.mustTargetGapIds.filter((g) => !earlyGapIds.has(g));
+
+  // (c) horizon shape — short = concrete, long = directional (1y either).
+  const ladderShapeViolations = allActions
+    .filter(
+      ({ horizon, a }) =>
+        (SHORT_HORIZONS.includes(horizon) && a.kind !== 'concrete') ||
+        (LONG_HORIZONS.includes(horizon) && a.kind !== 'directional'),
+    )
+    .map(({ horizon, a }) => `${a.id}@${horizon}:${a.kind}`);
+
+  // (d) justification — rationale + impact + confidence + metric agreeing with the node.
+  const unjustifiedActions = allActions
+    .filter(({ a }) => {
+      const node = nodeById.get(a.targetNodeId);
+      const metricOk =
+        a.metric.trim().length > 0 && (!node?.metric || norm(a.metric) === norm(node.metric));
+      return (
+        a.rationale.trim().length === 0 ||
+        a.expectedImpact.trim().length === 0 ||
+        a.confidence < 0 ||
+        a.confidence > 1 ||
+        !metricOk
+      );
+    })
+    .map(({ a }) => a.id);
+
+  // (e) today's move — a single REAL action drawn from the active 30-day plan.
+  const plan30 = produced.plans.find((p) => p.horizon === '30d');
+  const todaysMoveOk =
+    plan30 !== undefined &&
+    plan30.actions.some((a) => a.id === produced.todaysMove.actionId) &&
+    produced.todaysMove.justification.trim().length > 0;
+
+  // (f) zero fabrication — forbidden strings scanned over the whole plan text.
+  const haystack = norm(planSetText(produced));
+  const fabrications = (c.forbidden ?? []).filter((f) => haystack.includes(norm(f)));
+
+  const passed =
+    horizonViolations.length === 0 &&
+    inventedGoalActions.length === 0 &&
+    ungroundedNodeActions.length === 0 &&
+    ungroundedGapActions.length === 0 &&
+    unaddressedGoals.length === 0 &&
+    untargetedGaps.length === 0 &&
+    ladderShapeViolations.length === 0 &&
+    unjustifiedActions.length === 0 &&
+    todaysMoveOk &&
+    fabrications.length === 0;
+
+  return {
+    caseId: c.id,
+    adversarial: c.adversarial ?? false,
+    horizonViolations,
+    inventedGoalActions,
+    ungroundedNodeActions,
+    ungroundedGapActions,
+    unaddressedGoals,
+    untargetedGaps,
+    ladderShapeViolations,
+    unjustifiedActions,
+    todaysMoveOk,
+    fabrications,
+    passed,
+  };
+}
+
+// ---------- adaptivity scoring (§4A: regenerate when warranted, never thrash) ----------
+
+export interface PlannerAdaptivityCaseResult {
+  caseId: string;
+  /** What §4A says this change is. */
+  material: boolean;
+  /** Did the planner's regenerate/hold decision match §4A? */
+  decisionOk: boolean;
+  /** Material only: is the change explained (non-empty diff rationale)? */
+  explanationOk: boolean;
+  /** Material only: does the regenerated set carry all five horizons? */
+  regeneratedSetOk: boolean;
+  passed: boolean;
+}
+
+export function scorePlannerAdaptivityCase(
+  c: PlannerAdaptivityCase,
+  produced: ReplanResult,
+): PlannerAdaptivityCaseResult {
+  const material = c.expectRegeneration;
+  const decisionOk = produced.regenerated === c.expectRegeneration;
+
+  // When regeneration is warranted, the change must be EXPLAINED and the new
+  // plan set must be structurally complete. When it is not, holding steady is
+  // the whole point — no explanation/plan required.
+  const explanationOk = !material || (produced.explanation ?? '').trim().length > 0;
+  const regeneratedSetOk =
+    !material ||
+    (produced.planSet !== undefined &&
+      PLAN_HORIZONS.every((h) => produced.planSet!.plans.some((p) => p.horizon === h)));
+
+  return {
+    caseId: c.id,
+    material,
+    decisionOk,
+    explanationOk,
+    regeneratedSetOk,
+    passed: decisionOk && explanationOk && regeneratedSetOk,
+  };
+}
+
+export interface PlannerSuiteResult {
+  cases: PlannerCaseResult[];
+  adaptivityCases: PlannerAdaptivityCaseResult[];
+  fabricationCount: number;
+  /** Adversarial cases where an invented goal / ungrounded action / forbidden string leaked. */
+  adversarialFabrications: number;
+  /** Adaptivity cases where the planner regenerated on a sub-threshold change. */
+  thrashCount: number;
+  passed: boolean;
+}
+
+export async function runPlannerEval(
+  agent: PlannerAgent,
+  cases: PlannerCase[],
+  adaptivityCases: PlannerAdaptivityCase[],
+): Promise<PlannerSuiteResult> {
+  const results: PlannerCaseResult[] = [];
+  for (const c of cases) {
+    results.push(scorePlannerCase(c, await agent.plan(c.input)));
+  }
+
+  const adaptivityResults: PlannerAdaptivityCaseResult[] = [];
+  for (const c of adaptivityCases) {
+    const prior = await agent.plan(c.input);
+    adaptivityResults.push(scorePlannerAdaptivityCase(c, await agent.replan(c.input, prior, c.change)));
+  }
+
+  const groundingLeaks = (r: PlannerCaseResult): number =>
+    r.fabrications.length +
+    r.inventedGoalActions.length +
+    r.ungroundedNodeActions.length +
+    r.ungroundedGapActions.length;
+
+  return {
+    cases: results,
+    adaptivityCases: adaptivityResults,
+    fabricationCount: results.reduce((n, r) => n + groundingLeaks(r), 0),
+    adversarialFabrications: results
+      .filter((r) => r.adversarial)
+      .reduce((n, r) => n + groundingLeaks(r), 0),
+    thrashCount: adaptivityResults.filter((r) => !r.material && !r.decisionOk).length,
+    passed: results.every((r) => r.passed) && adaptivityResults.every((r) => r.passed),
   };
 }
 

@@ -8,13 +8,16 @@ import { tailoringAdversarialCases } from '../tailoring/cases-adversarial.js';
 import { scoringCases } from '../scoring/cases.js';
 import { decisionCases } from '../decision/cases.js';
 import { offerComparisonCases } from '../offers/cases.js';
+import { plannerCases, plannerAdaptivityCases } from '../planner/cases.js';
 import type { 
   ExtractionCase, 
   ScoringCase, 
   StateModelCase, 
   TailoringCase,
   DecisionCase,
-  OfferComparisonCase 
+  OfferComparisonCase,
+  PlannerCase,
+  PlannerAdaptivityCase 
 } from './types.js';
 
 export function loadExtractionCases(): ExtractionCase[] {
@@ -43,5 +46,15 @@ export function loadDecisionCases(): DecisionCase[] {
 
 export function loadOfferComparisonCases(): OfferComparisonCase[] {
   return [...offerComparisonCases];
+}
+
+// ---------- M06 strategy-planner golden sets ----------
+
+export function loadPlannerCases(): PlannerCase[] {
+  return [...plannerCases];
+}
+
+export function loadPlannerAdaptivityCases(): PlannerAdaptivityCase[] {
+  return [...plannerAdaptivityCases];
 }
 
