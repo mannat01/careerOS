@@ -12,6 +12,7 @@ import type { OpportunityHandlerDeps } from '../modules/opportunity/opportunity.
 import type { ApplicationHandlerDeps } from '../modules/application/application.handlers.js';
 import type { TwinHandlerDeps } from '../modules/twin/twin.handlers.js';
 import type { BriefingHandlerDeps } from '../modules/briefing/briefing.handlers.js';
+import type { PlanHandlerDeps } from '../modules/cie/plan.handlers.js';
 
 import type { ObjectStorage } from '../common/storage/object-storage.js';
 import type { ExportQueue } from '../common/queue/export-queue.js';
@@ -51,6 +52,13 @@ export interface AppDeps {
    * A failing step yields a partial briefing — never blank.
    */
   briefing: BriefingHandlerDeps;
+  /**
+   * M06 Stage-6 Step-3 — Strategy Plan endpoints. Persists per-horizon plans
+   * (30d/90d/1y/3y/5y) with one-active-per-horizon; adaptive regeneration is
+   * §4A-gated: material change → supersede + explained diff + MemoryEvent;
+   * sub-threshold → no-op (no thrash).
+   */
+  plan: PlanHandlerDeps;
   gate: EnforceDeps;
 
   storage: ObjectStorage;

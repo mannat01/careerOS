@@ -117,7 +117,7 @@ export function createPlannerFixtureAgent(cases: PlannerCase[]): PlannerAgent {
 
   // Real agent: prompt → gateway (Fake) → parse → groundPlanSet / decideReplan.
   // Structurally compatible with the evals' PlannerAgent surface.
-  return new LlmStrategicPlannerAgent(gateway) as unknown as PlannerAgent;
+  return new LlmStrategicPlannerAgent(gateway);
 }
 
 // Re-export for callers that only import the fixture.

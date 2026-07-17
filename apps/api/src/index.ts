@@ -112,6 +112,17 @@ export {
   type BriefingTrigger,
 } from './modules/briefing/briefing.handlers.js';
 export {
+  createPlans,
+  getPlans,
+  getPlanByHorizon,
+  regeneratePlan,
+  patchPlanAction,
+  type PlanHandlerDeps,
+  type PlanMemoryPort,
+  type PlanResponse,
+  type PlanSetResponse,
+} from './modules/cie/plan.handlers.js';
+export {
   InMemoryProfileRepo,
   type ProfileRepo,
   type ProfileImportResult,

@@ -113,6 +113,42 @@ enum BriefingItemState {
   failed
 }
 
+// database-schema.md §cie — StrategyPlan.horizon. Five planning horizons ordered
+// short → long (Prisma enum members cannot begin with a digit, so the '30d'…'5y'
+// domain values map to d30…y5 here; the store translates at the boundary).
+enum StrategyPlanHorizon {
+  d30
+  d90
+  y1
+  y3
+  y5
+}
+
+// database-schema.md §cie — StrategyPlan.status. One ACTIVE plan per horizon;
+// regeneration supersedes the prior with a stored diff + rationale.
+enum StrategyPlanStatus {
+  active
+  superseded
+}
+
+// database-schema.md §cie — PlanAction.kind (normalized for adherence tracking).
+enum PlanActionKind {
+  skill
+  project
+  cert
+  role
+  network
+  other
+}
+
+// database-schema.md §cie — PlanAction.status. Adherence lifecycle (M08 reads it).
+enum PlanActionStatus {
+  suggested
+  in_progress
+  done
+  dropped
+}
+
 
 // ---------------- identity ----------------
 
@@ -134,6 +170,7 @@ model User {
   graphEdges     GraphEdge[]
   applications   Application[]
   briefingRuns   BriefingRun[]
+  strategyPlans  StrategyPlan[]
 
   @@map("users")
 
@@ -625,6 +662,77 @@ model BriefingItem {
 
   @@index([briefingRunId])
   @@map("briefing_items")
+}
+
+// ---------------- CIE — Strategy Plans (M06 — database-schema.md §cie) ----------------
+
+/// A persisted, per-user, per-horizon StrategyPlan (database-schema.md §cie). The
+/// Strategy-Planner's grounded output for ONE horizon (30d/90d/1y/3y/5y). Exactly
+/// ONE plan per (user, horizon) is `active` at a time — enforced by a PARTIAL
+/// unique index `(user_id, horizon) WHERE status='active'` in the migration SQL.
+///
+/// Adaptive regeneration SUPERSEDES the prior active plan: the old row flips to
+/// `superseded` and points forward via `supersededById`; the new row stores the
+/// human-readable `diffSummary` ("moved X earlier because…") + `rationale` that
+/// explain WHY it changed. Sub-threshold changes never write a row (anti-thrash).
+model StrategyPlan {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  horizon      StrategyPlanHorizon
+  status       StrategyPlanStatus  @default(active)
+  /// The plan's own narrative summary / theme for this horizon.
+  summary      String
+  /// The grounded goal ids this plan ladders toward (jsonb array of strings).
+  goalRefs     Json                @default("[]") @map("goal_refs")
+  /// Human-readable diff vs the plan it superseded ("moved X earlier because…").
+  /// Null on a first-generation plan (nothing to diff against).
+  diffSummary  String?             @map("diff_summary")
+  /// Why this (re)generation happened — the §4A material-change rationale.
+  rationale    String?
+  modelVersion String              @map("model_version")
+
+  /// Supersession chain: the superseded row points forward to its replacement.
+  supersededById String?        @map("superseded_by_id") @db.Uuid
+  supersededBy   StrategyPlan?  @relation("supersession", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes     StrategyPlan[] @relation("supersession")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  actions PlanAction[]
+
+  @@index([userId, horizon, status])
+  @@map("strategy_plans")
+}
+
+/// One laddered, justified action inside a StrategyPlan (database-schema.md §cie).
+/// `orderIndex` is the plan's sequence (today's move = the top action of the
+/// active 30-day plan). `status`/`progress` track adherence (user-updated via
+/// PATCH). `evidenceRefs` grounds the action in real goals/graph/gaps — the
+/// deterministic guardrail (packages/cie/planner) forbids ungrounded actions.
+model PlanAction {
+  id     String       @id @default(uuid()) @db.Uuid
+  planId String       @map("plan_id") @db.Uuid
+  plan   StrategyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  /// Stable per-plan action key (mirrors the planner's action ids) for diffing.
+  actionKey    String           @map("action_key")
+  kind         PlanActionKind   @default(other)
+  title        String
+  rationale    String
+  orderIndex   Int              @map("order_index")
+  status       PlanActionStatus @default(suggested)
+  /// Adherence progress 0–100 (user-updated). Defaults to 0.
+  progress     Int              @default(0)
+  evidenceRefs Json             @default("[]") @map("evidence_refs")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([planId, orderIndex])
+  @@map("plan_actions")
 }
 
 /// A typed, directed relationship between two GraphNodes. Traversal is

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { queryGraph, type GraphQueryDeps } from '../modules/cie/graph.handlers.js';
 import {
@@ -16,6 +16,14 @@ import {
 } from '../modules/cie/state.handlers.js';
 import { decide, type DecideHandlerDeps } from '../modules/cie/decide.handlers.js';
 import { decideOffers, type DecideOffersHandlerDeps } from '../modules/cie/decide-offers.handlers.js';
+import {
+  createPlans,
+  getPlans,
+  getPlanByHorizon,
+  regeneratePlan,
+  patchPlanAction,
+  type PlanHandlerDeps,
+} from '../modules/cie/plan.handlers.js';
 import type { HandlerResponse } from '../common/errors/http-error.js';
 import { BearerAuthGuard, type AuthedRequest } from './bearer-auth.guard.js';
 import { APP_DEPS, type AppDeps } from './deps.js';
@@ -155,5 +163,69 @@ export class CieController {
   ): Promise<void> {
     const deps: DecideOffersHandlerDeps = this.deps.decideOffers;
     send(res, await decideOffers(req.ctx, body, deps));
+  }
+
+  /**
+   * GET /v1/cie/plans — the caller's active 30d/90d/1y/3y/5y plan set + today's move
+   * (top action of the active 30-day plan). Advisory Green (read-only).
+   */
+  @Get('plans')
+  async plansList(@Req() req: AuthedRequest, @Res() res: Response): Promise<void> {
+    const deps: PlanHandlerDeps = this.deps.plan;
+    send(res, await getPlans(req.ctx, deps));
+  }
+
+  /**
+   * POST /v1/cie/plans — first-generation (or force full regeneration) of the
+   * caller's plan set. Persisted per-horizon; supersedes any prior actives. For
+   * change-driven, §4A-gated adaptivity use POST /:horizon/regenerate.
+   */
+  @Post('plans')
+  async plansGenerate(
+    @Req() req: AuthedRequest,
+    @Body() body: unknown,
+    @Res() res: Response,
+  ): Promise<void> {
+    const deps: PlanHandlerDeps = this.deps.plan;
+    send(res, await createPlans(req.ctx, body, deps));
+  }
+
+  /** GET /v1/cie/plans/:horizon — the caller's active plan for one horizon. */
+  @Get('plans/:horizon')
+  async planByHorizon(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+    @Param('horizon') horizon: string,
+  ): Promise<void> {
+    const deps: PlanHandlerDeps = this.deps.plan;
+    send(res, await getPlanByHorizon(req.ctx, horizon, deps));
+  }
+
+  /**
+   * POST /v1/cie/plans/:horizon/regenerate — §4A-gated adaptive regeneration.
+   * MATERIAL change ⇒ regenerate + supersede prior + store explained diff +
+   * emit MemoryEvent. SUB-THRESHOLD ⇒ 200 { regenerated: false } (no thrash).
+   */
+  @Post('plans/:horizon/regenerate')
+  async planRegenerate(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+    @Param('horizon') horizon: string,
+    @Body() body: unknown,
+  ): Promise<void> {
+    const deps: PlanHandlerDeps = this.deps.plan;
+    send(res, await regeneratePlan(req.ctx, horizon, body, deps));
+  }
+
+  /** PATCH /v1/cie/plans/actions/:id — patch a plan action's status/progress. */
+  @Patch('plans/actions/:id')
+  async planActionPatch(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+    @Param('id') actionId: string,
+    @Body() body: unknown,
+  ): Promise<void> {
+    const deps: PlanHandlerDeps = this.deps.plan;
+    send(res, await patchPlanAction(req.ctx, actionId, body, deps));
   }
 }

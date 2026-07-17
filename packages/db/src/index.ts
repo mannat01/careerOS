@@ -63,5 +63,17 @@ export {
   type ApplicationStatusLike,
   type ApplicationActorLike,
 } from './stores/prisma-application-store.js';
+export {
+  PrismaStrategyPlanStore,
+  type StrategyPlanStorePortShape,
+  type StrategyPlanRecordLike,
+  type PlanActionRecordLike,
+  type PersistPlanLike,
+  type PersistPlanActionLike,
+  type PlanHorizonLike,
+  type PlanStatusLike,
+  type PlanActionKindLike,
+  type PlanActionStatusLike,
+} from './stores/prisma-strategy-plan-store.js';
 
 

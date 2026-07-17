@@ -22,6 +22,7 @@ import {
   PrismaApplicationStore,
   PrismaOpportunityExists,
   PrismaBriefingStore,
+  PrismaStrategyPlanStore,
 } from '@careeros/db';
 
 import { createLlmGateway, AnthropicProvider } from '@careeros/llm-gateway';
@@ -43,6 +44,7 @@ import {
   OfferComparisonService,
   StrategicReasonerService,
 } from '@careeros/cie-reasoning';
+import { LlmStrategicPlannerAgent, StrategicPlannerService } from '@careeros/cie-planner';
 import { GraphMemoryServiceAdapter } from '../modules/cie/graph.handlers.js';
 import {
   MemoryReasonerFactAdapter,
@@ -54,6 +56,13 @@ import {
   MemoryStateFactAdapter,
 } from '../modules/cie/state.handlers.js';
 import { MemoryResumeFactAdapter } from '../modules/cie/resume.handlers.js';
+import {
+  GraphMemoryPlannerAdapter,
+  MemoryPlannerFactAdapter,
+  PlanEpisodicMemoryAdapter,
+  StateServicePlannerAdapter,
+  StateServicePlannerGoalAdapter,
+} from '../modules/cie/plan.adapters.js';
 import { ApplicationMemoryServiceAdapter } from '../modules/application/memory-adapter.js';
 import type {
   TwinHandlerDeps,
@@ -186,6 +195,22 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
   // deterministic FakeEmbedder as the memory tiers (STUB(M02)).
   const graph = new GraphMemoryService(new PrismaGraphStore(prisma), new FakeEmbedder());
 
+  // Strategic Planner (M06 Stage-6). Advisory Green: derives a grounded plan
+  // set from the caller's real profile facts + state model + explicitly stated
+  // goals + career graph. Runs on the frontier tier; the deterministic
+  // guardrails in @careeros/cie-planner enforce ladder-to-stated-goals,
+  // resolvable-target-nodes, and the §4A anti-thrash regeneration gate. The
+  // handler in modules/cie/plan.handlers.ts persists per-horizon via the
+  // narrow StrategyPlanStorePort (PrismaStrategyPlanStore) and appends ONE
+  // MemoryEvent per material regeneration; sub-threshold changes never write.
+  const strategicPlannerService = new StrategicPlannerService({
+    facts: new MemoryPlannerFactAdapter(profileReader),
+    state: new StateServicePlannerAdapter(stateService),
+    goals: new StateServicePlannerGoalAdapter(stateService),
+    graph: new GraphMemoryPlannerAdapter(graph),
+    agent: new LlmStrategicPlannerAgent(gateway),
+  });
+
   return {
     authProvider,
     identity: overrides?.identity ?? {
@@ -245,6 +270,15 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
       reasoner: strategicReasonerService,
       audit,
     }),
+    // M06 Stage-6 Step-3 Strategy Plan endpoints. Narrow ports: the store is
+    // the sole @careeros/db seam; the memory adapter appends ONE MemoryEvent
+    // per MATERIAL regeneration (sub-threshold is a no-op, so no thrash).
+    plan: overrides?.plan ?? {
+      service: strategicPlannerService,
+      store: new PrismaStrategyPlanStore(prisma),
+      memory: new PlanEpisodicMemoryAdapter(memory),
+      audit,
+    },
 
     gate: overrides?.gate ?? {
 
