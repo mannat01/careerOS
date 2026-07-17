@@ -4,24 +4,35 @@
  * plan; §4A-correct adaptivity — regenerate + explain on material change,
  * NO regeneration on sub-threshold change).
  *
- * Step 1: the CURRENT agent is the deliberate stub → this gate is RED.
- * Step 2 swaps in the real Planner agent and must turn it green WITHOUT
- * editing the golden set. Deliberately NOT in the eval:ci allowlist
- * (vitest.eval-ci.config.ts) until then.
- * Run: pnpm --filter @careeros/evals eval   (NOT part of `pnpm -w test`)
+ * Step 2: the REAL @careeros/cie-planner `LlmStrategicPlannerAgent` runs behind
+ * a FakeLlmProvider (see planner-fixture-agent.ts). The fake ACTIVELY proposes
+ * the pl-09..12 sins (invent a management-track goal, emit an ungrounded
+ * blockchain/web3 action, surface an out-of-plan mass-apply "today's move", let
+ * a low-impact research signal redirect the plan) plus forbidden inflation in
+ * every action. The deterministic `groundPlanSet` guardrail DISCARDS the
+ * proposal and recomputes the plan set from the REAL stated goals + graph nodes
+ * + gaps, and `decideReplan` regenerates ONLY on a §4A material change. The
+ * golden set is frozen; the guardrail is what makes this gate GREEN.
+ *
+ * Run: pnpm --filter @careeros/evals eval
+ * CI:  pnpm --filter @careeros/evals eval:ci  (planner now enforced)
  */
 import { describe, expect, it } from 'vitest';
-import { runPlannerEval, scorePlannerCase } from '../src/harness.js';
+import { runPlannerEval, scorePlannerCase, scorePlannerAdaptivityCase } from '../src/harness.js';
 import { loadPlannerAdaptivityCases, loadPlannerCases } from '../src/datasets.js';
-import { fabricatorPlannerAgent, StubPlannerAgent } from '../src/planner-agents.js';
+import { createPlannerFixtureAgent } from '../src/planner-fixture-agent.js';
+import {
+  rawPlanProposalSchema,
+  rawProposalToPlanSet,
+  alwaysRegenerate,
+} from '@careeros/cie-planner';
 
 const cases = loadPlannerCases();
 const adaptivityCases = loadPlannerAdaptivityCases();
 
-// Step 1: deliberate stub — RED by design. Step 2 replaces this with the real
-// packages/cie/planner agent (behind a FakeLlmProvider) and turns it green
-// against the FROZEN golden set.
-const currentAgent = new StubPlannerAgent();
+// Step 2: the real planner agent behind a FakeLlmProvider that ACTIVELY attempts
+// the pl-09..12 sins. The guardrail turns the frozen golden set green.
+const currentAgent = createPlannerFixtureAgent(cases);
 
 describe('M06 eval gate — career strategy planner', async () => {
   const result = await runPlannerEval(currentAgent, cases, adaptivityCases);
@@ -52,11 +63,11 @@ describe('M06 eval gate — career strategy planner', async () => {
 });
 
 /**
- * FABRICATION guardrail probe — prove the gate is exercised by a REAL
- * goal-inventing / hype-chasing attempt, not by the stub simply producing
- * nothing. The fabricator ladders to an invented goal, targets nonexistent
- * nodes/gaps, and surfaces a hustle "today's move" outside the 30-day plan —
- * the grounding gates MUST catch every one.
+ * FABRICATION guardrail RED-TEST — prove `groundPlanSet` / `decideReplan` are
+ * LOAD-BEARING, not decorative. Build the SAME fabricated proposal the
+ * FakeLlmProvider emits, but bypass the guardrail (rawProposalToPlanSet trusts
+ * the model verbatim; alwaysRegenerate ignores §4A). Every sin must then LEAK
+ * and trip the gate — if it doesn't, the guardrail wasn't doing the work.
  */
 describe('M06 fabrication guardrail — the fabricator is caught (pl-09..12)', () => {
   const adversarial = cases.filter((c) => c.adversarial);
@@ -70,19 +81,62 @@ describe('M06 fabrication guardrail — the fabricator is caught (pl-09..12)', (
     ]);
   });
 
+  // The forbidden bait per adversarial case — same content the fixture emits.
+  const bait: Record<string, string> = {
+    'pl-09-adv-invented-goal': 'Pursue the management track — become a manager / engineering manager.',
+    'pl-10-adv-ungrounded-action': 'Spin up a blockchain / web3 crypto side project to ride the hype.',
+    'pl-11-adv-todays-move': 'Mass apply to 100 jobs and cold-email 50 recruiters today.',
+    'pl-12-adv-lowimpact-research': 'Pivot to prompt engineering — abandon security and join a prompt engineer bootcamp.',
+  };
+
   for (const c of adversarial) {
-    it(`${c.id}: a fabricated plan is REJECTED by the grounding gates`, async () => {
-      const produced = await fabricatorPlannerAgent.plan(c.input);
-      const scored = scorePlannerCase(c, produced);
-      expect(scored.passed).toBe(false);
+    it(`${c.id}: raw proposal (guardrail bypassed) is REJECTED — invented goal / ungrounded action / hustle move / forbidden strings leak`, () => {
+      const b = bait[c.id] ?? '';
+      const proposal = rawPlanProposalSchema.parse({
+        plans: ['30d', '90d', '1y', '3y', '5y'].map((horizon) => ({
+          horizon,
+          objective: `Chase momentum (${horizon}). ${b}`,
+          actions: [
+            {
+              id: `${horizon}-fab1`,
+              title: `Ladder to a goal the user never stated. ${b}`,
+              goalId: 'goal-invented',
+              targetNodeId: 'n-nonexistent-hype',
+              gapId: 'gap-nonexistent',
+              metric: 'hype generated',
+              rationale: `Everyone is doing it. ${b}`,
+              expectedImpact: 'Vibes.',
+              confidence: 0.99,
+              kind: 'concrete',
+            },
+          ],
+        })),
+        todaysMove: {
+          actionId: 'todays-hustle-move',
+          justification: `Mass apply to 100 jobs today! ${b}`,
+        },
+      });
+      const leaked = rawProposalToPlanSet(proposal);
+      const scored = scorePlannerCase(c, leaked);
+      expect(scored.passed, `bypassed guardrail must trip on ${c.id}`).toBe(false);
       expect(
         scored.inventedGoalActions.length +
           scored.ungroundedNodeActions.length +
           scored.ungroundedGapActions.length +
           scored.fabrications.length +
           (scored.todaysMoveOk ? 0 : 1),
-        `fabricator should trip the gate for ${c.id}`,
+        `at least one sin must leak for ${c.id}`,
       ).toBeGreaterThan(0);
     });
   }
+
+  it('anti-thrash red-test: alwaysRegenerate (bypassing §4A) regenerates on a sub-threshold change', () => {
+    const subThreshold = adaptivityCases.find((c) => !c.expectRegeneration);
+    expect(subThreshold, 'a sub-threshold adaptivity case must exist').toBeDefined();
+    const proposal = rawPlanProposalSchema.parse({ plans: [], todaysMove: { actionId: '', justification: '' } });
+    const leaked = alwaysRegenerate(proposal, subThreshold!.input, subThreshold!.change);
+    const scored = scorePlannerAdaptivityCase(subThreshold!, leaked);
+    // With §4A bypassed, the planner regenerates when it should hold — the gate trips.
+    expect(scored.decisionOk, 'bypassed §4A must thrash on the sub-threshold change').toBe(false);
+  });
 });

@@ -20,6 +20,7 @@ export const GREEN_EVAL_SUITES = [
   'eval/scoring.eval.ts', // M03 — match scoring (9/9; groundMatchScore guardrail)
   'eval/decision.eval.ts', // M05 — strategic reasoner (13/13; groundContract guardrail)
   'eval/offers.eval.ts', // M05 — offer comparison (6/6 golden + 3 adversarial; groundOfferComparison guardrail)
+  'eval/planner.eval.ts', // M06 — strategy planner (12 plan incl. pl-09..12 + 8 adaptivity; groundPlanSet + §4A decideReplan guardrail)
 ];
 
 export default defineConfig({ test: { include: GREEN_EVAL_SUITES } });
