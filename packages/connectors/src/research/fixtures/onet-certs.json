@@ -1,0 +1,33 @@
+{
+  "sourceKey": "onet-certs",
+  "domain": "certs",
+  "fetchedAt": "2026-07-01T00:00:00.000Z",
+  "records": [
+    {
+      "id": "onet-certs-15-1252-aws-2026",
+      "url": "https://services.onetcenter.org/ws/online/occupations/15-1252.00/certifications",
+      "title": "O*NET — Certifications Referenced for Software Developers 15-1252",
+      "publishedAt": "2026-03-15T00:00:00.000Z",
+      "summary": "O*NET 2026 catalog links AWS Certified Solutions Architect (Professional) and Certified Kubernetes Administrator to the fastest-growing software developer job postings.",
+      "entities": {
+        "skills": ["aws", "kubernetes", "cloud architecture"],
+        "companies": [],
+        "industries": ["technology", "cloud"]
+      },
+      "strength": "medium"
+    },
+    {
+      "id": "onet-certs-15-2051-2026",
+      "url": "https://services.onetcenter.org/ws/online/occupations/15-2051.00/certifications",
+      "title": "O*NET — Certifications Referenced for Data Scientists 15-2051",
+      "publishedAt": "2026-03-15T00:00:00.000Z",
+      "summary": "O*NET 2026 catalog links Google Professional ML Engineer and Databricks Certified Data Engineer Professional to top data scientist postings across healthcare and finance.",
+      "entities": {
+        "skills": ["machine learning", "data engineering", "databricks"],
+        "companies": [],
+        "industries": ["healthcare", "finance"]
+      },
+      "strength": "medium"
+    }
+  ]
+}

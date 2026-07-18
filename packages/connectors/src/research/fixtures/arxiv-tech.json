@@ -1,0 +1,33 @@
+{
+  "sourceKey": "arxiv-tech",
+  "domain": "tech",
+  "fetchedAt": "2026-07-01T00:00:00.000Z",
+  "records": [
+    {
+      "id": "arxiv-2606.10123",
+      "url": "https://export.arxiv.org/abs/2606.10123",
+      "title": "Retrieval-Augmented Generation at Enterprise Scale: A 2026 Survey",
+      "publishedAt": "2026-06-05T00:00:00.000Z",
+      "summary": "arXiv 2606.10123 surveys production RAG systems in 2026, finding vector-DB + hybrid-BM25 architectures dominant and highlighting emerging use of graph-augmented retrieval in regulated verticals.",
+      "entities": {
+        "skills": ["retrieval augmented generation", "vector databases", "llm systems"],
+        "companies": [],
+        "industries": ["technology", "healthcare", "finance"]
+      },
+      "strength": "medium"
+    },
+    {
+      "id": "arxiv-2605.04431",
+      "url": "https://export.arxiv.org/abs/2605.04431",
+      "title": "Small Language Models for On-Device Agentic Workflows",
+      "publishedAt": "2026-05-20T00:00:00.000Z",
+      "summary": "arXiv 2605.04431 demonstrates 3B-parameter models matching 70B baselines on constrained agentic tool-use benchmarks, signaling a shift toward on-device inference for latency-sensitive agents.",
+      "entities": {
+        "skills": ["small language models", "on-device inference", "agentic ai"],
+        "companies": [],
+        "industries": ["technology"]
+      },
+      "strength": "medium"
+    }
+  ]
+}

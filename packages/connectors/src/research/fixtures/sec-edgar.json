@@ -1,0 +1,33 @@
+{
+  "sourceKey": "sec-edgar",
+  "domain": "company",
+  "fetchedAt": "2026-07-01T00:00:00.000Z",
+  "records": [
+    {
+      "id": "sec-edgar-acme-8k-2026-06-12",
+      "url": "https://data.sec.gov/submissions/CIK0001234567.json",
+      "title": "Acme Corp — 8-K Current Report, 12 Jun 2026",
+      "publishedAt": "2026-06-12T00:00:00.000Z",
+      "summary": "Acme Corp filed an 8-K disclosing a new $250M Series-Extended round and the formation of an AI Platform business unit; net headcount growth in engineering signaled for 2026 H2.",
+      "entities": {
+        "skills": ["ai platform"],
+        "companies": ["acme corp"],
+        "industries": ["technology"]
+      },
+      "strength": "strong"
+    },
+    {
+      "id": "sec-edgar-globex-10q-2026-05-01",
+      "url": "https://data.sec.gov/submissions/CIK0007654321.json",
+      "title": "Globex — 10-Q Quarterly Report, 1 May 2026",
+      "publishedAt": "2026-05-01T00:00:00.000Z",
+      "summary": "Globex disclosed in its 10-Q a 12% year-over-year decline in professional services revenue and announced a workforce restructuring to prioritize cloud platform investment.",
+      "entities": {
+        "skills": ["cloud platform"],
+        "companies": ["globex"],
+        "industries": ["technology", "cloud"]
+      },
+      "strength": "medium"
+    }
+  ]
+}

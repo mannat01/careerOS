@@ -1,0 +1,33 @@
+{
+  "sourceKey": "bls-employment",
+  "domain": "hiring",
+  "fetchedAt": "2026-07-01T00:00:00.000Z",
+  "records": [
+    {
+      "id": "bls-employment-2026Q2-swe",
+      "url": "https://api.bls.gov/publicAPI/v2/timeseries/data/OEUS000000015113200000001",
+      "title": "Software Developers — U.S. Employment, 2026 Q2",
+      "publishedAt": "2026-06-30T00:00:00.000Z",
+      "summary": "U.S. employment for software developers grew 3.1% year-over-year in 2026 Q2, per BLS employment projections; net hiring remained positive despite Q1 layoff waves.",
+      "entities": {
+        "skills": ["software engineering", "backend engineering"],
+        "companies": [],
+        "industries": ["technology", "software"]
+      },
+      "strength": "strong"
+    },
+    {
+      "id": "bls-employment-2026Q2-datasci",
+      "url": "https://api.bls.gov/publicAPI/v2/timeseries/data/OEUS000000015113200000002",
+      "title": "Data Scientists — U.S. Employment, 2026 Q2",
+      "publishedAt": "2026-06-30T00:00:00.000Z",
+      "summary": "Data scientist employment expanded 5.6% year-over-year in 2026 Q2 with continued demand concentrated in healthcare, finance, and public-sector analytics.",
+      "entities": {
+        "skills": ["data science", "python", "sql"],
+        "companies": [],
+        "industries": ["healthcare", "finance", "technology"]
+      },
+      "strength": "strong"
+    }
+  ]
+}

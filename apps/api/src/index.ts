@@ -123,6 +123,18 @@ export {
   type PlanSetResponse,
 } from './modules/cie/plan.handlers.js';
 export {
+  listResearchFindings,
+  researchFeed,
+  researchRecommendations,
+  type PersistedResearchFinding,
+  type ResearchFeedResponse,
+  type ResearchFindingReadPort,
+  type ResearchHandlerDeps,
+  type ResearchListResponse,
+  type ResearchRecommendationsResponse,
+  type ResearchSynthesizerPort,
+} from './modules/cie/research.handlers.js';
+export {
   InMemoryProfileRepo,
   type ProfileRepo,
   type ProfileImportResult,

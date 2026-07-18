@@ -42,4 +42,27 @@ export {
   type OpportunityGraphSink,
   type OpportunityStore,
 } from './ingest.js';
+export {
+  FixtureResearchAdapter,
+  InMemoryResearchSourceRegistry,
+  M07_RESEARCH_SOURCE_SEED,
+  RESEARCH_FIXTURES,
+  ResearchIngestionService,
+  ResearchSourceNotAllowedError,
+  buildSanctionedResearchAdapters,
+  primaryHostFor,
+  type FixtureAdapterOptions,
+  type NormalizedResearchFinding,
+  type ResearchDomain,
+  type ResearchFindingStorePort,
+  type ResearchFixture,
+  type ResearchFixtureKey,
+  type ResearchGraphLinkPort,
+  type ResearchIngestionResult,
+  type ResearchIngestionServiceOptions,
+  type ResearchSourceAdapter,
+  type ResearchSourceEntry,
+  type ResearchSourceRegistry,
+  type ResearchStrength,
+} from './research/index.js';
 

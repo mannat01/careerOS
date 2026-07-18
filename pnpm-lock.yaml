@@ -44,6 +44,9 @@ importers:
       '@careeros/cie-reasoning':
         specifier: workspace:*
         version: link:../../packages/cie/reasoning
+      '@careeros/cie-research':
+        specifier: workspace:*
+        version: link:../../packages/cie/research
       '@careeros/cie-resume':
         specifier: workspace:*
         version: link:../../packages/cie/resume
@@ -53,6 +56,9 @@ importers:
       '@careeros/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@careeros/connectors':
+        specifier: workspace:*
+        version: link:../../packages/connectors
       '@careeros/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

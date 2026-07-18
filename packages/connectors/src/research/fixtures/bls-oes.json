@@ -1,0 +1,33 @@
+{
+  "sourceKey": "bls-oes",
+  "domain": "salary",
+  "fetchedAt": "2026-07-01T00:00:00.000Z",
+  "records": [
+    {
+      "id": "bls-oes-2026-swe-median",
+      "url": "https://api.bls.gov/publicAPI/v2/timeseries/data/OES15113200000000000004",
+      "title": "OES — Software Developers, Median Annual Wage, 2026",
+      "publishedAt": "2026-05-15T00:00:00.000Z",
+      "summary": "BLS OES 2026 reports a $138,700 median annual wage for U.S. software developers, up 2.4% from 2025; top-decile in SF Bay/NYC metro exceeds $215,000.",
+      "entities": {
+        "skills": ["software engineering"],
+        "companies": [],
+        "industries": ["technology", "software"]
+      },
+      "strength": "strong"
+    },
+    {
+      "id": "bls-oes-2026-datasci-median",
+      "url": "https://api.bls.gov/publicAPI/v2/timeseries/data/OES15205100000000000004",
+      "title": "OES — Data Scientists, Median Annual Wage, 2026",
+      "publishedAt": "2026-05-15T00:00:00.000Z",
+      "summary": "BLS OES 2026 reports a $124,300 median annual wage for data scientists, up 3.1% year-over-year; healthcare and finance verticals pay a $12k median premium.",
+      "entities": {
+        "skills": ["data science"],
+        "companies": [],
+        "industries": ["healthcare", "finance"]
+      },
+      "strength": "strong"
+    }
+  ]
+}

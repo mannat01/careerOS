@@ -760,3 +760,77 @@ model GraphEdge {
   @@index([userId, toNodeId, type])
   @@map("graph_edges")
 }
+
+// ---------------- CIE — Research (M07 Step 3 — database-schema.md §cie) ----------------
+
+/// ResearchFinding.domain — the seven sanctioned research domains from
+/// database-schema.md §cie (hiring/salary/skills/tech/certs/company/industry).
+enum ResearchFindingDomain {
+  hiring
+  salary
+  skills
+  tech
+  certs
+  company
+  industry
+}
+
+/// Sanctioned research source (database-schema.md §cie — extends `SourceRegistry`
+/// semantics for research feeds). GLOBAL (not user-owned); an entry that is
+/// absent or `enabled=false` cannot be fetched — the guarded fetch layer blocks
+/// the host with `source_not_allowed`, same discipline as the M04 SourceRegistry.
+///
+/// Kept in a SEPARATE table from `source_registry` so job-connector policy and
+/// research-source policy evolve independently while sharing the allow-list rule.
+model ResearchSource {
+  id      String                @id @default(uuid()) @db.Uuid
+  key     String                @unique
+  domain  ResearchFindingDomain
+  enabled Boolean               @default(false)
+  /// Exact hostnames the guarded research fetch layer may contact for this source.
+  hosts   Json
+  /// Rate policy JSON (e.g. { requestsPerMinute, dailyBudget }).
+  ratePolicy Json?              @map("rate_policy")
+  /// Optional per-source normalization hints (jsonb).
+  mapping    Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  findings ResearchFinding[]
+
+  @@map("research_sources")
+}
+
+/// A single sanctioned research finding (database-schema.md §cie). GLOBAL where
+/// market-wide (no `user_id`): the same normalized market signal serves every
+/// user. Idempotent on `(source_key, source_ref)` — re-ingesting the same
+/// fixture row upserts in place. `entities` (jsonb) is the graph-linking payload
+/// (skill/company/industry labels) the graph-evidence linker uses to upsert
+/// evidence nodes; the linker itself is per-user (edges cite this finding).
+model ResearchFinding {
+  id        String                @id @default(uuid()) @db.Uuid
+  sourceKey String                @map("source_key")
+  source    ResearchSource        @relation(fields: [sourceKey], references: [key], onDelete: Cascade)
+  /// Per-source stable ref (fixture row id); together with sourceKey uniquely
+  /// identifies a finding — enables dedupe on re-ingest.
+  sourceRef String                @map("source_ref")
+  domain    ResearchFindingDomain
+  /// Sanitized short summary of the finding — untrusted text passed through the
+  /// same sanitizer as the M04 opportunity connectors before it reached this row.
+  summary   String
+  /// Raw source citation (jsonb) — url + original title + publishedAt.
+  rawRef    Json                  @map("raw_ref")
+  /// Graph-linking payload (jsonb): { skills, companies, industries }.
+  entities  Json                  @default("{}")
+  /// Evidence strength — upper-bounds any synthesized insight's confidence.
+  strength  String                @default("medium")
+  observedAt DateTime             @map("observed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([sourceKey, sourceRef])
+  @@index([domain, observedAt(sort: Desc)])
+  @@map("research_findings")
+}

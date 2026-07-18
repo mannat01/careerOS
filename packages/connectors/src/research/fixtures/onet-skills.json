@@ -1,0 +1,33 @@
+{
+  "sourceKey": "onet-skills",
+  "domain": "skills",
+  "fetchedAt": "2026-07-01T00:00:00.000Z",
+  "records": [
+    {
+      "id": "onet-skills-15-1252-2026",
+      "url": "https://services.onetcenter.org/ws/online/occupations/15-1252.00/skills",
+      "title": "O*NET — Software Developers 15-1252, In-Demand Skills 2026",
+      "publishedAt": "2026-04-01T00:00:00.000Z",
+      "summary": "O*NET flags distributed systems, cloud-native runtime (Kubernetes), and Python as the fastest-rising in-demand skills for software developer roles through 2026.",
+      "entities": {
+        "skills": ["distributed systems", "kubernetes", "python", "cloud-native"],
+        "companies": [],
+        "industries": ["technology", "software"]
+      },
+      "strength": "strong"
+    },
+    {
+      "id": "onet-skills-15-2051-2026",
+      "url": "https://services.onetcenter.org/ws/online/occupations/15-2051.00/skills",
+      "title": "O*NET — Data Scientists 15-2051, In-Demand Skills 2026",
+      "publishedAt": "2026-04-01T00:00:00.000Z",
+      "summary": "O*NET 2026 skill index for data scientists emphasizes ML systems design, SQL at scale, and applied statistics; deep-learning framework fluency remains a differentiator.",
+      "entities": {
+        "skills": ["machine learning", "sql", "applied statistics", "pytorch"],
+        "companies": [],
+        "industries": ["technology"]
+      },
+      "strength": "medium"
+    }
+  ]
+}
