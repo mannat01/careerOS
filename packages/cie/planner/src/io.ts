@@ -196,14 +196,20 @@ export function groundPlanSet(_proposal: RawPlanProposal, input: PlannerInput): 
 // ---------- §4A material-change gate (single source of truth) ----------
 
 /**
- * §4A material-change predicate — the single source of truth for whether a
+ * §4A material-change predicate — THE single source of truth for whether a
  * change warrants regeneration. MATERIAL (⇒ regenerate + explain): a goal
  * added/removed; a state dimension whose confidence moves ≥0.2; a new
  * required-skill edge on ≥2 target roles; a high-impact research finding.
  * SUB-THRESHOLD (⇒ hold steady, no thrash): everything else.
  *
- * Mirrors evals/src/harness.ts `isMaterialChange` exactly (kept decoupled to
- * avoid an evals↔cie-planner import cycle — madge).
+ * This function is consumed by:
+ *   - the planner's own `decideReplan` gate (below);
+ *   - `apps/api/src/modules/cie/plan.handlers.ts` sub-threshold short-circuit;
+ *   - `evals/src/harness.ts` (re-exported so eval assertions test the SAME
+ *     function the handler and planner call at runtime).
+ * The dependency graph is unidirectional (evals → cie-planner, apps/api →
+ * cie-planner), so no madge cycle. Neuter this and every downstream import
+ * fails to typecheck / goes RED at runtime — the compiler enforces parity.
  */
 export function isMaterialChange(change: PlanChangeEvent): boolean {
   switch (change.type) {

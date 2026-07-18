@@ -34,7 +34,6 @@ import type {
   OfferComparisonCase,
   OfferComparison,
   PlanAction,
-  PlanChangeEvent,
   PlanHorizon,
   PlannerAdaptivityCase,
   PlannerAgent,
@@ -630,22 +629,17 @@ export const PLAN_HORIZONS: PlanHorizon[] = ['30d', '90d', '1y', '3y', '5y'];
 const SHORT_HORIZONS: PlanHorizon[] = ['30d', '90d'];
 const LONG_HORIZONS: PlanHorizon[] = ['3y', '5y'];
 
-/** §4A material-change predicate — the single source of truth for the eval. */
-export function isMaterialChange(change: PlanChangeEvent): boolean {
-  switch (change.type) {
-    case 'goal-added':
-    case 'goal-removed':
-      return true;
-    case 'state-confidence-shift':
-      return Math.abs(change.delta) >= 0.2;
-    case 'required-skill-edge':
-      return change.targetRoleCount >= 2;
-    case 'research-finding':
-      return change.impact === 'high';
-    case 'cosmetic-edit':
-      return false;
-  }
-}
+/**
+ * §4A material-change predicate — SINGLE SOURCE OF TRUTH lives in
+ * @careeros/cie-planner and is re-exported here so the eval harness, the
+ * planner service, and the apps/api handler all consult the same function.
+ * The compiler (not a comment) enforces parity: neuter the planner's export
+ * and every downstream import goes RED.
+ *
+ * The evals ↔ cie-planner dependency is unidirectional (evals depends on
+ * cie-planner, not the reverse), so no madge cycle. See `packages/cie/planner`.
+ */
+export { isMaterialChange } from '@careeros/cie-planner';
 
 /** Text surface scanned for forbidden fabrications in a plan set. */
 function planSetText(set: StrategyPlanSet): string {

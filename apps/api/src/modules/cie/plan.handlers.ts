@@ -24,11 +24,10 @@
  * Advisory Green: acting on a plan action stays Yellow/Red elsewhere; this
  * endpoint set is read-only advisory + persistence of the derived plan.
  *
- * FOLLOW-UP (recorded in the build log): the §4A material-change predicate is
- * duplicated in evals/src/harness.ts and packages/cie/planner/src/io.ts to keep
- * a madge cycle out of `evals ↔ cie-planner`. Both must move in lock-step. A
- * follow-up will lift `isMaterialChange` into a shared, tiny package that both
- * consume, deleting the duplication and letting the compiler enforce parity.
+ * §4A material-change gate is imported from @careeros/cie-planner — THE single
+ * source of truth. The evals harness re-exports the same function so the eval
+ * assertions test the exact predicate the handler and planner call at runtime.
+ * No duplication; the compiler enforces parity.
  */
 import type { AuditClient } from '@careeros/observability';
 import type {
