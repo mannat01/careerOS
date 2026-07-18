@@ -16,6 +16,7 @@
     "@careeros/agents": "workspace:*",
     "@careeros/cie-planner": "workspace:*",
     "@careeros/cie-reasoning": "workspace:*",
+    "@careeros/cie-research": "workspace:*",
     "@careeros/cie-resume": "workspace:*",
     "@careeros/cie-state": "workspace:*",
     "@careeros/connectors": "workspace:*",
