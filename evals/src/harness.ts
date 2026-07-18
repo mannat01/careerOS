@@ -40,6 +40,12 @@ import type {
   PlannerCase,
   ReplanResult,
   StrategyPlanSet,
+  ResearchFinding,
+  ResearchSynthesis,
+  ResearchSynthesisAgent,
+  ResearchSynthesisCase,
+  SynthesizedInsight,
+  SynthesizedRecommendation,
 } from './types.js';
 
 // ---------- helpers ----------
@@ -864,6 +870,250 @@ export async function runPlannerEval(
       .reduce((n, r) => n + groundingLeaks(r), 0),
     thrashCount: adaptivityResults.filter((r) => !r.material && !r.decisionOk).length,
     passed: results.every((r) => r.passed) && adaptivityResults.every((r) => r.passed),
+  };
+}
+
+// ============================================================================
+// M07 — RESEARCH SYNTHESIS scoring (property-based, never one "correct"
+// synthesis). A research synthesis passes a case iff ALL of:
+//   (a) GROUNDING / CITATION — every insight lists ≥1 real findingId (all
+//       resolve to input.findings) AND its citations map lists ≥1 sourceId
+//       whose value appears on input.allowedSources. No unlisted / nonexistent
+//       source may be cited anywhere; forbidden strings must not appear;
+//   (b) PERSONALIZATION — every surfaced insight carries ≥1 real
+//       goalRef/gapRef/planActionRef. Every mustSurfaceFindingId must be
+//       represented by ≥1 insight; every mustNotSurfaceFindingId must be
+//       dropped (personalization gate);
+//   (c) ACTIONABILITY — every recommendation resolves to a real insight AND
+//       carries ≥1 real gapId/goalId/planActionId. Every mustLink* id must be
+//       linked by ≥1 recommendation;
+//   (d) CALIBRATION — every insight's confidence is upper-bounded by the
+//       case's `maxConfidenceBySupportingStrength` for the STRONGEST of its
+//       supporting findings (weak-only support ⇒ low-confidence only).
+// ============================================================================
+
+/** Text surface scanned for forbidden fabrications in a synthesis. */
+function synthesisText(s: ResearchSynthesis): string {
+  const insightText = (i: SynthesizedInsight): string => i.summary;
+  const recText = (r: SynthesizedRecommendation): string => r.action;
+  const citationText = Object.values(s.citations).flat().join(' ');
+  return [
+    s.insights.map(insightText).join('\n'),
+    s.recommendations.map(recText).join('\n'),
+    citationText,
+  ].join('\n');
+}
+
+const STRENGTH_RANK: Record<ResearchFinding['strength'], number> = {
+  weak: 0,
+  medium: 1,
+  strong: 2,
+};
+
+/** Strongest supporting finding across a list; undefined when list is empty. */
+function strongestSupport(
+  findings: ResearchFinding[],
+  findingIds: string[],
+): ResearchFinding['strength'] | undefined {
+  const byId = new Map(findings.map((f) => [f.id, f]));
+  let best: ResearchFinding['strength'] | undefined;
+  for (const id of findingIds) {
+    const f = byId.get(id);
+    if (!f) continue;
+    if (best === undefined || STRENGTH_RANK[f.strength] > STRENGTH_RANK[best]) best = f.strength;
+  }
+  return best;
+}
+
+export interface ResearchSynthesisCaseResult {
+  caseId: string;
+  adversarial: boolean;
+  /** Insights whose findingIds list is empty OR contains an id absent from input.findings. */
+  ungroundedInsights: string[];
+  /** Insight ids in `citations` referencing a source not on allowedSources. */
+  unsanctionedCitations: string[];
+  /** Insights with no personalization ref at all (goalRefs/gapRefs/planActionRefs all empty or all fake). */
+  genericInsights: string[];
+  /** Must-surface findings that no insight represented. */
+  droppedRequiredFindings: string[];
+  /** Must-not-surface findings that leaked into ≥1 insight (generic-news gate). */
+  surfacedForbiddenFindings: string[];
+  /** Recommendations whose insightId does not resolve to a produced insight. */
+  orphanRecommendations: string[];
+  /** Recommendations without any real gap/goal/plan-action link (un-personalized). */
+  ungroundedRecommendations: string[];
+  /** mustLink ids (gap/goal/planAction) that no recommendation linked. */
+  unlinkedRequirements: string[];
+  /** Insights whose confidence exceeds the calibration cap for their strongest support. */
+  overclaimedInsights: string[];
+  /** Forbidden strings that appeared anywhere in the synthesis text. */
+  fabrications: string[];
+  passed: boolean;
+}
+
+export function scoreResearchSynthesisCase(
+  c: ResearchSynthesisCase,
+  produced: ResearchSynthesis,
+): ResearchSynthesisCaseResult {
+  const findingIds = new Set(c.input.findings.map((f) => f.id));
+  const allowedSources = new Set(c.input.allowedSources);
+  const goalIds = new Set(c.input.goals.map((g) => g.id));
+  const gapIds = new Set(c.input.gaps.map((g) => g.id));
+  const planActionIds = new Set(c.input.activePlanActions.map((a) => a.id));
+
+  // (a) GROUNDING — every insight lists ≥1 real findingId.
+  const ungroundedInsights = produced.insights
+    .filter((i) => i.findingIds.length === 0 || i.findingIds.some((id) => !findingIds.has(id)))
+    .map((i) => i.id);
+
+  // (a) CITATION — every listed source must be on the allow-list.
+  const unsanctionedCitations: string[] = [];
+  for (const [insightId, sources] of Object.entries(produced.citations)) {
+    for (const sourceId of sources) {
+      if (!allowedSources.has(sourceId)) {
+        unsanctionedCitations.push(`${insightId}→source:${sourceId}`);
+      }
+    }
+  }
+
+  // (b) PERSONALIZATION — every insight carries ≥1 REAL goal/gap/plan-action ref.
+  const genericInsights = produced.insights
+    .filter((i) => {
+      const goalOk = i.goalRefs.some((r) => goalIds.has(r));
+      const gapOk = i.gapRefs.some((r) => gapIds.has(r));
+      const actOk = i.planActionRefs.some((r) => planActionIds.has(r));
+      return !(goalOk || gapOk || actOk);
+    })
+    .map((i) => i.id);
+
+  // (b) Every must-surface finding must be represented by ≥1 insight (whose findingIds are all real).
+  const validInsightFindings = new Set(
+    produced.insights
+      .filter((i) => i.findingIds.every((id) => findingIds.has(id)))
+      .flatMap((i) => i.findingIds),
+  );
+  const droppedRequiredFindings = c.expected.mustSurfaceFindingIds.filter(
+    (id) => !validInsightFindings.has(id),
+  );
+  const surfacedForbiddenFindings = c.expected.mustNotSurfaceFindingIds.filter((id) =>
+    produced.insights.some((i) => i.findingIds.includes(id)),
+  );
+
+  // (c) ACTIONABILITY — every recommendation must resolve to a produced insight
+  // AND carry ≥1 real gap/goal/plan-action link.
+  const producedInsightIds = new Set(produced.insights.map((i) => i.id));
+  const orphanRecommendations = produced.recommendations
+    .filter((r) => !producedInsightIds.has(r.insightId))
+    .map((r) => r.id);
+  const ungroundedRecommendations = produced.recommendations
+    .filter((r) => {
+      const gapOk = r.gapId !== undefined && gapIds.has(r.gapId);
+      const goalOk = r.goalId !== undefined && goalIds.has(r.goalId);
+      const actOk = r.planActionId !== undefined && planActionIds.has(r.planActionId);
+      return !(gapOk || goalOk || actOk);
+    })
+    .map((r) => r.id);
+
+  // (c) Every mustLink id must be linked by ≥1 recommendation.
+  const linkedGapIds = new Set(
+    produced.recommendations.map((r) => r.gapId).filter((x): x is string => x !== undefined),
+  );
+  const linkedGoalIds = new Set(
+    produced.recommendations.map((r) => r.goalId).filter((x): x is string => x !== undefined),
+  );
+  const linkedPlanActionIds = new Set(
+    produced.recommendations.map((r) => r.planActionId).filter((x): x is string => x !== undefined),
+  );
+  const unlinkedRequirements = [
+    ...c.expected.mustLinkGapIds.filter((id) => !linkedGapIds.has(id)).map((id) => `gap:${id}`),
+    ...c.expected.mustLinkGoalIds.filter((id) => !linkedGoalIds.has(id)).map((id) => `goal:${id}`),
+    ...c.expected.mustLinkPlanActionIds
+      .filter((id) => !linkedPlanActionIds.has(id))
+      .map((id) => `planAction:${id}`),
+  ];
+
+  // (d) CALIBRATION — confidence upper-bounded by strongest supporting finding's strength.
+  const overclaimedInsights = produced.insights
+    .filter((i) => {
+      const support = strongestSupport(c.input.findings, i.findingIds);
+      // An insight without any real support was already caught by grounding —
+      // don't double-count here (but do treat any confidence as an overclaim).
+      if (support === undefined) return i.confidence > 0;
+      const cap = c.expected.maxConfidenceBySupportingStrength[support];
+      return i.confidence > cap;
+    })
+    .map((i) => i.id);
+
+  // (e) ZERO FABRICATION — forbidden strings scanned across the whole surface.
+  const haystack = norm(synthesisText(produced));
+  const fabrications = (c.forbidden ?? []).filter((f) => haystack.includes(norm(f)));
+
+  const passed =
+    ungroundedInsights.length === 0 &&
+    unsanctionedCitations.length === 0 &&
+    genericInsights.length === 0 &&
+    droppedRequiredFindings.length === 0 &&
+    surfacedForbiddenFindings.length === 0 &&
+    orphanRecommendations.length === 0 &&
+    ungroundedRecommendations.length === 0 &&
+    unlinkedRequirements.length === 0 &&
+    overclaimedInsights.length === 0 &&
+    fabrications.length === 0;
+
+  return {
+    caseId: c.id,
+    adversarial: c.adversarial ?? false,
+    ungroundedInsights,
+    unsanctionedCitations,
+    genericInsights,
+    droppedRequiredFindings,
+    surfacedForbiddenFindings,
+    orphanRecommendations,
+    ungroundedRecommendations,
+    unlinkedRequirements,
+    overclaimedInsights,
+    fabrications,
+    passed,
+  };
+}
+
+export interface ResearchSynthesisSuiteResult {
+  cases: ResearchSynthesisCaseResult[];
+  /** Grounding leaks across the whole suite (ungrounded + unsanctioned + fabrications). */
+  fabricationCount: number;
+  /** Grounding leaks on adversarial cases only — the worst failure mode. */
+  adversarialFabrications: number;
+  /** Insights that surfaced generic news untied to the user's state/plan. */
+  genericInsightCount: number;
+  /** Insights over-claiming certainty for their support strength. */
+  overclaimCount: number;
+  passed: boolean;
+}
+
+export async function runResearchSynthesisEval(
+  agent: ResearchSynthesisAgent,
+  cases: ResearchSynthesisCase[],
+): Promise<ResearchSynthesisSuiteResult> {
+  const results: ResearchSynthesisCaseResult[] = [];
+  for (const c of cases) {
+    results.push(scoreResearchSynthesisCase(c, await agent.synthesize(c.input)));
+  }
+
+  const groundingLeaks = (r: ResearchSynthesisCaseResult): number =>
+    r.ungroundedInsights.length +
+    r.unsanctionedCitations.length +
+    r.surfacedForbiddenFindings.length +
+    r.fabrications.length;
+
+  return {
+    cases: results,
+    fabricationCount: results.reduce((n, r) => n + groundingLeaks(r), 0),
+    adversarialFabrications: results
+      .filter((r) => r.adversarial)
+      .reduce((n, r) => n + groundingLeaks(r), 0),
+    genericInsightCount: results.reduce((n, r) => n + r.genericInsights.length, 0),
+    overclaimCount: results.reduce((n, r) => n + r.overclaimedInsights.length, 0),
+    passed: results.every((r) => r.passed),
   };
 }
 

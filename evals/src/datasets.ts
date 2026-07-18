@@ -9,15 +9,17 @@ import { scoringCases } from '../scoring/cases.js';
 import { decisionCases } from '../decision/cases.js';
 import { offerComparisonCases } from '../offers/cases.js';
 import { plannerCases, plannerAdaptivityCases } from '../planner/cases.js';
-import type { 
-  ExtractionCase, 
-  ScoringCase, 
-  StateModelCase, 
+import { researchSynthesisCases } from '../research/cases.js';
+import type {
+  ExtractionCase,
+  ScoringCase,
+  StateModelCase,
   TailoringCase,
   DecisionCase,
   OfferComparisonCase,
   PlannerCase,
-  PlannerAdaptivityCase 
+  PlannerAdaptivityCase,
+  ResearchSynthesisCase,
 } from './types.js';
 
 export function loadExtractionCases(): ExtractionCase[] {
@@ -56,5 +58,11 @@ export function loadPlannerCases(): PlannerCase[] {
 
 export function loadPlannerAdaptivityCases(): PlannerAdaptivityCase[] {
   return [...plannerAdaptivityCases];
+}
+
+// ---------- M07 research-synthesis golden set ----------
+
+export function loadResearchSynthesisCases(): ResearchSynthesisCase[] {
+  return [...researchSynthesisCases];
 }
 

@@ -585,3 +585,182 @@ export interface PlannerAdaptivityCase {
   /** Human note describing what makes the change material / sub-threshold. */
   trap?: string;
 }
+
+// ============================================================================
+// M07 — RESEARCH SYNTHESIS golden types (authored golden-first, before the
+// research agent exists — Step 1 of M07). They define THE BAR the Step-2
+// research synthesizer must meet. Assertions are CHECKABLE PROPERTIES, never
+// one "correct" synthesis:
+//   (a) GROUNDING / CITATION — every synthesized claim traces to a REAL
+//       provided finding (findingId resolves) whose source is on the sanctioned
+//       allow-list. No fabricated market claim; no invented statistic; no
+//       nonexistent citation.
+//   (b) PERSONALIZATION — the synthesis is surfaced because it materially
+//       affects THIS user's stated goals / gaps / active plan actions
+//       (goalRefs / gapRefs / planActionRefs resolve). Generic industry news
+//       untied to the user's state must be rejected.
+//   (c) ACTIONABILITY — every recommendation links to a REAL gap / goal /
+//       active plan action. Recommendations without a link (or linking to
+//       fabricated ids) are un-actionable and must be rejected.
+//   (d) CALIBRATION — confidence must not exceed the strongest supporting
+//       finding's `strength`. A single weak finding cannot yield a high-
+//       confidence claim (over-claiming certainty is fabrication too).
+// ============================================================================
+
+/** Sanctioned source domain — mirrors A1.5 allow-list. Non-allow-listed ⇒ blocked upstream. */
+export type ResearchSourceDomain = 'hiring' | 'salary' | 'skills' | 'tech' | 'certs' | 'company' | 'industry';
+
+/**
+ * A single research finding provided to the synthesizer. `sourceId` MUST be on
+ * the case's `allowedSources` list; a finding citing an unlisted source is a
+ * pre-synthesizer failure and the golden set treats it as adversarial bait.
+ */
+export interface ResearchFinding {
+  id: string;
+  domain: ResearchSourceDomain;
+  /** The exact claim from the source (verbatim; the synthesis can only paraphrase). */
+  claim: string;
+  /** Sanctioned/licensed source id (e.g. 'bls', 'levels-fyi', 'stackoverflow-survey-2025'). */
+  sourceId: string;
+  /**
+   * How strong the underlying evidence is:
+   *   - 'weak'   = single source, small n, anecdotal
+   *   - 'medium' = corroborated by one source or a mid-size dataset
+   *   - 'strong' = large dataset or multiple independent sources agreeing
+   * The synthesis's confidence is UPPER-BOUNDED by the strongest supporting
+   * finding on that claim (calibration).
+   */
+  strength: 'weak' | 'medium' | 'strong';
+}
+
+/**
+ * The user's active plan action, kept minimal to avoid coupling to the M06
+ * PlanAction shape — synthesis only needs the id + title + goalId ladder ref.
+ */
+export interface ActivePlanAction {
+  id: string;
+  title: string;
+  goalId: string;
+}
+
+/** The synthesizer's full input: findings + user's state model + goals + gaps + active plan actions. */
+export interface ResearchSynthesisInput {
+  findings: ResearchFinding[];
+  stateModel: DerivedDimension[];
+  goals: StatedGoal[];
+  gaps: SkillGap[];
+  activePlanActions: ActivePlanAction[];
+  /**
+   * Sanctioned source allow-list for THIS user. A finding whose sourceId is
+   * not on this list is unsanctioned and the synthesis must not surface it.
+   * (In production this comes from A1.5's licensed-source registry.)
+   */
+  allowedSources: string[];
+}
+
+/**
+ * One synthesized insight. `findingIds` is its GROUNDING provenance — the real
+ * findings it summarizes. `goalRefs` / `gapRefs` / `planActionRefs` are its
+ * PERSONALIZATION provenance — the user's state it materially affects. A
+ * synthesis without at least one real personalization ref is generic news and
+ * must be rejected.
+ */
+export interface SynthesizedInsight {
+  id: string;
+  /** Short human-readable summary (the paraphrase surfaced to the user). */
+  summary: string;
+  /** Real finding ids this insight summarizes. Empty ⇒ fabrication. */
+  findingIds: string[];
+  /** Stated-goal ids this insight materially affects. */
+  goalRefs: string[];
+  /** Real gap ids this insight materially affects. */
+  gapRefs: string[];
+  /** Active plan action ids this insight materially affects. */
+  planActionRefs: string[];
+  /** 0–1 confidence. Must not exceed the strongest supporting finding's strength. */
+  confidence: number;
+}
+
+/**
+ * One personalized recommendation. `insightId` is its LINEAGE ref (the insight
+ * it derives from). At least one of `gapId` / `goalId` / `planActionId` must
+ * resolve — a recommendation with no link to the user's real state/plan is
+ * generic advice and must be rejected.
+ */
+export interface SynthesizedRecommendation {
+  id: string;
+  /** Non-empty, actionable phrasing (a real next step, not generic exhortation). */
+  action: string;
+  /** The insight this recommendation derives from. Must resolve. */
+  insightId: string;
+  /** Real gap id this recommendation targets, if any. */
+  gapId?: string;
+  /** Stated goal id this recommendation advances, if any. */
+  goalId?: string;
+  /** Active plan action id this recommendation is tied to, if any. */
+  planActionId?: string;
+}
+
+/** The synthesizer's output — insights + recommendations + citations. */
+export interface ResearchSynthesis {
+  insights: SynthesizedInsight[];
+  recommendations: SynthesizedRecommendation[];
+  /**
+   * Machine-checkable citation map: for each insight in `insights`, the list
+   * of `sourceId`s it cites. Every listed source MUST appear on the input's
+   * `allowedSources` allow-list; nonexistent/unlisted sources are fabrication.
+   */
+  citations: Record<string, string[]>;
+}
+
+export interface ResearchSynthesisAgent {
+  synthesize(input: ResearchSynthesisInput): Promise<ResearchSynthesis>;
+}
+
+/**
+ * A golden case for the research synthesizer.
+ *
+ * `expected.mustSurfaceFindingIds` is the RELEVANCE key: findings that
+ * materially affect the user's state/plan and therefore MUST be represented
+ * in ≥1 insight. `expected.mustNotSurfaceFindingIds` is the NEGATIVE key:
+ * findings the case includes deliberately BUT the synthesis must drop as
+ * generic-news / off-goal / low-impact.
+ *
+ * `expected.mustLinkGapIds` / `mustLinkGoalIds` / `mustLinkPlanActionIds`
+ * enforce actionability: every listed id must be linked by ≥1 recommendation.
+ *
+ * `expected.maxConfidenceBySupportingStrength` upper-bounds insight confidence
+ * as a function of the strongest supporting finding — a case-level calibration
+ * key. Weak-only support ⇒ confidence must not exceed this cap.
+ */
+export interface ResearchSynthesisCase {
+  id: string;
+  description: string;
+  input: ResearchSynthesisInput;
+  expected: {
+    mustSurfaceFindingIds: string[];
+    mustNotSurfaceFindingIds: string[];
+    mustLinkGapIds: string[];
+    mustLinkGoalIds: string[];
+    mustLinkPlanActionIds: string[];
+    /**
+     * Max confidence allowed on any insight whose strongest supporting finding
+     * has this strength. Enforces "one weak finding ⇒ low confidence".
+     */
+    maxConfidenceBySupportingStrength: {
+      weak: number;
+      medium: number;
+      strong: number;
+    };
+  };
+  /**
+   * ZERO-FABRICATION guard: strings that must NEVER appear anywhere in the
+   * synthesis text (invented market trends, fake statistics, generic hustle
+   * advice).
+   */
+  forbidden?: string[];
+  /** Marks a "pressure to fabricate" case. */
+  adversarial?: boolean;
+  /** Human note describing the trap (adversarial cases only). */
+  trap?: string;
+}
