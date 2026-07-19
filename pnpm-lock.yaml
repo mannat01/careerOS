@@ -117,7 +117,18 @@ importers:
 
   apps/web: {}
 
-  apps/workers: {}
+  apps/workers:
+    dependencies:
+      '@careeros/cie-planner':
+        specifier: workspace:*
+        version: link:../../packages/cie/planner
+    devDependencies:
+      '@careeros/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@20.19.43)
 
   evals:
     dependencies:
