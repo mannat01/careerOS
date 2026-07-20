@@ -226,7 +226,7 @@ export class PrismaBriefingStore implements BriefingStorePortShape {
       where: { id: itemId, briefingRunId: runId, run: { userId } },
     });
     if (!row) return null;
-    return this.toItem(row as unknown as ItemRow);
+    return this.toItem(row);
   }
 
   /**
@@ -246,7 +246,7 @@ export class PrismaBriefingStore implements BriefingStorePortShape {
       where: { id: itemId },
       data,
     });
-    return this.toItem(row as unknown as ItemRow);
+    return this.toItem(row);
   }
 
   private toRun(row: RunRow): BriefingRunLike {

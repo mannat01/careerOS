@@ -51,7 +51,7 @@ export class PrismaAuditReadStore implements AuditReadPortShape {
       data: page.map((r) => ({
         id: r.id,
         userId: r.userId,
-        actor: r.actor as 'user' | 'twin' | 'system',
+        actor: r.actor,
         action: r.action,
         target: r.target ?? null,
         reason: r.reason,
