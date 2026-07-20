@@ -58,6 +58,7 @@ describe('M07 Step 5 — autonomy tiers live (per-user tightening)', () => {
     const gated = withCapabilityGate<undefined, { ok: true }>(
       'me.export', // registry: green
       gateDeps,
+      // eslint-disable-next-line @typescript-eslint/require-await
       async () => ({ status: 200, body: { ok: true } }),
       resolver,
     );
@@ -94,8 +95,7 @@ describe('M07 Step 5 — autonomy tiers live (per-user tightening)', () => {
     await settings.save(makeSettings({ 'me.export': 'yellow' }));
     const res = await runExportRoute(undefined, {});
     expect(res.status).toBe(403);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect((res.body as any).error.code).toBe('capability_denied');
+    expect((res.body as { error: { code: string } }).error.code).toBe('capability_denied');
     expect(auditSink.records().at(-1)?.action).toBe('capability_gate.denied');
   });
 
@@ -138,8 +138,8 @@ describe('M07 Step 5 — autonomy tiers live (per-user tightening)', () => {
 
     const res = await runExportRoute(undefined, { 'x-approval-token': token });
     expect(res.status).toBe(403);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect((res.body as any).error.details.reason).toBe('red_never_automated');
+    const errBody = res.body as unknown as { error: { details?: { reason?: string } } };
+    expect(errBody.error.details?.reason).toBe('red_never_automated');
   });
 
   it('changing the user\'s autonomy setting flips enforcement on the very next call', async () => {

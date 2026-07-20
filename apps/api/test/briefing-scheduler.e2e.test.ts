@@ -41,7 +41,8 @@ import {
 } from '../src/index.js';
 
 // ------------ real docker Redis ------------
-const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
+// eslint-disable-next-line no-restricted-properties
+const REDIS_URL = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
 
 // ------------ helpers ------------
 
@@ -88,7 +89,7 @@ function makeComposer(
 }
 
 function makeResearch(findings: ResearchFindingLike[]): ResearchFindingReadPort {
-  return { listRecentFindingsAffectingUser: async () => findings };
+  return { listRecentFindingsAffectingUser: () => Promise.resolve(findings) };
 }
 
 function makeRegenerator(): {
@@ -97,6 +98,7 @@ function makeRegenerator(): {
 } {
   const calls: Array<{ userId: string; changeType: string; impact?: string; diffSummary: string }> = [];
   const port: PlanRegeneratorPort = {
+    // eslint-disable-next-line @typescript-eslint/require-await
     regenerate: async (input) => {
       const impact =
         input.change.type === 'research-finding' ? input.change.impact : undefined;
@@ -117,6 +119,7 @@ function makeAudit(): { port: AuditPort; entries: Array<{ action: string; reason
   const entries: Array<{ action: string; reason: string }> = [];
   return {
     port: {
+      // eslint-disable-next-line @typescript-eslint/require-await
       append: async ({ action, reason }) => {
         entries.push({ action, reason });
       },

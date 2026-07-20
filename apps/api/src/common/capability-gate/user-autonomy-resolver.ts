@@ -24,6 +24,6 @@ export function makeUserAutonomyResolver(settings: UserSettingsRepo): UserAutono
     if (!row) return undefined;
     const override = row.autonomyDefaults[action];
     if (typeof override !== 'string') return undefined;
-    return VALID_TIERS.has(override as AutonomyTier) ? (override as AutonomyTier) : undefined;
+    return VALID_TIERS.has(override) ? override : undefined;
   };
 }

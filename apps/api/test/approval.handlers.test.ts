@@ -132,6 +132,7 @@ class FakeStore implements BriefingStorePort {
 function makeAudit(): { audit: AuditClient; sink: AuditRecord[] } {
   const sink: AuditRecord[] = [];
   const audit: AuditClient = {
+    // eslint-disable-next-line @typescript-eslint/require-await
     async append(rec) {
       const full: AuditRecord = {
         id: `audit-${sink.length + 1}`,
