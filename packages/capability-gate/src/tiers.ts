@@ -22,6 +22,10 @@ export const ACTION_TIERS = {
   'draft.send': 'yellow',
   'portfolio.publish': 'yellow',
   'me.delete': 'yellow',
+  // M07 — executing a Yellow BriefingItem from the approval queue. The
+  // approval endpoint mints an ApprovalToken bound to the (user, action,
+  // payloadHash) of the item so the caller must present it to execute.
+  'briefing.item.execute': 'yellow',
 
   // Red — never automated; no token can enable these. They exist in the registry
   // ONLY so the gate can hard-deny them; no callable route/tool may be bound to them.

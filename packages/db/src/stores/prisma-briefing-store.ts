@@ -85,6 +85,17 @@ export interface BriefingStorePortShape {
   ): Promise<BriefingItemLike[]>;
   getById(userId: string, id: string): Promise<BriefingRunDetailLike | null>;
   latestForUser(userId: string): Promise<BriefingRunDetailLike | null>;
+  /** M07 — per-user scoped item lookup for the approval queue. */
+  findItemOnUserRun(
+    userId: string,
+    runId: string,
+    itemId: string,
+  ): Promise<BriefingItemLike | null>;
+  /** M07 — transition one item's `state` (and optionally its payload). */
+  updateItemState(
+    itemId: string,
+    input: { state: BriefingItemStateLike; payload?: Record<string, unknown> },
+  ): Promise<BriefingItemLike>;
 }
 
 interface RunRow {
@@ -199,6 +210,43 @@ export class PrismaBriefingStore implements BriefingStorePortShape {
       ...this.toRun(row),
       items: (row.items as unknown as ItemRow[]).map((i) => this.toItem(i)),
     };
+  }
+
+  /**
+   * PER-USER scoped item lookup: matches on (item.id, run.id, run.userId).
+   * Returns null for any mismatch — the handler surfaces null as 404 so we
+   * never leak cross-user or cross-run existence.
+   */
+  async findItemOnUserRun(
+    userId: string,
+    runId: string,
+    itemId: string,
+  ): Promise<BriefingItemLike | null> {
+    const row = await this.prisma.briefingItem.findFirst({
+      where: { id: itemId, briefingRunId: runId, run: { userId } },
+    });
+    if (!row) return null;
+    return this.toItem(row as unknown as ItemRow);
+  }
+
+  /**
+   * Transition one item's `state` (approved/edited/skipped). For `edit` the
+   * payload is replaced atomically alongside the state — same TX so a partial
+   * write can never leave payload + state inconsistent.
+   */
+  async updateItemState(
+    itemId: string,
+    input: { state: BriefingItemStateLike; payload?: Record<string, unknown> },
+  ): Promise<BriefingItemLike> {
+    const data: Prisma.BriefingItemUpdateInput = { state: input.state };
+    if (input.payload !== undefined) {
+      data.payload = input.payload as Prisma.InputJsonValue;
+    }
+    const row = await this.prisma.briefingItem.update({
+      where: { id: itemId },
+      data,
+    });
+    return this.toItem(row as unknown as ItemRow);
   }
 
   private toRun(row: RunRow): BriefingRunLike {

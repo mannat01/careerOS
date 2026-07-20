@@ -1,6 +1,7 @@
 
 import type { EnforceDeps } from '@careeros/capability-gate';
 import type { AuthProvider } from '../common/auth/auth-provider.js';
+import type { UserAutonomyResolver } from '../common/capability-gate/gate-interceptor.js';
 import type { IdentityDeps } from '../modules/identity/me.handlers.js';
 import type { ProfileImportDeps } from '../modules/profile/import.handlers.js';
 import type { GraphQueryDeps } from '../modules/cie/graph.handlers.js';
@@ -12,6 +13,8 @@ import type { OpportunityHandlerDeps } from '../modules/opportunity/opportunity.
 import type { ApplicationHandlerDeps } from '../modules/application/application.handlers.js';
 import type { TwinHandlerDeps } from '../modules/twin/twin.handlers.js';
 import type { BriefingHandlerDeps } from '../modules/briefing/briefing.handlers.js';
+import type { ApprovalHandlerDeps } from '../modules/briefing/approval.handlers.js';
+import type { AuditHandlerDeps } from '../modules/audit/audit.handlers.js';
 import type { PlanHandlerDeps } from '../modules/cie/plan.handlers.js';
 
 import type { ObjectStorage } from '../common/storage/object-storage.js';
@@ -53,6 +56,18 @@ export interface AppDeps {
    */
   briefing: BriefingHandlerDeps;
   /**
+   * M07 — approval queue for BriefingItems. Mints/consumes single-use
+   * ApprovalTokens bound to (user, `briefing.item.execute`, payloadHash) via
+   * the M01 capability-gate. Reuses the same tokenStore + secret as `gate`.
+   */
+  approval: ApprovalHandlerDeps;
+  /**
+   * M07 — GET /v1/audit. Read-only projection over the append-only audit log,
+   * PER-USER scoped by construction. The write path continues to flow through
+   * every handler + the gate; nothing writes here.
+   */
+  audit: AuditHandlerDeps;
+  /**
    * M06 Stage-6 Step-3 — Strategy Plan endpoints. Persists per-horizon plans
    * (30d/90d/1y/3y/5y) with one-active-per-horizon; adaptive regeneration is
    * §4A-gated: material change → supersede + explained diff + MemoryEvent;
@@ -60,6 +75,14 @@ export interface AppDeps {
    */
   plan: PlanHandlerDeps;
   gate: EnforceDeps;
+
+  /**
+   * M07 Step 5 — per-user autonomy resolver. Interceptor consults this before
+   * enforcement so a user's `UserSettings.autonomyDefaults[action]` override
+   * TIGHTENS the gate (never loosens). Composition root builds it from the
+   * live UserSettingsRepo; tests may pass a bespoke stub.
+   */
+  userAutonomy: UserAutonomyResolver;
 
   storage: ObjectStorage;
   exportQueue: ExportQueue;

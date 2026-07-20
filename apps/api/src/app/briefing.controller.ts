@@ -5,6 +5,11 @@ import {
   getLatestBriefing,
   runManualBriefing,
 } from '../modules/briefing/briefing.handlers.js';
+import {
+  approveBriefingItem,
+  editBriefingItem,
+  skipBriefingItem,
+} from '../modules/briefing/approval.handlers.js';
 import type { HandlerResponse } from '../common/errors/http-error.js';
 import { BearerAuthGuard, type AuthedRequest } from './bearer-auth.guard.js';
 import { APP_DEPS, type AppDeps } from './deps.js';
@@ -47,5 +52,44 @@ export class BriefingController {
   @Get(':id')
   async detail(@Req() req: AuthedRequest, @Res() res: Response, @Param('id') id: string): Promise<void> {
     send(res, await getBriefing(req.ctx, id, this.deps.briefing));
+  }
+
+  /**
+   * POST /v1/briefings/:id/items/:itemId/approve — user consents to a Yellow
+   * item; response contains a single-use ApprovalToken that the caller uses
+   * to redeem `briefing.item.execute` at the capability-gate. Green items
+   * are marked approved without a token.
+   */
+  @Post(':id/items/:itemId/approve')
+  async approveItem(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+  ): Promise<void> {
+    send(res, await approveBriefingItem(req.ctx, id, itemId, this.deps.approval));
+  }
+
+  /** POST /v1/briefings/:id/items/:itemId/edit — user replaces the item payload. */
+  @Post(':id/items/:itemId/edit')
+  async editItem(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() body: unknown,
+  ): Promise<void> {
+    send(res, await editBriefingItem(req.ctx, id, itemId, body, this.deps.approval));
+  }
+
+  /** POST /v1/briefings/:id/items/:itemId/skip — user dismisses the item. */
+  @Post(':id/items/:itemId/skip')
+  async skipItem(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+  ): Promise<void> {
+    send(res, await skipBriefingItem(req.ctx, id, itemId, this.deps.approval));
   }
 }

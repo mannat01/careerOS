@@ -15,6 +15,11 @@ export { SOURCE_REGISTRY_SEED, type SourceRegistrySeedRow } from './seed-data.js
 
 export { PrismaApprovalTokenStore } from './stores/prisma-approval-token-store.js';
 export { PrismaAuditSink } from './stores/prisma-audit-sink.js';
+export {
+  PrismaAuditReadStore,
+  type AuditRowLike,
+  type AuditReadPortShape,
+} from './stores/prisma-audit-read-store.js';
 export { PrismaSourceRegistry } from './stores/prisma-source-registry.js';
 export { PrismaUserRepo, PrismaUserSettingsRepo, PrismaUserLifecycleRepo } from './stores/prisma-identity-repos.js';
 export { PrismaProfileRepo } from './stores/prisma-profile-repo.js';

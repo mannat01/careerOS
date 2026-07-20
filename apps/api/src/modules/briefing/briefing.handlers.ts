@@ -119,6 +119,25 @@ export interface BriefingStorePort {
   addItems(runId: string, items: Omit<BriefingItem, 'id' | 'createdAt'>[]): Promise<BriefingItem[]>;
   getById(userId: string, id: string): Promise<BriefingRunDetail | null>;
   latestForUser(userId: string): Promise<BriefingRunDetail | null>;
+  /**
+   * M07 approval-queue — find one item on a run scoped by the caller. Returns
+   * `null` if the run does not belong to `userId` OR the item is not on it.
+   * Used by approve/edit/skip to enforce per-user scoping without leaking ids.
+   */
+  findItemOnUserRun?(
+    userId: string,
+    runId: string,
+    itemId: string,
+  ): Promise<BriefingItem | null>;
+  /**
+   * M07 approval-queue — transition a single BriefingItem's `state` (and
+   * optionally mutate its `payload` for `edit`). Returns the updated item.
+   * Callers MUST have already verified per-user scope + capability-gate.
+   */
+  updateItemState?(
+    itemId: string,
+    input: { state: BriefingItemState; payload?: Record<string, unknown> },
+  ): Promise<BriefingItem>;
 }
 
 /**

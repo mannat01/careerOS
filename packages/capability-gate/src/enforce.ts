@@ -38,6 +38,25 @@ export interface EnforceInput {
   actor?: 'user' | 'twin' | 'system';
   traceId?: string | undefined;
   target?: string | undefined;
+  /**
+   * OPTIONAL user-scoped tier override sourced from UserSettings.autonomyDefaults.
+   * MAY ONLY TIGHTEN the registry tier — never loosen. Loosening attempts are
+   * ignored (registry wins). This is how M07 lets users raise Green→Yellow or
+   * Yellow→Red for themselves without ever weakening the authoritative floor.
+   */
+  userTierOverride?: AutonomyTier | undefined;
+}
+
+const TIER_STRICTNESS: Record<AutonomyTier, number> = { green: 0, yellow: 1, red: 2 };
+
+/**
+ * Tightening-only tier composition. If the user override is stricter than the
+ * registry tier we adopt it; otherwise the registry wins. This preserves the
+ * "prompt/config can never loosen the floor" invariant.
+ */
+function effectiveTier(registryTier: AutonomyTier, userOverride?: AutonomyTier): AutonomyTier {
+  if (!userOverride) return registryTier;
+  return TIER_STRICTNESS[userOverride] > TIER_STRICTNESS[registryTier] ? userOverride : registryTier;
 }
 
 export interface EnforceDeps {
@@ -86,13 +105,17 @@ async function audit(
 }
 
 export async function enforce(input: EnforceInput, deps: EnforceDeps): Promise<EnforceResult> {
-  const tier = (deps.getTier ?? getActionTier)(input.action);
+  const registryTier = (deps.getTier ?? getActionTier)(input.action);
 
   // Fail closed: an action absent from the registry is never executable.
-  if (tier === undefined) {
+  if (registryTier === undefined) {
     await audit(deps, input, 'denied', `unknown action '${input.action}' — fail closed`);
     return { allowed: false, code: 'capability_denied', tier: null, reason: 'unknown_action' };
   }
+
+  // User settings may tighten (never loosen) the registry tier. Any evaluation
+  // downstream uses `tier`, so a Yellow→Red user override hard-denies too.
+  const tier = effectiveTier(registryTier, input.userTierOverride);
 
   if (tier === 'red') {
     // No allowed path exists for Red. A token — even a "valid" one — changes nothing.

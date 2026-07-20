@@ -4,7 +4,11 @@
 export { errorResponse, ok, type HandlerResponse } from './common/errors/http-error.js';
 export { contextFromVerifiedClaims, type RequestContext } from './common/auth/request-context.js';
 export { assertUserScope, scopedWhere, ScopeViolationError } from './common/auth/scope.js';
-export { withCapabilityGate } from './common/capability-gate/gate-interceptor.js';
+export {
+  withCapabilityGate,
+  type UserAutonomyResolver,
+} from './common/capability-gate/gate-interceptor.js';
+export { makeUserAutonomyResolver } from './common/capability-gate/user-autonomy-resolver.js';
 export { deleteMe, getMe, patchMeSettings, type IdentityDeps } from './modules/identity/me.handlers.js';
 export {
   InMemoryUserLifecycleRepo,
@@ -112,6 +116,20 @@ export {
   type BriefingTrigger,
 } from './modules/briefing/briefing.handlers.js';
 export {
+  approveBriefingItem,
+  editBriefingItem,
+  skipBriefingItem,
+  BRIEFING_ITEM_EXECUTE_ACTION,
+  DEFAULT_APPROVAL_TTL_MS,
+  type ApprovalHandlerDeps,
+} from './modules/briefing/approval.handlers.js';
+export {
+  listAudit,
+  type AuditHandlerDeps,
+  type AuditReadPort,
+  type AuditRow,
+} from './modules/audit/audit.handlers.js';
+export {
   createPlans,
   getPlans,
   getPlanByHorizon,
@@ -146,3 +164,14 @@ export { type AuthProvider } from './common/auth/auth-provider.js';
 export { DevAuthProvider } from './common/auth/dev-auth-provider.js';
 export { ClerkAuthProvider } from './common/auth/clerk-auth-provider.js';
 export { resolveBearerToken } from './common/auth/auth-guard.js';
+export {
+  BRIEFING_QUEUE_NAME,
+  BriefingSchedulerQueue,
+  createBriefingSchedulerWorker,
+  parseRedisUrl,
+  type BriefingSchedulerJob,
+} from './common/queue/briefing-scheduler.js';
+export {
+  DEFAULT_IDEMPOTENCY_TTL_SECONDS,
+  RedisIdempotencyStore,
+} from './common/queue/redis-idempotency-store.js';

@@ -27,11 +27,13 @@
     "@careeros/llm-gateway": "workspace:*",
     "@careeros/memory": "workspace:*",
     "@careeros/observability": "workspace:*",
+    "@careeros/workers": "workspace:*",
 
     "@nestjs/common": "^11.1.28",
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",
     "bullmq": "^5.79.3",
+    "ioredis": "^5.4.1",
     "jose": "^6.2.3",
     "minio": "^8.0.7",
     "reflect-metadata": "^0.2.2",

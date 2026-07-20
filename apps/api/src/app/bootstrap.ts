@@ -22,6 +22,7 @@ import {
   PrismaApplicationStore,
   PrismaOpportunityExists,
   PrismaBriefingStore,
+  PrismaAuditReadStore,
   PrismaStrategyPlanStore,
 } from '@careeros/db';
 
@@ -80,6 +81,7 @@ import { MinioObjectStorage } from '../common/storage/minio-object-storage.js';
 import { BullMqExportQueue, type ExportQueue } from '../common/queue/export-queue.js';
 import { AgentExtractionAdapter } from '../modules/profile/extractor-adapter.js';
 import { MemoryServiceEventAdapter } from '../modules/profile/memory-adapter.js';
+import { makeUserAutonomyResolver } from '../common/capability-gate/user-autonomy-resolver.js';
 
 
 /**
@@ -211,13 +213,15 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     agent: new LlmStrategicPlannerAgent(gateway),
   });
 
+  const identityDeps = overrides?.identity ?? {
+    users: new PrismaUserRepo(prisma),
+    settings: new PrismaUserSettingsRepo(prisma),
+    lifecycle: new PrismaUserLifecycleRepo(prisma),
+  };
+
   return {
     authProvider,
-    identity: overrides?.identity ?? {
-      users: new PrismaUserRepo(prisma),
-      settings: new PrismaUserSettingsRepo(prisma),
-      lifecycle: new PrismaUserLifecycleRepo(prisma),
-    },
+    identity: identityDeps,
     profile: overrides?.profile ?? {
       extractor,
       profiles: new PrismaProfileRepo(prisma),
@@ -286,6 +290,23 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
       tokenStore: new PrismaApprovalTokenStore(prisma),
       audit,
     },
+    // M07 — approval queue for BriefingItems. SHARE the same tokenStore +
+    // secret as the gate above so a minted token is redeemable by any code
+    // path that later calls enforce({action: 'briefing.item.execute', ...}).
+    approval: overrides?.approval ?? {
+      store: overrides?.briefing?.store ?? new PrismaBriefingStore(prisma),
+      tokenStore: new PrismaApprovalTokenStore(prisma),
+      audit,
+      approvalSecret: env.APPROVAL_TOKEN_SECRET,
+    },
+    // M07 — read-only view over the immutable audit log.
+    audit: overrides?.audit ?? {
+      audit: new PrismaAuditReadStore(prisma),
+    },
+    // M07 Step 5 — LIVE per-user autonomy resolver. Built from the same
+    // UserSettingsRepo the identity module uses, so /v1/me/settings edits are
+    // observed by the gate on the very next request (no cache to invalidate).
+    userAutonomy: overrides?.userAutonomy ?? makeUserAutonomyResolver(identityDeps.settings),
     storage,
     exportQueue,
   };

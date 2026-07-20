@@ -54,6 +54,8 @@ export class MeController {
         await this.deps.storage.deletePrefix(`${ctx.userId}/`);
         return deleteMe(ctx, this.deps.identity);
       },
+      // M07 Step 5: honor the user's per-action autonomy override (tightening-only).
+      this.deps.userAutonomy,
     );
     send(res, await gated(req.ctx, undefined));
   }
@@ -72,6 +74,8 @@ export class MeController {
         });
         return ok({ jobId, status: 'queued' as const });
       },
+      // A user may raise me.export Green→Yellow/Red for themselves.
+      this.deps.userAutonomy,
     );
     send(res, await gated(req.ctx, undefined));
   }
