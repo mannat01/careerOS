@@ -10,6 +10,7 @@ import { decisionCases } from '../decision/cases.js';
 import { offerComparisonCases } from '../offers/cases.js';
 import { plannerCases, plannerAdaptivityCases } from '../planner/cases.js';
 import { researchSynthesisCases } from '../research/cases.js';
+import { dashboardMetricCases } from '../metrics/cases.js';
 import type {
   ExtractionCase,
   ScoringCase,
@@ -20,6 +21,7 @@ import type {
   PlannerCase,
   PlannerAdaptivityCase,
   ResearchSynthesisCase,
+  DashboardMetricCase,
 } from './types.js';
 
 export function loadExtractionCases(): ExtractionCase[] {
@@ -64,5 +66,11 @@ export function loadPlannerAdaptivityCases(): PlannerAdaptivityCase[] {
 
 export function loadResearchSynthesisCases(): ResearchSynthesisCase[] {
   return [...researchSynthesisCases];
+}
+
+// ---------- M08 intelligence-dashboard metric golden set ----------
+
+export function loadDashboardMetricCases(): DashboardMetricCase[] {
+  return [...dashboardMetricCases];
 }
 

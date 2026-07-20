@@ -764,3 +764,167 @@ export interface ResearchSynthesisCase {
   /** Human note describing the trap (adversarial cases only). */
   trap?: string;
 }
+
+// ============================================================================
+// M08 — INTELLIGENCE DASHBOARDS golden types (authored golden-first, before
+// the metric composer exists — Step 1 of M08). They define THE BAR the
+// Step-2 metric composer must meet. Assertions are CHECKABLE PROPERTIES,
+// never one "correct" dashboard:
+//   (a) GROUNDING — every metric's value is computed from REAL evidence
+//       (evidence refs must resolve to a real state dimension / graph node /
+//       research finding / application-outcome record supplied by the case).
+//       A drill-down ref that dangles is fabrication.
+//   (b) EXPLANATION — every metric carries a plain-language "why it matters +
+//       how to move it" explanation (NEVER a bare number). The explanation
+//       must be CONSISTENT with the metric's value + trend — upbeat / rising
+//       language on a flat-or-declining trend is a cheerleading violation.
+//   (c) LINKAGE — every metric links to a REAL plan action (planActionId
+//       must resolve to a real action in the case's plan) that would move it.
+//       A metric linked to a nonexistent action is fabricated actionability.
+//   (d) INSUFFICIENT-DATA — when the case's evidence is thin, the composer
+//       must return `status: 'insufficient_data'` with a low confidence
+//       rather than invent a value. Fabricating a score on thin evidence
+//       is the "hallucinated metric" failure mode.
+// ============================================================================
+
+/** The ten A1.6 intelligence-dashboard metric keys. Frozen set. */
+export type DashboardMetricKey =
+  | 'career_momentum'
+  | 'interview_readiness'
+  | 'skill_momentum'
+  | 'market_positioning'
+  | 'salary_trajectory'
+  | 'opportunity_quality'
+  | 'networking_strength'
+  | 'recruiter_engagement'
+  | 'portfolio_completeness'
+  | 'strategic_recommendations';
+
+/** Direction of movement over the observation window. */
+export type MetricTrend = 'rising' | 'flat' | 'declining';
+
+/**
+ * A single application/outcome history record — the CIE's record of how the
+ * user's applications have progressed. Metric composers consume this to
+ * derive interview_readiness, opportunity_quality, recruiter_engagement, etc.
+ */
+export interface ApplicationOutcome {
+  id: string;
+  /** Opportunity/company the outcome pertains to. */
+  opportunityId: string;
+  /** Where in the pipeline the outcome landed. */
+  stage: 'applied' | 'screen' | 'interview' | 'onsite' | 'offer' | 'rejected' | 'ghosted';
+  /** ISO date (YYYY-MM-DD) so trend windows are deterministic in the golden set. */
+  observedAt: string;
+  /** Optional short note explaining the outcome (e.g. "recruiter reached out"). */
+  note?: string;
+}
+
+/**
+ * The metric composer's full input. Mirrors the M07/M06/M02 shapes so the
+ * composer can grind a metric from real evidence — state model, graph nodes,
+ * research findings, active plan actions, and application/outcome history.
+ * `allowedEvidenceRefs` is the sanctioned universe of refs a metric may cite;
+ * a ref outside this set is treated as fabrication (mirrors A1.5).
+ */
+export interface DashboardMetricInput {
+  stateModel: DerivedDimension[];
+  graph: PlanGraphNode[];
+  findings: ResearchFinding[];
+  activePlanActions: ActivePlanAction[];
+  applicationHistory: ApplicationOutcome[];
+  /**
+   * Union of every id a metric is permitted to cite as evidence: state-dim
+   * evidence refs, graph node ids, finding ids, plan-action ids, and
+   * application-outcome ids. A drill-down ref outside this set is fabricated
+   * evidence and must be rejected.
+   */
+  allowedEvidenceRefs: string[];
+}
+
+/**
+ * A single composed dashboard metric. `status: 'ok'` requires a numeric value
+ * (0–100 normalized), a trend, an evidence trail (all refs must resolve),
+ * a plain-language explanation consistent with value + trend, and a linked
+ * real plan action. `status: 'insufficient_data'` requires a low confidence
+ * and an honest explanation of what evidence is missing — the composer must
+ * NOT invent a value.
+ */
+export interface DashboardMetric {
+  key: DashboardMetricKey;
+  status: 'ok' | 'insufficient_data';
+  /** 0–100 normalized value. Required when status === 'ok'; ignored otherwise. */
+  value?: number;
+  trend: MetricTrend;
+  /**
+   * Plain-language "why it matters + how to move it". Never a bare number.
+   * Tone must be consistent with value + trend (see cheerleading gate).
+   */
+  explanation: string;
+  /**
+   * Provenance: the real evidence ids this metric was computed from. Every
+   * ref must appear on the input's allowedEvidenceRefs (mirrors A1.5).
+   */
+  evidenceRefs: string[];
+  /**
+   * Actionability: the plan action that would move this metric. Must resolve
+   * to a real activePlanAction id. Absent only when status === 'insufficient_data'.
+   */
+  linkedPlanActionId?: string;
+  /** 0–1 confidence. Must be LOW when status === 'insufficient_data'. */
+  confidence: number;
+}
+
+export interface DashboardMetricAgent {
+  compose(input: DashboardMetricInput): Promise<DashboardMetric[]>;
+}
+
+/**
+ * A golden case for the dashboard metric composer. `expected.metrics` is the
+ * per-metric assertion set — the key + expected status + trend + required
+ * evidence + required linked action + a value band (calibration) + tone
+ * bounds (cheerleading gate). A key not listed is ignored (allows staged
+ * rollout of metric coverage).
+ */
+export interface DashboardMetricCase {
+  id: string;
+  description: string;
+  input: DashboardMetricInput;
+  expected: {
+    metrics: ExpectedDashboardMetric[];
+  };
+  /**
+   * ZERO-FABRICATION guard: strings that must NEVER appear anywhere in the
+   * dashboard (invented outcomes, cheerleading superlatives on flat trends,
+   * fake plan-action titles).
+   */
+  forbidden?: string[];
+  /** Marks a "pressure to fabricate" case. */
+  adversarial?: boolean;
+  /** Human note describing the trap (adversarial cases only). */
+  trap?: string;
+}
+
+/**
+ * Per-metric assertion inside a DashboardMetricCase.
+ *
+ * `valueBand` — acceptable numeric band (calibration, not exactness).
+ * `mustCiteEvidenceRefs` — refs the composer MUST include in evidenceRefs.
+ * `mustLinkPlanActionId` — the real action the composer MUST link to.
+ * `explanationMustMentionAny` — the explanation must contain ≥1 of these
+ *   substrings (case-insensitive) so it's honestly grounded in the evidence
+ *   surface (e.g. cites the specific gap/finding driving the value).
+ * `explanationForbiddenSubstrings` — cheerleading-gate substrings that must
+ *   NEVER appear on this metric (e.g. "surging" on a flat trend).
+ */
+export interface ExpectedDashboardMetric {
+  key: DashboardMetricKey;
+  status: 'ok' | 'insufficient_data';
+  trend: MetricTrend;
+  valueBand?: { min: number; max: number };
+  confidenceBand: { min: number; max: number };
+  mustCiteEvidenceRefs?: string[];
+  mustLinkPlanActionId?: string;
+  explanationMustMentionAny?: string[];
+  explanationForbiddenSubstrings?: string[];
+}
