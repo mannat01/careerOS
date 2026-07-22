@@ -23,6 +23,7 @@ export const GREEN_EVAL_SUITES = [
   'eval/planner.eval.ts', // M06 — strategy planner (12 plan incl. pl-09..12 + 8 adaptivity; groundPlanSet + §4A decideReplan guardrail)
   'eval/research.eval.ts', // M07 — research synthesizer (12 cases incl. rs-09..12; groundResearchSynthesis guardrail)
   'eval/metrics.eval.ts', // M08 — dashboard metric composer (12 cases incl. dm-09..12; composeDashboardMetrics guardrail)
+  'eval/interview.eval.ts', // M09 — interview-prep interviewer (12 cases incl. ip-09..12; groundInterviewPrep guardrail)
 ];
 
 export default defineConfig({ test: { include: GREEN_EVAL_SUITES } });

@@ -1,0 +1,21 @@
+{
+  "name": "@careeros/cie-interview",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@careeros/llm-gateway": "workspace:*",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@careeros/config": "workspace:*",
+    "vitest": "^2.1.9"
+  }
+}
