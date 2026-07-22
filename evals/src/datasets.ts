@@ -11,6 +11,7 @@ import { offerComparisonCases } from '../offers/cases.js';
 import { plannerCases, plannerAdaptivityCases } from '../planner/cases.js';
 import { researchSynthesisCases } from '../research/cases.js';
 import { dashboardMetricCases } from '../metrics/cases.js';
+import { interviewPrepCases } from '../interview/cases.js';
 import type {
   ExtractionCase,
   ScoringCase,
@@ -22,6 +23,7 @@ import type {
   PlannerAdaptivityCase,
   ResearchSynthesisCase,
   DashboardMetricCase,
+  InterviewPrepCase,
 } from './types.js';
 
 export function loadExtractionCases(): ExtractionCase[] {
@@ -72,5 +74,11 @@ export function loadResearchSynthesisCases(): ResearchSynthesisCase[] {
 
 export function loadDashboardMetricCases(): DashboardMetricCase[] {
   return [...dashboardMetricCases];
+}
+
+// ---------- M09 interview-prep golden set ----------
+
+export function loadInterviewPrepCases(): InterviewPrepCase[] {
+  return [...interviewPrepCases];
 }
 

@@ -928,3 +928,181 @@ export interface ExpectedDashboardMetric {
   explanationMustMentionAny?: string[];
   explanationForbiddenSubstrings?: string[];
 }
+
+// ============================================================================
+// M09 — INTERVIEW PREP golden types (authored golden-first, before the
+// interviewer agent exists — Step 1 of M09). They define THE BAR the Step-2
+// interviewer must meet. Assertions are CHECKABLE PROPERTIES, never one
+// "correct" prep:
+//   (a) QUESTION RELEVANCE — every generated question fits the target role's
+//       stated requirements + seniority. A question untethered from the JD
+//       (or to a competency the JD does not require) is off-target and must
+//       be rejected. For every JD requirement in `mustCoverRequirements`,
+//       at least one generated question must cover it.
+//   (b) ANSWER GROUNDING — every suggested answer / STAR scaffold is built
+//       from the user's REAL experience. Every substantive claim inside an
+//       answer maps to a real profile fact / graph node via `evidenceMap`.
+//       No invented project, no invented metric, no invented story. An
+//       evidence-map entry whose `factRef` does not resolve to a real
+//       profile-fact id or graph-node id on `allowedFactRefs` is fabrication.
+//   (c) HONEST GAPS — for a competency the user genuinely LACKS (a JD
+//       requirement not covered by any profile fact), the prep must EITHER
+//       surface the honest closest-real experience the user does have OR
+//       a "how to address this gap" note. It must NEVER fabricate a STAR
+//       story that claims the missing competency. The gap must be tagged
+//       `honest_bridge` or `address_gap` — anything else is fabrication.
+//   (d) NO SCOPE/METRIC/SENIORITY INFLATION — a metric the candidate never
+//       reported must not appear in an answer; a seniority/scope the
+//       candidate never had must not be claimed. Case-wide `forbidden`
+//       strings enforce this on the rendered prep text.
+// ============================================================================
+
+/**
+ * Kind of interview question the prep generates. Behavioral triggers a STAR
+ * scaffold from real experience; technical triggers grounded talking points;
+ * situational + values-fit likewise. `system_design` scaffolds must ground
+ * every architectural decision in a real project the candidate shipped.
+ */
+export type InterviewQuestionKind =
+  | 'behavioral'
+  | 'technical'
+  | 'system_design'
+  | 'situational'
+  | 'values_fit';
+
+/**
+ * One question the interviewer would likely ask for THIS role. `covers` links
+ * the question to the JD requirement(s) it targets — a question that covers
+ * nothing on the JD is off-target and rejected by the relevance gate.
+ */
+export interface InterviewQuestion {
+  id: string;
+  kind: InterviewQuestionKind;
+  prompt: string;
+  /** JD requirement(s) this question probes. Must resolve to real requirements on the case's JD. */
+  covers: string[];
+}
+
+/**
+ * One evidence-map entry inside an answer scaffold. Each claim the answer
+ * makes (a project, a metric, a scope, a technology used) must be traceable
+ * to a real profile fact or a real graph node the case supplies. `factRef`
+ * must appear on the case's `allowedFactRefs` — otherwise the claim is
+ * ungrounded and the prep is rejected.
+ */
+export interface InterviewEvidenceMapEntry {
+  /** The claim inside the answer text (a paraphrase — e.g. "shipped Postgres migration"). */
+  claim: string;
+  /** Real profile-fact id or graph-node id backing the claim. */
+  factRef: string;
+}
+
+/**
+ * The "honest gap" strategy for a JD requirement the candidate does NOT have.
+ *   - 'honest_bridge': acknowledge the gap + surface the closest-real
+ *     transferable experience (must include ≥1 evidenceMap entry to a real fact).
+ *   - 'address_gap': acknowledge the gap + name a concrete step to close it
+ *     (no evidenceMap required, but no fabricated experience either).
+ * Any other strategy — or a STAR that claims the missing competency — is
+ * fabrication and MUST be rejected.
+ */
+export type HonestGapStrategy = 'honest_bridge' | 'address_gap';
+
+/**
+ * One answer scaffold: the STAR / grounded response the prep suggests for a
+ * question. `evidenceMap` is its grounding provenance — every real claim in
+ * `text` must appear as an entry with a resolving `factRef`. When the
+ * question probes a competency the user LACKS, `honestGap` MUST be set and
+ * `text` MUST NOT claim the missing competency.
+ */
+export interface InterviewAnswerScaffold {
+  /** The question this scaffold answers. Must resolve to a real InterviewQuestion id. */
+  questionId: string;
+  /** The full STAR / grounded answer text. */
+  text: string;
+  /** Every substantive claim in `text` mapped to a real profile fact / graph node. */
+  evidenceMap: InterviewEvidenceMapEntry[];
+  /** Set iff the question probes a gap competency; strategy the scaffold uses. */
+  honestGap?: {
+    strategy: HonestGapStrategy;
+    /** The JD requirement the user genuinely lacks. Must be on the case's gapCompetencies. */
+    competency: string;
+    /** Free-text note (e.g. "closest real experience is X"). */
+    note: string;
+  };
+}
+
+/**
+ * The interviewer's full input. Mirrors M02/M03/M05/M06 shapes so the agent
+ * can ground answers in the user's real state. `allowedFactRefs` is the
+ * sanctioned universe of ids an answer's evidenceMap may cite; a `factRef`
+ * outside this set is treated as fabrication (mirrors A1.5).
+ */
+export interface InterviewPrepInput {
+  profile: ProfileFact[];
+  stateModel: DerivedDimension[];
+  graph: PlanGraphNode[];
+  /** The target opportunity — its requirements drive question relevance. */
+  opportunity: JobDescription;
+  /**
+   * Union of every id an answer scaffold's evidenceMap may cite: profile
+   * fact ids and graph node ids. A factRef outside this set is fabricated
+   * evidence and must be rejected.
+   */
+  allowedFactRefs: string[];
+}
+
+/** The interviewer's output — questions + grounded answer scaffolds. */
+export interface InterviewPrep {
+  questions: InterviewQuestion[];
+  answers: InterviewAnswerScaffold[];
+}
+
+export interface InterviewPrepAgent {
+  prepare(input: InterviewPrepInput): Promise<InterviewPrep>;
+}
+
+/**
+ * A golden case for the interviewer.
+ *
+ * `expected.mustCoverRequirements` — the RELEVANCE key: every JD requirement
+ * listed must be covered by ≥1 generated question (via `covers`).
+ *
+ * `expected.mustGenerateQuestionKinds` — coverage across kinds so the prep
+ * doesn't degenerate into "10 behavioral" (must include e.g. behavioral +
+ * technical when the JD demands both).
+ *
+ * `expected.answerGroundingFactIds` — for each JD requirement the candidate
+ * HAS covered by real experience, the profile-fact / graph-node ids the
+ * scaffold MUST cite. Enforces that answers use the real evidence, not
+ * generic filler.
+ *
+ * `expected.gapCompetencies` — JD requirements the candidate genuinely
+ * LACKS. For each, the prep MUST include an `honestGap` scaffold and MUST
+ * NOT fabricate a STAR story claiming the competency. `expected
+ * .allowedGapStrategies` restricts what strategies are acceptable per
+ * competency (usually both 'honest_bridge' and 'address_gap').
+ */
+export interface InterviewPrepCase {
+  id: string;
+  description: string;
+  input: InterviewPrepInput;
+  expected: {
+    mustCoverRequirements: string[];
+    mustGenerateQuestionKinds: InterviewQuestionKind[];
+    /** Requirement → profile/graph fact ids a real answer must cite. */
+    answerGroundingFactIds: Record<string, string[]>;
+    gapCompetencies: string[];
+    allowedGapStrategies: HonestGapStrategy[];
+  };
+  /**
+   * ZERO-FABRICATION guard: strings that must NEVER appear in the rendered
+   * prep (invented projects, metrics, staff/principal titles the candidate
+   * never held, technologies the candidate never used).
+   */
+  forbidden?: string[];
+  /** Marks a "pressure to fabricate" case. */
+  adversarial?: boolean;
+  /** Human note describing the trap (adversarial cases only). */
+  trap?: string;
+}
