@@ -25,6 +25,8 @@ import {
   PrismaAuditReadStore,
   PrismaStrategyPlanStore,
   PrismaDashboardMetricStore,
+  PrismaSkillGapStore,
+  PrismaGapSignalReadStore,
 } from '@careeros/db';
 
 import { createLlmGateway, AnthropicProvider } from '@careeros/llm-gateway';
@@ -47,6 +49,7 @@ import {
   StrategicReasonerService,
 } from '@careeros/cie-reasoning';
 import { LlmStrategicPlannerAgent, StrategicPlannerService } from '@careeros/cie-planner';
+import { GapAnalyzerService } from '@careeros/cie-skills';
 import {
   DashboardMetricComposerService,
   LlmDashboardMetricComposerAgent,
@@ -78,6 +81,12 @@ import {
   StateServiceMetricStateAdapter,
   StrategyPlanMetricPlanAdapter,
 } from '../modules/cie/dashboard.adapters.js';
+import {
+  GapSignalMatchAdapter,
+  StateServiceGapStateAdapter,
+  GapSignalTargetRoleAdapter,
+  PersistedSkillGapPlannerGapReader,
+} from '../modules/cie/skills.adapters.js';
 import type {
   ResearchFindingReadPort,
   PersistedResearchFinding,
@@ -225,11 +234,20 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
   // handler in modules/cie/plan.handlers.ts persists per-horizon via the
   // narrow StrategyPlanStorePort (PrismaStrategyPlanStore) and appends ONE
   // MemoryEvent per material regeneration; sub-threshold changes never write.
+  // M09 Step 3 — the persisted SkillGap rows (deterministic GapAnalyzer
+  // output, integrity-verified) feed the planner's EXISTING gap intake via
+  // the reader below; the planner keeps grounding gap actions to real nodes.
+  const skillGapStore = new PrismaSkillGapStore(prisma);
+  const plannerGapReader = new PersistedSkillGapPlannerGapReader(
+    skillGapStore,
+    new PrismaProfileResolver(prisma),
+    graph,
+  );
   const strategicPlannerService = new StrategicPlannerService({
     facts: new MemoryPlannerFactAdapter(profileReader),
     state: new StateServicePlannerAdapter(stateService),
     goals: new StateServicePlannerGoalAdapter(stateService),
-    graph: new GraphMemoryPlannerAdapter(graph),
+    graph: new GraphMemoryPlannerAdapter(graph, plannerGapReader),
     agent: new LlmStrategicPlannerAgent(gateway),
   });
 
@@ -336,6 +354,36 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     // a follow-up; until then the findings port is empty (the composer's
     // guardrail treats no findings as "signal absent", not fabricated).
     dashboards: overrides?.dashboards ?? dashboardsDeps,
+    // M09 Step 3 — Skill development endpoints. Green, per-user scoped. The
+    // GapAnalyzerService reaches match signals / state model / target roles
+    // ONLY via narrow ports (adapters below); the Prisma stores are the sole
+    // @careeros/db seams. The analyzer's deterministic guardrail guarantees
+    // no invented gaps, never a skill the user already demonstrates, and
+    // every LearningItem linked to a real gap — before anything persists.
+    skills: overrides?.skills ?? {
+      store: skillGapStore,
+      profileResolver: new PrismaProfileResolver(prisma),
+      analyzer: new GapAnalyzerService({
+        matches: new GapSignalMatchAdapter(
+          new PrismaGapSignalReadStore(prisma),
+          new PrismaProfileResolver(prisma),
+        ),
+        state: new StateServiceGapStateAdapter(stateService),
+        targets: new GapSignalTargetRoleAdapter(
+          new PrismaGapSignalReadStore(prisma),
+          new PrismaProfileResolver(prisma),
+        ),
+      }),
+      // Reuses the M08 recompute path: a fresh gap set re-materializes the
+      // caller's dashboard skill metrics. Best-effort inside the handler.
+      dashboards: {
+        recompute: async (userId: string) => {
+          const pid = await dashboardsDeps.profileResolver.resolveProfileId(userId);
+          if (!pid) return;
+          await recomputeAndPersistDashboard(userId, pid, dashboardsDeps);
+        },
+      },
+    },
 
     gate: overrides?.gate ?? {
 

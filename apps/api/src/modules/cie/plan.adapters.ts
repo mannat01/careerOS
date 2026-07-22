@@ -118,8 +118,16 @@ export class StateServicePlannerGoalAdapter implements PlannerGoalPort {
  * yet have as a node" — a conservative first-pass; a richer `gaps` projection
  * (from the state model + graph) can supersede this without breaking the port.
  */
+/** Narrow gap intake — M09 wires the persisted SkillGap projection here. */
+export interface PlannerGapReader {
+  readGaps(userId: string): Promise<SkillGap[]>;
+}
+
 export class GraphMemoryPlannerAdapter implements PlannerGraphPort {
-  constructor(private readonly graph: GraphMemoryService) {}
+  constructor(
+    private readonly graph: GraphMemoryService,
+    private readonly gapReader?: PlannerGapReader,
+  ) {}
 
   async readGraphNodes(userId: string): Promise<PlanGraphNode[]> {
     const nodes = await this.graph.listNodes(userId);
@@ -132,13 +140,12 @@ export class GraphMemoryPlannerAdapter implements PlannerGraphPort {
   }
 
   readGaps(userId: string): Promise<SkillGap[]> {
-    // Conservative first-pass: no derived gaps until a dedicated projection
-    // (or the graph-side gap store) exists. The planner treats an empty gap
-    // list as "no gap-closing actions available" — never as a license to
-    // invent one. A follow-up will fill this once GraphMemoryService exposes
-    // a `requiredSkillsForTargetRoles` view.
-    void userId;
-    return Promise.resolve([]);
+    // M09 Step 3 — the dedicated projection landed: persisted SkillGap rows
+    // (computed by the deterministic GapAnalyzer, integrity-verified) feed the
+    // planner's existing gap intake. Without a wired reader the list stays
+    // empty — the planner treats that as "no gap-closing actions available",
+    // never as a license to invent one.
+    return this.gapReader ? this.gapReader.readGaps(userId) : Promise.resolve([]);
   }
 }
 

@@ -17,6 +17,7 @@ import type { ApprovalHandlerDeps } from '../modules/briefing/approval.handlers.
 import type { AuditHandlerDeps } from '../modules/audit/audit.handlers.js';
 import type { PlanHandlerDeps } from '../modules/cie/plan.handlers.js';
 import type { DashboardHandlerDeps } from '../modules/cie/dashboard.handlers.js';
+import type { SkillsHandlerDeps } from '../modules/cie/skills.handlers.js';
 
 import type { ObjectStorage } from '../common/storage/object-storage.js';
 import type { ExportQueue } from '../common/queue/export-queue.js';
@@ -83,6 +84,14 @@ export interface AppDeps {
    * periodic refresh in the scheduler's maintenance cadence.
    */
   dashboards: DashboardHandlerDeps;
+  /**
+   * M09 Step 3 — Skill development endpoints. Green, per-user scoped. The
+   * GapAnalyzer computes SkillGaps deterministically (per-opportunity from
+   * match subscores; aggregate from low-confidence state dimensions vs stated
+   * target roles) and self-verifies: no invented gaps, never a skill the user
+   * already demonstrates, every LearningItem links to a real gap.
+   */
+  skills: SkillsHandlerDeps;
   gate: EnforceDeps;
 
   /**

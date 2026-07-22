@@ -88,5 +88,17 @@ export {
   type DashboardMetricTrendLike,
   type PersistDashboardMetricLike,
 } from './stores/prisma-dashboard-metric-store.js';
+export {
+  PrismaSkillGapStore,
+  type SkillGapStorePortShape,
+  type SkillGapRowLike,
+  type SkillGapWriteLike,
+  type LearningItemRowLike,
+} from './stores/prisma-skill-gap-store.js';
+export {
+  PrismaGapSignalReadStore,
+  type GapSignalReadPortShape,
+  type GapMatchSignalLike,
+} from './stores/prisma-gap-signal-read-store.js';
 
 

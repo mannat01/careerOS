@@ -218,6 +218,7 @@ model Profile {
   derivedInsights DerivedInsight[]
   matchScores     MatchScore[]
   dashboardMetrics DashboardMetric[]
+  skillGaps        SkillGap[]
 
   @@index([userId])
   @@map("profiles")
@@ -878,4 +879,81 @@ model DashboardMetric {
 
   @@index([profileId, metric, computedAt(sort: Desc)])
   @@map("dashboard_metrics")
+}
+
+// ---------------- CIE — Skill Development (M09 Step 3 — database-schema.md §cie) ----------------
+
+/// SkillGap.source — where the gap was derived from.
+enum SkillGapSource {
+  per_opp
+  aggregate
+}
+
+/// LearningItem.status — progress lifecycle for one recommendation.
+enum LearningItemStatus {
+  suggested
+  in_progress
+  done
+}
+
+/// A derived skill gap (database-schema.md §cie: Profile 1:N SkillGap). Each row
+/// is a DEMANDED-BUT-MISSING skill computed deterministically by the GapAnalyzer:
+///   - `per_opp`  — from a real MatchScore's low subscore + the opportunity's
+///     real requirement the profile does not demonstrate (`opportunity_id` set);
+///   - `aggregate` — from a low-confidence/absent state-model dimension measured
+///     against the user's STATED target roles (`opportunity_id` null).
+/// The integrity guardrail forbids invented gaps and gaps for skills the user
+/// already demonstrates (checked against the state model's demonstrated_skills).
+/// PER-USER by construction: `profile_id` binds the gap to the caller's profile.
+model SkillGap {
+  id        String  @id @default(uuid()) @db.Uuid
+  profileId String  @map("profile_id") @db.Uuid
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  /// Null for aggregate gaps; the real opportunity id for per-opp gaps.
+  opportunityId String?        @map("opportunity_id") @db.Uuid
+  /// The canonical (lowercased) skill identity this gap names.
+  skill         String
+  /// Grounded human-readable description — why this is a gap ("demanded by X,
+  /// not demonstrated"). May be LLM-drafted; validated against the computed gap.
+  gap           String
+  severity      String         @default("medium")
+  source        SkillGapSource
+  /// Evidence ref ids the derivation leaned on (requirement strings, subscore
+  /// keys, state dimensions) — jsonb array of strings.
+  evidenceRefs  Json           @default("[]") @map("evidence_refs")
+  modelVersion  String         @map("model_version")
+  computedAt    DateTime       @map("computed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  learningItems LearningItem[]
+
+  @@unique([profileId, skill, source, opportunityId])
+  @@index([profileId, computedAt(sort: Desc)])
+  @@map("skill_gaps")
+}
+
+/// A learning recommendation linked to a REAL SkillGap (database-schema.md §cie:
+/// SkillGap 1:N LearningItem). `resource` is the jsonb payload (title/kind/url/
+/// estimated effort); `status` + `progress` track the user's adherence via
+/// PATCH /v1/skills/learning/:id. A LearningItem cannot exist without its gap —
+/// the FK + the GapAnalyzer guardrail enforce every-item-links-to-a-real-gap.
+model LearningItem {
+  id         String   @id @default(uuid()) @db.Uuid
+  skillGapId String   @map("skill_gap_id") @db.Uuid
+  skillGap   SkillGap @relation(fields: [skillGapId], references: [id], onDelete: Cascade)
+
+  /// { title, kind, url?, effort? } — the recommended learning resource.
+  resource Json
+  status   LearningItemStatus @default(suggested)
+  /// 0-100 user-updated progress.
+  progress Int                @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([skillGapId])
+  @@map("learning_items")
 }

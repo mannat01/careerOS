@@ -20,6 +20,7 @@
     "@careeros/cie-reasoning": "workspace:*",
     "@careeros/cie-research": "workspace:*",
     "@careeros/cie-resume": "workspace:*",
+    "@careeros/cie-skills": "workspace:*",
     "@careeros/cie-state": "workspace:*",
     "@careeros/config": "workspace:*",
     "@careeros/connectors": "workspace:*",
