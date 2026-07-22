@@ -80,5 +80,13 @@ export {
   type PlanActionKindLike,
   type PlanActionStatusLike,
 } from './stores/prisma-strategy-plan-store.js';
+export {
+  PrismaDashboardMetricStore,
+  type DashboardMetricStorePortShape,
+  type DashboardMetricRecordLike,
+  type DashboardMetricStatusLike,
+  type DashboardMetricTrendLike,
+  type PersistDashboardMetricLike,
+} from './stores/prisma-dashboard-metric-store.js';
 
 

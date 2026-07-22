@@ -1,4 +1,4 @@
-
+ 
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import type { INestApplication } from '@nestjs/common';
@@ -24,6 +24,7 @@ import {
   PrismaBriefingStore,
   PrismaAuditReadStore,
   PrismaStrategyPlanStore,
+  PrismaDashboardMetricStore,
 } from '@careeros/db';
 
 import { createLlmGateway, AnthropicProvider } from '@careeros/llm-gateway';
@@ -46,6 +47,10 @@ import {
   StrategicReasonerService,
 } from '@careeros/cie-reasoning';
 import { LlmStrategicPlannerAgent, StrategicPlannerService } from '@careeros/cie-planner';
+import {
+  DashboardMetricComposerService,
+  LlmDashboardMetricComposerAgent,
+} from '@careeros/cie-metrics';
 import { GraphMemoryServiceAdapter } from '../modules/cie/graph.handlers.js';
 import {
   MemoryReasonerFactAdapter,
@@ -64,7 +69,22 @@ import {
   StateServicePlannerAdapter,
   StateServicePlannerGoalAdapter,
 } from '../modules/cie/plan.adapters.js';
+import {
+  ApplicationHistoryMetricAdapter,
+  ComposedMetricEvidenceAdapter,
+  DashboardComposerAdapter,
+  GraphMemoryMetricGraphAdapter,
+  ResearchFindingMetricAdapter,
+  StateServiceMetricStateAdapter,
+  StrategyPlanMetricPlanAdapter,
+} from '../modules/cie/dashboard.adapters.js';
+import type {
+  ResearchFindingReadPort,
+  PersistedResearchFinding,
+} from '../modules/cie/research.handlers.js';
+import { recomputeAndPersist as recomputeAndPersistDashboard } from '../modules/cie/dashboard.handlers.js';
 import { ApplicationMemoryServiceAdapter } from '../modules/application/memory-adapter.js';
+import type { ApplicationDashboardRecomputePort } from '../modules/application/application.handlers.js';
 import type {
   TwinHandlerDeps,
   TwinMemoryPort,
@@ -219,6 +239,26 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     lifecycle: new PrismaUserLifecycleRepo(prisma),
   };
 
+  // M08 Step 3 — build the Intelligence Dashboard deps FIRST so the M04
+  // application handler can be wired with the change-hook recompute port
+  // (a new application / meaningful status change re-materializes the
+  // caller's dashboard, so freshness moves per the recompute-trigger
+  // contract). Cheap best-effort recompute; failure never fails the caller.
+  const dashboardsDeps = buildDashboardDeps({
+    prisma,
+    stateService,
+    graph,
+    gateway,
+    strategicPlannerService,
+  });
+  const dashboardRecomputeAdapter: ApplicationDashboardRecomputePort = {
+    recompute: async (userId) => {
+      const profileId = await dashboardsDeps.profileResolver.resolveProfileId(userId);
+      if (!profileId) return;
+      await recomputeAndPersistDashboard(userId, profileId, dashboardsDeps);
+    },
+  };
+
   return {
     authProvider,
     identity: identityDeps,
@@ -245,11 +285,15 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     // M04 Stage 4 application pipeline (CRM). The store is the sole @careeros/db
     // seam; the memory adapter appends ONE episodic MemoryEvent per meaningful
     // status change. The applied-only-by-user invariant lives in the pure
-    // status-machine the handler runs before any write.
+    // status-machine the handler runs before any write. The optional
+    // `dashboards` recompute hook is wired below (after dashboardsDeps is
+    // built) so a new application / meaningful status change re-materializes
+    // the caller's dashboard freshness.
     application: overrides?.application ?? {
       store: new PrismaApplicationStore(prisma),
       opportunities: new PrismaOpportunityExists(prisma),
       memory: new ApplicationMemoryServiceAdapter(memory),
+      dashboards: dashboardRecomputeAdapter,
     },
     // M05 Stage-5 Step-5 manual Briefing orchestrator. Reuses the existing
     // scored-opportunity + state-model + strategic-reasoner services — the only
@@ -283,6 +327,15 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
       memory: new PlanEpisodicMemoryAdapter(memory),
       audit,
     },
+    // M08 Step 3 Intelligence Dashboard endpoints. Green/read-only, per-user
+    // scoped by construction (userId from the verified request context →
+    // profileId via ProfileResolver). Every response carries value + trend +
+    // explanation + evidence + linked action + freshness — never a bare
+    // number. The composer service is wired to narrow ports whose Prisma
+    // adapters live in @careeros/db. Research findings persistence lands in
+    // a follow-up; until then the findings port is empty (the composer's
+    // guardrail treats no findings as "signal absent", not fabricated).
+    dashboards: overrides?.dashboards ?? dashboardsDeps,
 
     gate: overrides?.gate ?? {
 
@@ -338,6 +391,97 @@ function buildTwinDeps(input: {
     profiles: profilePort,
     reasoner: reasonerPort,
     audit: input.audit,
+  };
+}
+
+/**
+ * M08 Step 3 — Intelligence Dashboard deps helper. Composes the
+ * DashboardMetricComposerService with narrow adapters over the LIVE state
+ * service, graph, strategy plan store, application store, and profile
+ * resolver — plus a stubbed research-findings port (persistence lands with a
+ * follow-up). Also injects an evidence resolver that hydrates raw evidence
+ * refs into `ResolvedEvidence` shapes the drill-down endpoint returns, and a
+ * plan-action resolver that titles the linkedActionId. Prisma imports stay
+ * confined to this file.
+ */
+function buildDashboardDeps(input: {
+  prisma: PrismaClient;
+  stateService: CareerStateService;
+  graph: GraphMemoryService;
+  gateway: ReturnType<typeof createLlmGateway>;
+  strategicPlannerService: StrategicPlannerService;
+}) {
+  const applicationStore = new PrismaApplicationStore(input.prisma);
+  const strategyPlanStore = new PrismaStrategyPlanStore(input.prisma);
+
+  const stateAdapter = new StateServiceMetricStateAdapter(input.stateService);
+  const graphAdapter = new GraphMemoryMetricGraphAdapter(input.graph);
+  const historyAdapter = new ApplicationHistoryMetricAdapter(applicationStore);
+  const plansAdapter = new StrategyPlanMetricPlanAdapter(strategyPlanStore);
+
+  // Research findings persistence isn't wired in bootstrap yet; the port
+  // returns an empty list so the composer treats "no findings" as
+  // signal-absent and produces `insufficient_data` where a finding was
+  // required — never a fabricated value. Wiring the PrismaResearchFindingStore
+  // is a follow-up that will replace this stub without touching the composer.
+  const findingsStub: ResearchFindingReadPort = {
+    listFindings: async () => [],
+    listFindingsAffectingUser: async () => [] as PersistedResearchFinding[],
+  };
+  const findingsAdapter = new ResearchFindingMetricAdapter(findingsStub);
+
+  const evidence = new ComposedMetricEvidenceAdapter({
+    state: stateAdapter,
+    graph: graphAdapter,
+    findings: findingsAdapter,
+    plans: plansAdapter,
+  });
+
+  const composerService = new DashboardMetricComposerService({
+    state: stateAdapter,
+    graph: graphAdapter,
+    findings: findingsAdapter,
+    plans: plansAdapter,
+    history: historyAdapter,
+    evidence,
+    agent: new LlmDashboardMetricComposerAgent(input.gateway),
+  });
+
+  return {
+    store: new PrismaDashboardMetricStore(input.prisma),
+    profileResolver: new PrismaProfileResolver(input.prisma),
+    composer: new DashboardComposerAdapter(composerService),
+    evidenceResolver: {
+      resolve: async (userId: string, refs: string[]) => {
+        // Hydrate refs by looking up graph nodes + plan actions the caller
+        // owns. Any ref that doesn't resolve is returned as-is with kind
+        // `unknown` — the composer already filtered against the allow-list
+        // at write time, so this only trims the label surface.
+        const nodes = await input.graph.listNodes(userId);
+        const nodeById = new Map(nodes.map((n) => [n.id, n]));
+        const activePlans = await strategyPlanStore.getActivePlans(userId);
+        const actionById = new Map<string, { title: string }>();
+        for (const p of activePlans) {
+          for (const a of p.actions) actionById.set(a.id, { title: a.title });
+        }
+        return refs.map((ref) => {
+          const node = nodeById.get(ref);
+          if (node) return { ref, kind: node.kind, label: node.label };
+          const action = actionById.get(ref);
+          if (action) return { ref, kind: 'plan_action', label: action.title };
+          return { ref, kind: 'unknown', label: ref };
+        });
+      },
+    },
+    planActionResolver: {
+      resolveTitle: async (userId: string, actionId: string) => {
+        const plans = await strategyPlanStore.getActivePlans(userId);
+        for (const p of plans) {
+          for (const a of p.actions) if (a.id === actionId) return a.title;
+        }
+        return null;
+      },
+    },
   };
 }
 

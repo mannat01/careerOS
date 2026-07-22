@@ -16,6 +16,7 @@ import type { BriefingHandlerDeps } from '../modules/briefing/briefing.handlers.
 import type { ApprovalHandlerDeps } from '../modules/briefing/approval.handlers.js';
 import type { AuditHandlerDeps } from '../modules/audit/audit.handlers.js';
 import type { PlanHandlerDeps } from '../modules/cie/plan.handlers.js';
+import type { DashboardHandlerDeps } from '../modules/cie/dashboard.handlers.js';
 
 import type { ObjectStorage } from '../common/storage/object-storage.js';
 import type { ExportQueue } from '../common/queue/export-queue.js';
@@ -74,6 +75,14 @@ export interface AppDeps {
    * sub-threshold → no-op (no thrash).
    */
   plan: PlanHandlerDeps;
+  /**
+   * M08 Step 3 — Intelligence Dashboard endpoints. Green/read-only, per-user
+   * scoped by construction. Every response carries explanation + trend +
+   * evidence + linked action + freshness — never a bare number. Recompute is
+   * driven by change hooks (completed interview, new application) and a
+   * periodic refresh in the scheduler's maintenance cadence.
+   */
+  dashboards: DashboardHandlerDeps;
   gate: EnforceDeps;
 
   /**

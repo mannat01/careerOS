@@ -88,11 +88,35 @@ export interface ApplicationMemoryPort {
   }): Promise<void>;
 }
 
+/**
+ * Optional M08 recompute hook — when wired, the handler triggers a best-effort
+ * dashboard recompute on inputs the composer depends on: a NEW application
+ * moves opportunity_quality / recruiter_engagement, and a status change into
+ * `interviewing` / `offer` moves interview_readiness. The recompute is
+ * fire-and-forget (never blocks the caller's response) and swallows errors —
+ * the mutation is already durably persisted before the hook runs.
+ */
+export interface ApplicationDashboardRecomputePort {
+  recompute(userId: string, trigger: 'application_created' | 'application_status_changed'): Promise<void>;
+}
+
 export interface ApplicationHandlerDeps {
   store: ApplicationStorePort;
   opportunities: OpportunityExistsPort;
   /** Optional: when wired, an episodic MemoryEvent is appended per status change. */
   memory?: ApplicationMemoryPort;
+  /** Optional: when wired, a dashboard recompute is triggered on relevant edits. */
+  dashboards?: ApplicationDashboardRecomputePort;
+}
+
+/**
+ * Which application status changes move a dashboard metric input. Kept narrow
+ * so the recompute stays low-cost: `applied` moves opportunity_quality /
+ * recruiter_engagement; interviewing/offer moves interview_readiness. Other
+ * transitions are ignored.
+ */
+function statusChangeAffectsDashboard(to: ApplicationStatus): boolean {
+  return to === 'applied' || to === 'interviewing' || to === 'offer';
 }
 
 // ---------- POST /v1/applications ----------
@@ -123,6 +147,16 @@ export async function createApplication(
     ...(parsed.data.resumeVariantId !== undefined ? { resumeVariantId: parsed.data.resumeVariantId } : {}),
     ...(parsed.data.notes !== undefined ? { notes: parsed.data.notes } : {}),
   });
+
+  // Best-effort M08 dashboard recompute — a new application moves
+  // opportunity_quality + recruiter_engagement. Fire-and-forget: never blocks
+  // the caller's response and never fails it.
+  if (deps.dashboards) {
+    void deps.dashboards
+      .recompute(ctx.userId, 'application_created')
+      .catch(() => {});
+  }
+
   return { status: 201, body: created };
 }
 
@@ -230,6 +264,18 @@ export async function patchApplication(
       toStatus: command.statusChange.to,
       actor,
     });
+  }
+
+  // Best-effort M08 dashboard recompute on the transitions the composer
+  // depends on. Fire-and-forget: the mutation is already durably persisted.
+  if (
+    deps.dashboards &&
+    command.statusChange &&
+    statusChangeAffectsDashboard(command.statusChange.to)
+  ) {
+    void deps.dashboards
+      .recompute(ctx.userId, 'application_status_changed')
+      .catch(() => {});
   }
 
   return ok(updated);

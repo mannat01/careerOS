@@ -24,6 +24,11 @@ import {
   patchPlanAction,
   type PlanHandlerDeps,
 } from '../modules/cie/plan.handlers.js';
+import {
+  getDashboards,
+  getDashboardMetric,
+  type DashboardHandlerDeps,
+} from '../modules/cie/dashboard.handlers.js';
 import type { HandlerResponse } from '../common/errors/http-error.js';
 import { BearerAuthGuard, type AuthedRequest } from './bearer-auth.guard.js';
 import { APP_DEPS, type AppDeps } from './deps.js';
@@ -227,5 +232,35 @@ export class CieController {
   ): Promise<void> {
     const deps: PlanHandlerDeps = this.deps.plan;
     send(res, await patchPlanAction(req.ctx, actionId, body, deps));
+  }
+
+  /**
+   * GET /v1/cie/dashboards — M08 Intelligence Dashboards (Green/read-only).
+   * Every metric response carries value + trend + explanation + linked action
+   * + freshness — never a bare number. Per-user by construction (userId from
+   * the verified RequestContext → profileId via ProfileResolver). If no metric
+   * has ever been computed the handler composes + persists one on-demand so
+   * subsequent reads are cheap and freshness moves.
+   */
+  @Get('dashboards')
+  async dashboards(@Req() req: AuthedRequest, @Res() res: Response): Promise<void> {
+    const deps: DashboardHandlerDeps = this.deps.dashboards;
+    send(res, await getDashboards(req.ctx, deps));
+  }
+
+  /**
+   * GET /v1/cie/dashboards/:metric — drill-down for one A1.6 metric key with
+   * resolved evidence + linked action + freshness. Unknown metric keys and
+   * cross-user access both 404 (the store is scoped by profileId so a metric
+   * that belongs to another profile is simply not reachable).
+   */
+  @Get('dashboards/:metric')
+  async dashboardMetric(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+    @Param('metric') metric: string,
+  ): Promise<void> {
+    const deps: DashboardHandlerDeps = this.deps.dashboards;
+    send(res, await getDashboardMetric(req.ctx, metric, deps));
   }
 }

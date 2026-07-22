@@ -42,6 +42,17 @@ export {
 } from './research-plan-hook.js';
 
 export {
+  DASHBOARD_MAINTENANCE_DEFAULTS,
+  refreshStaleDashboards,
+  type DashboardMaintenanceDeps,
+  type DashboardMaintenanceInput,
+  type DashboardMaintenanceResult,
+  type DashboardRecomputePort,
+  type MaintenanceAuditPort,
+  type StaleDashboardListPort,
+} from './dashboard-maintenance.js';
+
+export {
   runOvernightLoop,
   type AuditPort,
   type BriefingComposerPort,

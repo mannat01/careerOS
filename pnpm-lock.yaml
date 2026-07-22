@@ -38,6 +38,9 @@ importers:
       '@careeros/capability-gate':
         specifier: workspace:*
         version: link:../../packages/capability-gate
+      '@careeros/cie-metrics':
+        specifier: workspace:*
+        version: link:../../packages/cie/metrics
       '@careeros/cie-planner':
         specifier: workspace:*
         version: link:../../packages/cie/planner

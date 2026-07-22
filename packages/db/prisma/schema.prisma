@@ -217,6 +217,7 @@ model Profile {
   skillClaims SkillClaim[]
   derivedInsights DerivedInsight[]
   matchScores     MatchScore[]
+  dashboardMetrics DashboardMetric[]
 
   @@index([userId])
   @@map("profiles")
@@ -833,4 +834,48 @@ model ResearchFinding {
   @@unique([sourceKey, sourceRef])
   @@index([domain, observedAt(sort: Desc)])
   @@map("research_findings")
+}
+
+// ---------------- CIE — Intelligence Dashboards (M08 Step 3 — database-schema.md §cie) ----------------
+
+/// A persisted DashboardMetric read-model row — one row per (profile, metric,
+/// computed_at). The dashboard endpoints read the LATEST row per (profile, metric).
+/// PER-USER by construction: `profile_id` binds the metric to the caller's profile,
+/// so cross-user reads return null and the endpoint returns 404.
+///
+/// Every metric row carries its `explanation` (never a bare number), plus optional
+/// `value`/`trend`/`linked_action_id`/`evidence_refs` — the composer's grounded,
+/// calibrated output. `status='insufficient_data'` when evidence is thin: `value` is
+/// null (never invented) and `confidence` ≤ 0.5. `computed_at` is the freshness
+/// marker the endpoint surfaces; recomputes advance it on input change.
+model DashboardMetric {
+  id        String  @id @default(uuid()) @db.Uuid
+  profileId String  @map("profile_id") @db.Uuid
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  /// One of the ten A1.6 metric keys (career_momentum, interview_readiness, …).
+  metric          String
+  /// 'ok' | 'insufficient_data'. Insufficient means: not enough evidence to derive
+  /// a value — value stays null, confidence ≤ 0.5.
+  status          String
+  /// 0-100. NULL when status='insufficient_data' (never invented).
+  value           Int?
+  /// 'rising' | 'flat' | 'declining'.
+  trend           String
+  /// The grounded "why it matters + how to move it" paragraph. Never bare.
+  explanation     String
+  /// Evidence ref ids the value+trend+explanation lean on (jsonb array).
+  evidenceRefs    Json    @default("[]") @map("evidence_refs")
+  /// Optional PlanAction id chosen from the caller's own activePlanActions.
+  linkedActionId  String?  @map("linked_action_id") @db.Uuid
+  /// 0-1. status='insufficient_data' ⇒ ≤ 0.5.
+  confidence      Float
+  modelVersion    String  @map("model_version")
+  computedAt      DateTime @map("computed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([profileId, metric, computedAt(sort: Desc)])
+  @@map("dashboard_metrics")
 }
