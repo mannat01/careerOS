@@ -18,6 +18,7 @@ import type { AuditHandlerDeps } from '../modules/audit/audit.handlers.js';
 import type { PlanHandlerDeps } from '../modules/cie/plan.handlers.js';
 import type { DashboardHandlerDeps } from '../modules/cie/dashboard.handlers.js';
 import type { SkillsHandlerDeps } from '../modules/cie/skills.handlers.js';
+import type { DraftsHandlerDeps } from '../modules/cie/drafts.handlers.js';
 
 import type { ObjectStorage } from '../common/storage/object-storage.js';
 import type { ExportQueue } from '../common/queue/export-queue.js';
@@ -92,6 +93,15 @@ export interface AppDeps {
    * already demonstrates, every LearningItem links to a real gap.
    */
   skills: SkillsHandlerDeps;
+  /**
+   * M09 Step 4 — cover-letter / outreach drafting. Draft generation + read
+   * are Green (advisory artifact, zero-fabrication guardrail inside the
+   * DraftingService). Sending is Yellow: the controller wraps the send
+   * handler in withCapabilityGate('draft.send') AND the handler enforces the
+   * destination channel's ToS (capability_denied + manual-send guidance when
+   * automated send is not permitted).
+   */
+  drafts: DraftsHandlerDeps;
   gate: EnforceDeps;
 
   /**

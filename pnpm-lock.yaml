@@ -38,6 +38,9 @@ importers:
       '@careeros/capability-gate':
         specifier: workspace:*
         version: link:../../packages/capability-gate
+      '@careeros/cie-drafting':
+        specifier: workspace:*
+        version: link:../../packages/cie/drafting
       '@careeros/cie-metrics':
         specifier: workspace:*
         version: link:../../packages/cie/metrics
@@ -147,6 +150,9 @@ importers:
       '@careeros/agents':
         specifier: workspace:*
         version: link:../packages/agents
+      '@careeros/cie-drafting':
+        specifier: workspace:*
+        version: link:../packages/cie/drafting
       '@careeros/cie-interview':
         specifier: workspace:*
         version: link:../packages/cie/interview
@@ -210,6 +216,22 @@ importers:
       '@careeros/config':
         specifier: workspace:*
         version: link:../config
+
+  packages/cie/drafting:
+    dependencies:
+      '@careeros/llm-gateway':
+        specifier: workspace:*
+        version: link:../../llm-gateway
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+    devDependencies:
+      '@careeros/config':
+        specifier: workspace:*
+        version: link:../../config
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@20.19.43)
 
   packages/cie/interview:
     dependencies:

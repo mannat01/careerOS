@@ -50,6 +50,7 @@ import {
 } from '@careeros/cie-reasoning';
 import { LlmStrategicPlannerAgent, StrategicPlannerService } from '@careeros/cie-planner';
 import { GapAnalyzerService } from '@careeros/cie-skills';
+import { LlmDrafterAgent, DraftingService } from '@careeros/cie-drafting';
 import {
   DashboardMetricComposerService,
   LlmDashboardMetricComposerAgent,
@@ -87,6 +88,18 @@ import {
   GapSignalTargetRoleAdapter,
   PersistedSkillGapPlannerGapReader,
 } from '../modules/cie/skills.adapters.js';
+import {
+  CompositeDraftEvidenceAdapter,
+  GraphMemoryDraftGraphAdapter,
+  MemoryDraftProfileAdapter,
+  OpportunityDraftAdapter,
+  StateServiceDraftStateAdapter,
+} from '../modules/cie/drafts.adapters.js';
+import {
+  InMemoryDraftStore,
+  StaticChannelPolicy,
+  type DraftRecord,
+} from '../modules/cie/drafts.handlers.js';
 import type {
   ResearchFindingReadPort,
   PersistedResearchFinding,
@@ -382,6 +395,34 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
           if (!pid) return;
           await recomputeAndPersistDashboard(userId, pid, dashboardsDeps);
         },
+      },
+    },
+
+    // M09 Step 4 — cover-letter / outreach drafting. The DraftingService
+    // reaches profile facts / state model / graph / opportunity / evidence
+    // allow-list ONLY via the narrow adapters above — never @careeros/db.
+    // Draft generation + read are GREEN; sending is YELLOW (the controller
+    // wraps the handler in withCapabilityGate('draft.send')) AND ToS-gated
+    // per-channel (capability_denied + manual-send guidance otherwise).
+    // The store is in-memory until a Prisma DraftStore lands; the sender is
+    // a STUB(M09) that only marks the record sent — a real email connector
+    // replaces it behind the same one-method port.
+    drafts: overrides?.drafts ?? {
+      service: new DraftingService({
+        profile: new MemoryDraftProfileAdapter(profileReader),
+        state: new StateServiceDraftStateAdapter(stateService),
+        graph: new GraphMemoryDraftGraphAdapter(graph),
+        opportunity: new OpportunityDraftAdapter(new PrismaOpportunityReadStore(prisma)),
+        evidence: new CompositeDraftEvidenceAdapter(profileReader, graph),
+        agent: new LlmDrafterAgent(gateway),
+      }),
+      store: new InMemoryDraftStore(),
+      channels: new StaticChannelPolicy(),
+      sender: {
+        // STUB(M09): no live email connector yet. Reaching this point means
+        // the Yellow gate consumed a valid token AND the channel ToS permits
+        // automated send; the audit trail already records the decision.
+        send: async (_userId: string, _draft: DraftRecord, _channel: string) => {},
       },
     },
 

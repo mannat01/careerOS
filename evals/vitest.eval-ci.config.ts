@@ -24,6 +24,7 @@ export const GREEN_EVAL_SUITES = [
   'eval/research.eval.ts', // M07 — research synthesizer (12 cases incl. rs-09..12; groundResearchSynthesis guardrail)
   'eval/metrics.eval.ts', // M08 — dashboard metric composer (12 cases incl. dm-09..12; composeDashboardMetrics guardrail)
   'eval/interview.eval.ts', // M09 — interview-prep interviewer (12 cases incl. ip-09..12; groundInterviewPrep guardrail)
+  'eval/drafting.eval.ts', // M09 — cover/outreach drafter (5 cases incl. dr-03..05 adversarial; groundDraft guardrail)
 ];
 
 export default defineConfig({ test: { include: GREEN_EVAL_SUITES } });
