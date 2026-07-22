@@ -24,6 +24,7 @@ class FakeStale implements StaleDashboardListPort {
   public seenLimit = 0;
   constructor(private readonly users: string[]) {}
   async listStaleUsers(input: { olderThan: Date; limit: number }): Promise<string[]> {
+    await Promise.resolve();
     this.seenOlderThan = input.olderThan;
     this.seenLimit = input.limit;
     return this.users.slice(0, input.limit);
@@ -34,6 +35,7 @@ class FakeRecompute implements DashboardRecomputePort {
   public recomputed: string[] = [];
   constructor(private readonly failFor: Set<string> = new Set()) {}
   async recompute(userId: string): Promise<void> {
+    await Promise.resolve();
     if (this.failFor.has(userId)) throw new Error(`boom:${userId}`);
     this.recomputed.push(userId);
   }
@@ -48,6 +50,7 @@ class FakeAudit implements MaintenanceAuditPort {
     userId?: string;
     target?: string;
   }): Promise<void> {
+    await Promise.resolve();
     const row: { action: string; reason: string; userId?: string } = {
       action: input.action,
       reason: input.reason,

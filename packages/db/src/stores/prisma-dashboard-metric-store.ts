@@ -165,7 +165,7 @@ export class PrismaDashboardMetricStore implements DashboardMetricStorePortShape
       value: row.value,
       trend:
         row.trend === 'rising' || row.trend === 'flat' || row.trend === 'declining'
-          ? (row.trend as DashboardMetricTrendLike)
+          ? row.trend
           : 'flat',
       explanation: row.explanation,
       evidenceRefs: toStringArray(row.evidenceRefs),

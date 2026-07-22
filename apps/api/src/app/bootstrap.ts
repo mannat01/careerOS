@@ -425,8 +425,8 @@ function buildDashboardDeps(input: {
   // required — never a fabricated value. Wiring the PrismaResearchFindingStore
   // is a follow-up that will replace this stub without touching the composer.
   const findingsStub: ResearchFindingReadPort = {
-    listFindings: async () => [],
-    listFindingsAffectingUser: async () => [] as PersistedResearchFinding[],
+    listFindings: () => Promise.resolve([]),
+    listFindingsAffectingUser: () => Promise.resolve([] as PersistedResearchFinding[]),
   };
   const findingsAdapter = new ResearchFindingMetricAdapter(findingsStub);
 

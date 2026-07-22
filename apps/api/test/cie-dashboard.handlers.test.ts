@@ -51,6 +51,7 @@ class FakeStore implements DashboardMetricStorePortShape {
     metrics: PersistDashboardMetricLike[],
     computedAt: Date,
   ): Promise<DashboardMetricRecordLike[]> {
+    await Promise.resolve();
     this.writes += 1;
     const persisted: DashboardMetricRecordLike[] = metrics.map((m, i) => ({
       id: `row-${this.writes}-${i}`,
@@ -69,6 +70,7 @@ class FakeStore implements DashboardMetricStorePortShape {
     return persisted;
   }
   async getLatestForProfile(_profileId: string): Promise<DashboardMetricRecordLike[]> {
+    await Promise.resolve();
     const seen = new Set<string>();
     const latest: DashboardMetricRecordLike[] = [];
     for (const r of [...this.rows].reverse()) {
@@ -83,6 +85,7 @@ class FakeStore implements DashboardMetricStorePortShape {
     _profileId: string,
     metric: string,
   ): Promise<DashboardMetricRecordLike | null> {
+    await Promise.resolve();
     for (const r of [...this.rows].reverse()) {
       if (r.metric === metric) return r;
     }
@@ -93,14 +96,15 @@ class FakeStore implements DashboardMetricStorePortShape {
 class FakeProfileResolver implements DashboardProfileResolverPort {
   constructor(private readonly map: Record<string, string | null>) {}
   async resolveProfileId(userId: string): Promise<string | null> {
+    await Promise.resolve();
     return Object.hasOwn(this.map, userId) ? this.map[userId] ?? null : null;
   }
 }
 
 function mkComposer(metrics: DashboardMetric[]): DashboardComposerPort {
   return {
-    async compose(): Promise<DashboardMetricComposition> {
-      return { metrics, modelVersion: METRIC_COMPOSER_MODEL_VERSION };
+    compose(): Promise<DashboardMetricComposition> {
+      return Promise.resolve({ metrics, modelVersion: METRIC_COMPOSER_MODEL_VERSION });
     },
   };
 }
@@ -115,17 +119,19 @@ function mkMetric(over: Partial<DashboardMetric>): DashboardMetric {
     evidenceRefs: ['dim:executionCadence'],
     confidence: 0.8,
     ...over,
-  } as DashboardMetric;
+  };
 }
 
 const evidenceResolver: DashboardEvidenceResolverPort = {
   async resolve(_userId, refs) {
+    await Promise.resolve();
     return refs.map((ref) => ({ ref, kind: 'state_dimension', label: `label:${ref}` }));
   },
 };
 
 const planActionResolver: DashboardPlanActionResolverPort = {
   async resolveTitle(_userId, actionId) {
+    await Promise.resolve();
     return actionId === 'action-1' ? 'Ship a portfolio piece' : null;
   },
 };

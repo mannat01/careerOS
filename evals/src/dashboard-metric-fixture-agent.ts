@@ -31,7 +31,6 @@ import { FakeLlmProvider, createLlmGateway } from '@careeros/llm-gateway';
 import {
   LlmDashboardMetricComposerAgent,
   ALL_METRIC_KEYS,
-  type MetricComposerInput,
 } from '@careeros/cie-metrics';
 import type {
   DashboardMetric,
@@ -85,9 +84,9 @@ export function createDashboardMetricComposerFixtureAgent(): DashboardMetricAgen
     async compose(input: DashboardMetricInput): Promise<DashboardMetric[]> {
       // Structural pass-through: the metrics package types are a subset of
       // the evals types (same field names + shapes). Cast is safe.
-      const composition = await real.compose(input as unknown as MetricComposerInput);
+      const composition = await real.compose(input);
       // Unwrap { metrics, modelVersion } → the array the harness expects.
-      return composition.metrics as unknown as DashboardMetric[];
+      return composition.metrics;
     },
   };
 }
