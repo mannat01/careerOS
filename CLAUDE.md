@@ -37,6 +37,14 @@ If the product *why* is ever unclear, the authority is `CareerOS-Master-PRD-and-
 ## 5. CI gates (must be green to merge — see `coding-standards.md`)
 typecheck · lint (incl. import-boundary rules) · unit + integration · **contract tests** (responses match `packages/contracts` zod) · **eval gates** (per-agent regression + zero-fabrication + calibration where relevant) · **security tests** (capability-gate, source allow-list, prompt-injection, cross-user isolation) · a11y (axe AA) · migration check.
 
+### 5a. Pre-push canonical check (local ↔ CI parity)
+The canonical pre-push lint command is **`pnpm -w lint`**. It is wired to do exactly what CI does — nothing more, nothing less — so a green local run guarantees a green CI lint step:
+
+1. `pnpm --filter @careeros/db exec prisma generate` — CI regenerates Prisma types before lint. The type-aware ESLint rules (`@typescript-eslint/no-unnecessary-type-assertion`, `require-await`, `no-floating-promises`) resolve against `@prisma/client` types; a stale generated client silently changes their verdict.
+2. `turbo run lint --force` — Turbo's per-package hash cache is bypassed (`--force`) so a green cached log can never mask a rule that would now flag. CI has no turbo cache, so it always runs fresh; local must too.
+
+If you want the fast, cached view during iteration, use `pnpm run lint:cached`. Never push based on `lint:cached` alone.
+
 ## 6. Golden-dataset rule (greenfield)
 No historical data exists. An agent's **first** deliverable is its hand-authored golden set (10–30 labeled cases) under `evals/<agent>/`, committed before the agent logic. An eval gate with no dataset is not "done."
 
