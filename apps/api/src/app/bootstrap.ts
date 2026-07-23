@@ -108,6 +108,12 @@ import {
   MemoryPortfolioProjectAdapter,
 } from '../modules/cie/portfolio.adapters.js';
 import { InMemoryPortfolioStore } from '../modules/cie/portfolio.handlers.js';
+import { CalibrationService } from '@careeros/cie-calibration';
+import {
+  CalibrationComputeAdapter,
+  CalibrationReasonerFeedbackAdapter,
+  EmptyRealizedRecommendationPort,
+} from '../modules/cie/calibration.adapters.js';
 import type {
   ResearchFindingReadPort,
   PersistedResearchFinding,
@@ -220,16 +226,30 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     agent: new LlmMatchScorerAgent(gateway),
   });
 
+  // M10 Step 1 — confidence-calibration service. Reads the caller's REALIZED
+  // recommendations through the narrow RealizedRecommendationPort (STUB until
+  // the persisted Recommendation+outcome store lands) and computes the ECE +
+  // per-domain feedback deterministically. Its `applyFeedback` closes the loop
+  // back into the reasoner below. HONEST BY CONSTRUCTION: an overconfident set
+  // scores LOW; the feedback sign is derived from the user's OWN history.
+  const calibrationService = new CalibrationService({
+    recommendations: new EmptyRealizedRecommendationPort(),
+  });
+
   // Strategic Reasoner (M05). Advisory Green: derives a grounded DecisionContract
   // from the caller's real profile + real state model. Reads via the narrow
   // ReasonerFactPort / ReasonerStatePort seams (Memory/ProfileReader +
   // CareerStateService) — never @careeros/db from the agent boundary. Runs on
   // the frontier tier; the deterministic `groundContract` guardrail is what
-  // enforces evidence-grounded + honest + calibrated invariants.
+  // enforces evidence-grounded + honest + calibrated invariants. M10 Step 1 —
+  // the optional `calibration` seam feeds the per-domain confidence adjustment
+  // back in, so a historically overconfident `decision` domain pulls the next
+  // confidence DOWN toward its realized rate.
   const strategicReasonerService = new StrategicReasonerService({
     facts: new MemoryReasonerFactAdapter(profileReader),
     state: new StateServiceReasonerAdapter(stateService),
     agent: new LlmStrategicReasonerAgent(gateway),
+    calibration: new CalibrationReasonerFeedbackAdapter(calibrationService),
   });
 
   // Offer Comparison (M05 Stage-5). Advisory Green: derives an objective,
@@ -451,6 +471,14 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
         evidence: new CompositePortfolioEvidenceAdapter(profileReader, graph),
       }),
       store: new InMemoryPortfolioStore(),
+    },
+
+    // M10 Step 1 — confidence-calibration report (A1.7 model-quality
+    // guardrail). Green/read-only, per-user scoped. The compute adapter wraps
+    // the deterministic CalibrationService, which self-verifies before serving
+    // — a poorly-calibrated set yields a LOW score, never a flattering one.
+    calibration: overrides?.calibration ?? {
+      calibration: new CalibrationComputeAdapter(calibrationService),
     },
 
     gate: overrides?.gate ?? {

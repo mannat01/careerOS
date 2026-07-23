@@ -38,6 +38,9 @@ importers:
       '@careeros/capability-gate':
         specifier: workspace:*
         version: link:../../packages/capability-gate
+      '@careeros/cie-calibration':
+        specifier: workspace:*
+        version: link:../../packages/cie/calibration
       '@careeros/cie-drafting':
         specifier: workspace:*
         version: link:../../packages/cie/drafting
@@ -219,6 +222,15 @@ importers:
       '@careeros/config':
         specifier: workspace:*
         version: link:../config
+
+  packages/cie/calibration:
+    devDependencies:
+      '@careeros/config':
+        specifier: workspace:*
+        version: link:../../config
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@20.19.43)
 
   packages/cie/drafting:
     dependencies:

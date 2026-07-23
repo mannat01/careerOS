@@ -20,6 +20,7 @@ import type { DashboardHandlerDeps } from '../modules/cie/dashboard.handlers.js'
 import type { SkillsHandlerDeps } from '../modules/cie/skills.handlers.js';
 import type { DraftsHandlerDeps } from '../modules/cie/drafts.handlers.js';
 import type { PortfolioHandlerDeps } from '../modules/cie/portfolio.handlers.js';
+import type { CalibrationHandlerDeps } from '../modules/cie/calibration.handlers.js';
 
 import type { ObjectStorage } from '../common/storage/object-storage.js';
 import type { ExportQueue } from '../common/queue/export-queue.js';
@@ -113,6 +114,15 @@ export interface AppDeps {
    * read serves ONLY published snapshots.
    */
   portfolio: PortfolioHandlerDeps;
+  /**
+   * M10 Step 1 — confidence-calibration report (A1.7 model-quality guardrail).
+   * Green/read-only, per-user scoped. The CalibrationService buckets the
+   * caller's REALIZED recommendations by stated confidence, computes ECE +
+   * per-domain calibration scores, and self-verifies. HONEST BY CONSTRUCTION:
+   * an overconfident set yields a LOW score (never flattering); the feedback
+   * signal is fed back to the reasoner as a per-domain confidence adjustment.
+   */
+  calibration: CalibrationHandlerDeps;
   gate: EnforceDeps;
 
   /**

@@ -29,6 +29,10 @@ import {
   getDashboardMetric,
   type DashboardHandlerDeps,
 } from '../modules/cie/dashboard.handlers.js';
+import {
+  getCalibration,
+  type CalibrationHandlerDeps,
+} from '../modules/cie/calibration.handlers.js';
 import type { HandlerResponse } from '../common/errors/http-error.js';
 import { BearerAuthGuard, type AuthedRequest } from './bearer-auth.guard.js';
 import { APP_DEPS, type AppDeps } from './deps.js';
@@ -262,5 +266,20 @@ export class CieController {
   ): Promise<void> {
     const deps: DashboardHandlerDeps = this.deps.dashboards;
     send(res, await getDashboardMetric(req.ctx, metric, deps));
+  }
+
+  /**
+   * GET /v1/cie/calibration — M10 Step 1 confidence-calibration report (Green,
+   * read-only). Returns the caller's predicted-vs-realized calibration report
+   * with the per-domain bucket evidence behind it + the reasoner-facing
+   * feedback signal. HONEST: an overconfident recommendation set yields a LOW
+   * calibration score, never a flattering one. Per-user by construction (userId
+   * from the verified RequestContext → only the caller's realized
+   * recommendations are read through the RealizedRecommendationPort).
+   */
+  @Get('calibration')
+  async calibration(@Req() req: AuthedRequest, @Res() res: Response): Promise<void> {
+    const deps: CalibrationHandlerDeps = this.deps.calibration;
+    send(res, await getCalibration(req.ctx, deps));
   }
 }

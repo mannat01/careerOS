@@ -33,9 +33,11 @@ export {
 
 export {
   StrategicReasonerService,
+  DECISION_CALIBRATION_DOMAIN,
   type StrategicReasonerServiceDeps,
   type ReasonerFactPort,
   type ReasonerStatePort,
+  type ReasonerCalibrationPort,
 } from './service.js';
 
 // ---------- offer comparison surface (M05 Stage-5) ----------
