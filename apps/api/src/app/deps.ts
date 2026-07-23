@@ -19,6 +19,7 @@ import type { PlanHandlerDeps } from '../modules/cie/plan.handlers.js';
 import type { DashboardHandlerDeps } from '../modules/cie/dashboard.handlers.js';
 import type { SkillsHandlerDeps } from '../modules/cie/skills.handlers.js';
 import type { DraftsHandlerDeps } from '../modules/cie/drafts.handlers.js';
+import type { PortfolioHandlerDeps } from '../modules/cie/portfolio.handlers.js';
 
 import type { ObjectStorage } from '../common/storage/object-storage.js';
 import type { ExportQueue } from '../common/queue/export-queue.js';
@@ -102,6 +103,16 @@ export interface AppDeps {
    * automated send is not permitted).
    */
   drafts: DraftsHandlerDeps;
+  /**
+   * M09 Step 5 — public portfolio generation. Draft generation + owner read
+   * are Green (the PortfolioService composes strictly from real facts via
+   * ports and self-verifies zero fabrication). Publishing is Yellow: the
+   * controller wraps the publish handler in
+   * withCapabilityGate('portfolio.publish'), so a single-use ApprovalToken is
+   * required and the decision is audited. Private by default: the public
+   * read serves ONLY published snapshots.
+   */
+  portfolio: PortfolioHandlerDeps;
   gate: EnforceDeps;
 
   /**

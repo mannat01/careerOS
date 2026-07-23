@@ -48,6 +48,7 @@ User ─1:N─ ConnectedSource (OAuth)  |  SourceRegistry (global allow-list)
 - **MockSession** — `interview_prep_id`, `transcript` (jsonb), `feedback` (jsonb), `scores` (jsonb).
 - **SkillGap** — `profile_id`, `opportunity_id (nullable)`, `gap` (text), `severity`, `source` (per-opp|aggregate).
 - **LearningItem** — `skill_gap_id`, `resource` (jsonb), `status` (enum: suggested|in_progress|done), `progress`.
+- **Portfolio** — `user_id (unique)`, `status` (enum: private|published — private by default), `slug (unique)`, `content` (jsonb — generator draft, owner-only), `published_content` (jsonb nullable — frozen snapshot the public read serves; null until first publish), `published_at (nullable)`, `model_version`, `generated_at`. Publish is Yellow (ApprovalToken, audited); public reads serve ONLY `published_content` of `status='published'` rows.
 
 ### memory
 - **MemoryEvent** (append-only) — `user_id`, `type` (enum: twin_action|user_decision|outcome|system), `payload` (jsonb), `rationale` (text), `autonomy_tier`, `occurred_at`. Immutable; no updates/deletes except via account hard-delete.

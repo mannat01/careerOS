@@ -100,6 +100,14 @@ import {
   StaticChannelPolicy,
   type DraftRecord,
 } from '../modules/cie/drafts.handlers.js';
+import { PortfolioService } from '@careeros/cie-portfolio';
+import {
+  CompositePortfolioEvidenceAdapter,
+  GraphMemoryPortfolioAdapter,
+  MemoryPortfolioProfileAdapter,
+  MemoryPortfolioProjectAdapter,
+} from '../modules/cie/portfolio.adapters.js';
+import { InMemoryPortfolioStore } from '../modules/cie/portfolio.handlers.js';
 import type {
   ResearchFindingReadPort,
   PersistedResearchFinding,
@@ -424,6 +432,25 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
         // automated send; the audit trail already records the decision.
         send: async (_userId: string, _draft: DraftRecord, _channel: string) => {},
       },
+    },
+
+    // M09 Step 5 — public portfolio generation. The PortfolioService composes
+    // STRICTLY from real profile facts + projects + graph evidence via the
+    // narrow adapters above (never @careeros/db) and self-verifies with the
+    // independent zero-fabrication oracle before anything persists. Draft
+    // generation + owner read are GREEN and PRIVATE BY DEFAULT; publishing is
+    // YELLOW (controller wraps the handler in
+    // withCapabilityGate('portfolio.publish') — single-use ApprovalToken,
+    // audited). The public read serves ONLY published snapshots. The store is
+    // in-memory until a Prisma PortfolioStore lands (schema/migration ready).
+    portfolio: overrides?.portfolio ?? {
+      service: new PortfolioService({
+        profile: new MemoryPortfolioProfileAdapter(profileReader),
+        projects: new MemoryPortfolioProjectAdapter(profileReader),
+        graph: new GraphMemoryPortfolioAdapter(graph),
+        evidence: new CompositePortfolioEvidenceAdapter(profileReader, graph),
+      }),
+      store: new InMemoryPortfolioStore(),
     },
 
     gate: overrides?.gate ?? {

@@ -18,6 +18,7 @@
     "@careeros/cie-drafting": "workspace:*",
     "@careeros/cie-metrics": "workspace:*",
     "@careeros/cie-planner": "workspace:*",
+    "@careeros/cie-portfolio": "workspace:*",
     "@careeros/cie-reasoning": "workspace:*",
     "@careeros/cie-research": "workspace:*",
     "@careeros/cie-resume": "workspace:*",

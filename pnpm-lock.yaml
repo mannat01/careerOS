@@ -47,6 +47,9 @@ importers:
       '@careeros/cie-planner':
         specifier: workspace:*
         version: link:../../packages/cie/planner
+      '@careeros/cie-portfolio':
+        specifier: workspace:*
+        version: link:../../packages/cie/portfolio
       '@careeros/cie-reasoning':
         specifier: workspace:*
         version: link:../../packages/cie/reasoning
@@ -273,6 +276,19 @@ importers:
       '@careeros/memory':
         specifier: workspace:*
         version: link:../../memory
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+    devDependencies:
+      '@careeros/config':
+        specifier: workspace:*
+        version: link:../../config
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@20.19.43)
+
+  packages/cie/portfolio:
+    dependencies:
       zod:
         specifier: ^3.23.8
         version: 3.25.76

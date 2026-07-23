@@ -65,6 +65,12 @@ Any side-effecting route tagged Yellow requires a valid `ApprovalToken` (header 
 - `POST /v1/drafts` `{ type, opportunityId }` → generate draft (Green).
 - `POST /v1/drafts/:id/send` → **Yellow**, requires approval token; only via user-connected channel where ToS permits; otherwise returns `capability_denied` with guidance to send manually.
 
+### Portfolio — Yellow at publish, private by default
+- `POST /v1/portfolio` → generate/update the portfolio draft (Green; zero-fabrication — every rendered item resolves to a real profile fact/project/graph node; stays private).
+- `GET /v1/portfolio` → owner view (Green; draft + publish state).
+- `POST /v1/portfolio/publish` → **Yellow**, requires approval token; freezes the current draft into the public snapshot; audited.
+- `GET /v1/portfolio/public/:slug` → public read (no auth); serves ONLY the frozen snapshot of `status='published'` portfolios — an unpublished portfolio is never publicly readable (404).
+
 ### Briefing & automation
 - `POST /v1/briefings/run` `{ trigger: "manual" }` → enqueue loop → `{ briefingRunId }`.
 - `GET /v1/briefings/:id` → run status, steps (with trace ids + cost), items.

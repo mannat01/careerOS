@@ -219,6 +219,7 @@ model Profile {
   matchScores     MatchScore[]
   dashboardMetrics DashboardMetric[]
   skillGaps        SkillGap[]
+  portfolio        Portfolio?
 
   @@index([userId])
   @@map("profiles")
@@ -956,4 +957,44 @@ model LearningItem {
 
   @@index([skillGapId])
   @@map("learning_items")
+}
+
+// ---------------- Portfolio (M09 Step 5 — database-schema.md §prep/portfolio) ----------------
+
+/// Portfolio.status — private by default; published only via the Yellow
+/// publish route (ApprovalToken consumed + audited).
+enum PortfolioStatus {
+  private
+  published
+}
+
+/// The user's single public portfolio (Profile 1:1 Portfolio). PRIVATE BY
+/// DEFAULT: `status='private'` until the user approves publishing through
+/// POST /v1/portfolio/publish (Yellow — ApprovalToken + audit). `content` is
+/// the current DRAFT the generator composed (strictly from real profile
+/// facts + projects + graph evidence — zero-fabrication verified);
+/// `publishedContent` is the frozen snapshot the public read serves — a
+/// not-yet-published portfolio is NOT publicly readable. `slug` is the
+/// public handle (unique); per-user by construction via `profile_id`.
+model Portfolio {
+  id        String  @id @default(uuid()) @db.Uuid
+  profileId String  @unique @map("profile_id") @db.Uuid
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  status           PortfolioStatus @default(private)
+  /// Public handle for the published portfolio (unique across users).
+  slug             String          @unique
+  /// The current generator draft (PortfolioContent jsonb) — owner-only.
+  content          Json
+  /// Frozen snapshot served publicly; null until first publish.
+  publishedContent Json?           @map("published_content")
+  publishedAt      DateTime?       @map("published_at")
+  modelVersion     String          @map("model_version")
+  generatedAt      DateTime        @map("generated_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status, slug])
+  @@map("portfolios")
 }
