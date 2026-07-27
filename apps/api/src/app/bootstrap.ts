@@ -110,10 +110,19 @@ import {
 import { InMemoryPortfolioStore } from '../modules/cie/portfolio.handlers.js';
 import { CalibrationService } from '@careeros/cie-calibration';
 import {
+  MarketIntelligenceService,
+  InMemoryAggregateStore,
+  InMemoryContributionStore,
+} from '@careeros/cie-market-intel';
+import {
   CalibrationComputeAdapter,
   CalibrationReasonerFeedbackAdapter,
   EmptyRealizedRecommendationPort,
 } from '../modules/cie/calibration.adapters.js';
+import {
+  MarketAggregateReadAdapter,
+  SettingsOptInAdapter,
+} from '../modules/cie/market-intel.adapters.js';
 import type {
   ResearchFindingReadPort,
   PersistedResearchFinding,
@@ -298,6 +307,22 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     lifecycle: new PrismaUserLifecycleRepo(prisma),
   };
 
+  // M10 Step 2 — cross-user Market Intelligence pipeline. PRIVACY-CRITICAL.
+  // The service contributes signals ONLY for users whose
+  // `UserSettings.dataUseOptIns.crossUserIntel` is explicitly true (checked via
+  // the SettingsOptInAdapter over the SAME UserSettingsRepo the identity module
+  // uses — fail-closed), de-identifies + aggregates behind a k-anonymity
+  // minimum-cohort threshold, and purges a user's prior contribution on opt-out
+  // (next rebuild). The consumption endpoint reads ONLY the published aggregate
+  // set (no userId can leak). Contribution + rebuild are driven by the
+  // scheduler / opt-out lifecycle; both raw + aggregate stores are in-memory
+  // until Prisma-backed stores land (same narrow ports, no service change).
+  const marketIntelService = new MarketIntelligenceService({
+    optIn: new SettingsOptInAdapter(identityDeps.settings),
+    contributions: new InMemoryContributionStore(),
+    aggregates: new InMemoryAggregateStore(),
+  });
+
   // M08 Step 3 — build the Intelligence Dashboard deps FIRST so the M04
   // application handler can be wired with the change-hook recompute port
   // (a new application / meaningful status change re-materializes the
@@ -479,6 +504,15 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     // — a poorly-calibrated set yields a LOW score, never a flattering one.
     calibration: overrides?.calibration ?? {
       calibration: new CalibrationComputeAdapter(calibrationService),
+    },
+
+    // M10 Step 2 — cross-user Market Intelligence consumption (Green/read-only).
+    // PRIVACY-CRITICAL. The read adapter delegates to the pipeline service's
+    // getAggregates, which returns ONLY the de-identified, k-anonymized
+    // aggregate set (structurally incapable of carrying a userId). Contribution
+    // opt-in gating + opt-out purge live on the service, never this endpoint.
+    marketIntel: overrides?.marketIntel ?? {
+      market: new MarketAggregateReadAdapter(marketIntelService),
     },
 
     gate: overrides?.gate ?? {

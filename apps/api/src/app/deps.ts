@@ -21,6 +21,7 @@ import type { SkillsHandlerDeps } from '../modules/cie/skills.handlers.js';
 import type { DraftsHandlerDeps } from '../modules/cie/drafts.handlers.js';
 import type { PortfolioHandlerDeps } from '../modules/cie/portfolio.handlers.js';
 import type { CalibrationHandlerDeps } from '../modules/cie/calibration.handlers.js';
+import type { MarketIntelHandlerDeps } from '../modules/cie/market-intel.handlers.js';
 
 import type { ObjectStorage } from '../common/storage/object-storage.js';
 import type { ExportQueue } from '../common/queue/export-queue.js';
@@ -123,6 +124,14 @@ export interface AppDeps {
    * signal is fed back to the reasoner as a per-domain confidence adjustment.
    */
   calibration: CalibrationHandlerDeps;
+  /**
+   * M10 Step 2 — cross-user Market Intelligence consumption (Green/read-only).
+   * PRIVACY-CRITICAL. Exposes ONLY de-identified, k-anonymized market
+   * aggregates (the SAME set for every user); no per-user data is reachable
+   * from this read path. Contribution is opt-in-gated and opt-out purges prior
+   * contribution — both live on the pipeline service, not this endpoint.
+   */
+  marketIntel: MarketIntelHandlerDeps;
   gate: EnforceDeps;
 
   /**

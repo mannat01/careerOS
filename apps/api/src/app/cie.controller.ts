@@ -33,6 +33,10 @@ import {
   getCalibration,
   type CalibrationHandlerDeps,
 } from '../modules/cie/calibration.handlers.js';
+import {
+  getMarketIntel,
+  type MarketIntelHandlerDeps,
+} from '../modules/cie/market-intel.handlers.js';
 import type { HandlerResponse } from '../common/errors/http-error.js';
 import { BearerAuthGuard, type AuthedRequest } from './bearer-auth.guard.js';
 import { APP_DEPS, type AppDeps } from './deps.js';
@@ -281,5 +285,24 @@ export class CieController {
   async calibration(@Req() req: AuthedRequest, @Res() res: Response): Promise<void> {
     const deps: CalibrationHandlerDeps = this.deps.calibration;
     send(res, await getCalibration(req.ctx, deps));
+  }
+
+  /**
+   * GET /v1/cie/market-intel — M10 Step 2 cross-user Market Intelligence
+   * (Green, read-only). PRIVACY-CRITICAL. Returns ONLY the de-identified,
+   * k-anonymized market aggregate set — the SAME aggregates for EVERY user;
+   * no per-user data is reachable from this path. Contribution is opt-in-gated
+   * and opt-out purges prior contribution, both on the pipeline service (never
+   * here). The optional `kind` query param is a de-identified family filter
+   * (e.g. `skill_demand_shift`) and cannot narrow to an individual.
+   */
+  @Get('market-intel')
+  async marketIntel(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+    @Query('kind') kind?: string,
+  ): Promise<void> {
+    const deps: MarketIntelHandlerDeps = this.deps.marketIntel;
+    send(res, await getMarketIntel(req.ctx, { kind }, deps));
   }
 }
