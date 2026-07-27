@@ -22,6 +22,7 @@ import type { DraftsHandlerDeps } from '../modules/cie/drafts.handlers.js';
 import type { PortfolioHandlerDeps } from '../modules/cie/portfolio.handlers.js';
 import type { CalibrationHandlerDeps } from '../modules/cie/calibration.handlers.js';
 import type { MarketIntelHandlerDeps } from '../modules/cie/market-intel.handlers.js';
+import type { NegotiationHandlerDeps } from '../modules/cie/negotiation.handlers.js';
 
 import type { ObjectStorage } from '../common/storage/object-storage.js';
 import type { ExportQueue } from '../common/queue/export-queue.js';
@@ -132,6 +133,16 @@ export interface AppDeps {
    * contribution — both live on the pipeline service, not this endpoint.
    */
   marketIntel: MarketIntelHandlerDeps;
+  /**
+   * M10 Step 3 — advisory negotiation & offer-intelligence endpoint (Green).
+   * The NegotiationService composes grounded talking points + a fair-range
+   * assessment from the caller's REAL offers + REAL stated values + sanctioned
+   * market comp signals (reached ONLY via the narrow MarketCompRangePort;
+   * NEVER @careeros/db). accept/dec‍line of an offer stays RED — the handler
+   * has no callable execution path and refuses auto-accept requests with
+   * `red_never_automated`.
+   */
+  negotiation: NegotiationHandlerDeps;
   gate: EnforceDeps;
 
   /**

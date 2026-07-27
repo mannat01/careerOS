@@ -71,3 +71,26 @@ export {
   OfferComparisonService,
   type OfferComparisonServiceDeps,
 } from './offer-service.js';
+
+// ---------- negotiation & offer intelligence surface (M10 Step 3) ----------
+
+export {
+  NEGOTIATION_MODEL_VERSION,
+  type CompensationRangeSignal,
+  type FairRangeAssessment,
+  type FairRangeBand,
+  type MarketCompRangePort,
+  type NegotiationGuidance,
+  type NegotiationTalkingPoint,
+  type NegotiationTalkingPointCategory,
+} from './negotiation-model.js';
+
+export {
+  groundNegotiationGuidance,
+  rawUnsanctionedGuidance,
+} from './negotiation-io.js';
+
+export {
+  NegotiationService,
+  type NegotiationServiceDeps,
+} from './negotiation-service.js';

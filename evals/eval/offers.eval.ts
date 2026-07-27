@@ -27,6 +27,9 @@ import { createOfferFixtureAgent } from '../src/offer-fixture-agent.js';
 import {
   rawOfferComparisonProposalSchema,
   rawProposalToOfferComparison,
+  groundNegotiationGuidance,
+  rawUnsanctionedGuidance,
+  type CompensationRangeSignal,
 } from '@careeros/cie-reasoning';
 
 const cases = loadOfferComparisonCases();
@@ -111,4 +114,110 @@ describe('M05 offers fabrication guardrail — the fabrication attempt is caught
       expect(scored.passed, `bypassed guardrail must trip on ${c.id}`).toBe(false);
     });
   }
+});
+
+/**
+ * M10 Step 3 — NEGOTIATION GUIDANCE gate (advisory Green). Reuses the
+ * offers golden set as the REAL user offer/values input; feeds a sanctioned
+ * market comp aggregate; asserts the grounded guidance:
+ *   (a) surfaces at least one values-anchored talking point per case whose
+ *       weights map has ≥1 key of weight ≥0.15 (never invents leverage);
+ *   (b) every talking-point evidence ref is a REAL offer id OR a REAL market
+ *       cohort key (never a phantom);
+ *   (c) every $-figure appearing in a market talking point matches the mean
+ *       of the sanctioned aggregate (rounded to $1k) — no invented numbers;
+ *   (d) stamps the negotiation model version.
+ */
+describe('M10 Step 3 — negotiation guidance (grounded, advisory)', () => {
+  const sanctionedSignal: CompensationRangeSignal = {
+    cohortKey: 'comp:senior-engineer:us',
+    meanTotal: 200_000,
+    contributorCount: 42,
+  };
+
+  for (const c of cases) {
+    it(`case ${c.id}: talking points + fair-range trace to real offer + sanctioned market cohort`, () => {
+      const guidance = groundNegotiationGuidance(
+        c.candidateValues,
+        c.offers,
+        [sanctionedSignal],
+      );
+      // (d) model version present
+      expect(guidance.modelVersion).toMatch(/^negotiation@/);
+
+      // (b) every evidence ref traces to a real offer id or the sanctioned cohort
+      const realOfferIds = new Set(c.offers.map((o) => o.id));
+      for (const tp of guidance.talkingPoints) {
+        for (const ref of tp.evidenceRefs) {
+          const isRealOffer = realOfferIds.has(ref);
+          const isSanctionedCohort = ref === sanctionedSignal.cohortKey;
+          expect(isRealOffer || isSanctionedCohort, `phantom ref '${ref}' in ${c.id}`).toBe(true);
+        }
+      }
+
+      // (c) any $-figure appearing in a market talking point matches the aggregate mean
+      const marketPoints = guidance.talkingPoints.filter((tp) => tp.category === 'market');
+      for (const tp of marketPoints) {
+        const match = tp.point.match(/\$([\d,]+)/);
+        expect(match, `market talking point missing $-figure in ${c.id}`).not.toBeNull();
+        const value = Number((match?.[1] ?? '0').replace(/,/g, ''));
+        // Rounded to nearest $1k of the aggregate mean
+        const expected = Math.round(sanctionedSignal.meanTotal / 1000) * 1000;
+        expect(value, `market $-figure '${value}' != aggregate mean '${expected}' in ${c.id}`).toBe(expected);
+      }
+
+      // (a) at least one values-anchored talking point whenever a heavy weight exists
+      const heavyKeys = Object.entries(c.candidateValues.weights).filter(([, w]) => w >= 0.15);
+      if (heavyKeys.length > 0) {
+        const valuesPoints = guidance.talkingPoints.filter((tp) => tp.category === 'values');
+        expect(valuesPoints.length, `no values-anchored talking point despite heavy weight in ${c.id}`).toBeGreaterThan(0);
+      }
+    });
+  }
+});
+
+/**
+ * M10 Step 3 — RED-TEST. Fabricated "comparable roles pay $50k more" market
+ * claim WITHOUT any supporting sanctioned aggregate. The grounded path drops
+ * it entirely (no market talking point surfaces because the signals list is
+ * empty). The unguarded path (rawUnsanctionedGuidance) does leak it — which
+ * is exactly what proves the sanctioned-aggregate port is load-bearing.
+ */
+describe('M10 Step 3 — fabricated comp-figure red-test (guardrail is load-bearing)', () => {
+  const firstCase = cases[0]!;
+  const FABRICATED_CLAIM = 'Comparable roles pay $50,000 more than this offer — you have strong leverage.';
+  const FABRICATED_REF = 'comparable-roles-fabricated';
+
+  it('grounded path with EMPTY market signals emits NO market talking point (fabricated $50k cannot leak)', () => {
+    const guidance = groundNegotiationGuidance(
+      firstCase.candidateValues,
+      firstCase.offers,
+      /* no sanctioned aggregate */ [],
+    );
+    const marketPoints = guidance.talkingPoints.filter((tp) => tp.category === 'market');
+    expect(marketPoints.length).toBe(0);
+    // No phantom ref in the evidence union either
+    expect(guidance.evidenceRefs).not.toContain(FABRICATED_REF);
+    // Every fair-range assessment is `insufficient_data` (no market anchor)
+    for (const f of guidance.fairRange) {
+      expect(f.band).toBe('insufficient_data');
+      expect(f.marketMean).toBeUndefined();
+      expect(f.marketCohortKey).toBeUndefined();
+    }
+    // No $-figure whatsoever appears anywhere in the talking-point text
+    for (const tp of guidance.talkingPoints) {
+      expect(tp.point).not.toMatch(/\$[\d,]+/);
+    }
+  });
+
+  it('unguarded path (rawUnsanctionedGuidance) DOES leak — proves the port is what stops fabrication', () => {
+    const leaked = rawUnsanctionedGuidance(
+      firstCase.candidateValues,
+      firstCase.offers,
+      FABRICATED_CLAIM,
+      FABRICATED_REF,
+    );
+    expect(leaked.talkingPoints.some((tp) => tp.point.includes('$50,000'))).toBe(true);
+    expect(leaked.evidenceRefs).toContain(FABRICATED_REF);
+  });
 });

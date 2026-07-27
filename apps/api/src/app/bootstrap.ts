@@ -45,6 +45,7 @@ import { CareerStateService, InMemoryStateStore, LlmStateUpdaterAgent } from '@c
 import {
   LlmOfferComparisonAgent,
   LlmStrategicReasonerAgent,
+  NegotiationService,
   OfferComparisonService,
   StrategicReasonerService,
 } from '@careeros/cie-reasoning';
@@ -123,6 +124,7 @@ import {
   MarketAggregateReadAdapter,
   SettingsOptInAdapter,
 } from '../modules/cie/market-intel.adapters.js';
+import { MarketIntelCompRangeAdapter } from '../modules/cie/negotiation.adapters.js';
 import type {
   ResearchFindingReadPort,
   PersistedResearchFinding,
@@ -513,6 +515,17 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     // opt-in gating + opt-out purge live on the service, never this endpoint.
     marketIntel: overrides?.marketIntel ?? {
       market: new MarketAggregateReadAdapter(marketIntelService),
+    },
+
+    // M10 Step 3 — advisory negotiation & offer-intelligence endpoint (Green).
+    // Wires NegotiationService against the sanctioned market-intel aggregate
+    // stream via MarketIntelCompRangeAdapter — the ONLY path from a market
+    // comp figure to a talking point. accept/dec‍line stays RED at the handler
+    // boundary (auto_accept:true → 403 red_never_automated).
+    negotiation: overrides?.negotiation ?? {
+      service: new NegotiationService({
+        market: new MarketIntelCompRangeAdapter(marketIntelService),
+      }),
     },
 
     gate: overrides?.gate ?? {

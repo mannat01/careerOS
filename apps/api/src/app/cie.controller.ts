@@ -37,6 +37,10 @@ import {
   getMarketIntel,
   type MarketIntelHandlerDeps,
 } from '../modules/cie/market-intel.handlers.js';
+import {
+  negotiation,
+  type NegotiationHandlerDeps,
+} from '../modules/cie/negotiation.handlers.js';
 import type { HandlerResponse } from '../common/errors/http-error.js';
 import { BearerAuthGuard, type AuthedRequest } from './bearer-auth.guard.js';
 import { APP_DEPS, type AppDeps } from './deps.js';
@@ -304,5 +308,26 @@ export class CieController {
   ): Promise<void> {
     const deps: MarketIntelHandlerDeps = this.deps.marketIntel;
     send(res, await getMarketIntel(req.ctx, { kind }, deps));
+  }
+
+  /**
+   * POST /v1/cie/negotiation — M10 Step 3 advisory Green endpoint. Returns
+   * grounded NEGOTIATION GUIDANCE (talking points + fair-range assessment)
+   * for the caller's REAL offers + REAL stated values + sanctioned market
+   * comp signals (reached via the narrow MarketCompRangePort; NEVER
+   * @careeros/db). Per-user by construction (userId from ctx). ADVISORY
+   * only: accept/dec‍line of an offer stays RED — this endpoint has no
+   * callable execution path that acts on the guidance and REFUSES any
+   * `accept:true` / `auto_accept:true` / `action:"accept"` request with
+   * 403 `forbidden` + `details.reason:"red_never_automated"`.
+   */
+  @Post('negotiation')
+  async negotiation(
+    @Req() req: AuthedRequest,
+    @Body() body: unknown,
+    @Res() res: Response,
+  ): Promise<void> {
+    const deps: NegotiationHandlerDeps = this.deps.negotiation;
+    send(res, await negotiation(req.ctx, body, deps));
   }
 }
