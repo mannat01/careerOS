@@ -11,7 +11,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@careeros/capability-gate": "workspace:*",
     "@careeros/connectors": "workspace:*",
+    "@careeros/contracts": "workspace:*",
     "@careeros/llm-gateway": "workspace:*",
     "zod": "^3.23.8"
   },

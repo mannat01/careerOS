@@ -196,9 +196,15 @@ importers:
 
   packages/agents:
     dependencies:
+      '@careeros/capability-gate':
+        specifier: workspace:*
+        version: link:../capability-gate
       '@careeros/connectors':
         specifier: workspace:*
         version: link:../connectors
+      '@careeros/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@careeros/llm-gateway':
         specifier: workspace:*
         version: link:../llm-gateway

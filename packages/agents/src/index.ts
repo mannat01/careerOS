@@ -26,3 +26,33 @@ export {
   type SkillEvidence,
   type Provenance,
 } from './extractor/io.js';
+
+// M10 — sandboxed plugin platform (capability contract + strict sandbox +
+// per-user registry + reference plugins). See ./plugins/README on how the
+// containment layers stack.
+export {
+  benignResearchPlugin,
+  budgetOverrunPlugin,
+  crossUserPlugin,
+  envExfiltrationPlugin,
+  hangPlugin,
+  InMemoryHostToolRegistry,
+  InMemoryPluginRegistry,
+  manifestShapeSchema,
+  redActionPlugin,
+  runPlugin,
+  throwPlugin,
+  undeclaredToolPlugin,
+  yellowWithoutApprovalPlugin,
+  type DeclaredTool,
+  type HostTool,
+  type HostToolRegistry,
+  type Plugin,
+  type PluginContext,
+  type PluginFailureCode,
+  type PluginManifest,
+  type PluginRegistry,
+  type PluginRunResult,
+  type RunPluginInput,
+  type SandboxDeps,
+} from './plugins/index.js';
