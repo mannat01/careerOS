@@ -125,6 +125,7 @@ import {
   SettingsOptInAdapter,
 } from '../modules/cie/market-intel.adapters.js';
 import { MarketIntelCompRangeAdapter } from '../modules/cie/negotiation.adapters.js';
+import { InMemoryPkmGraphIngest, InMemoryPkmStore, PkmService } from '@careeros/cie-pkm';
 import type {
   ResearchFindingReadPort,
   PersistedResearchFinding,
@@ -525,6 +526,19 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     negotiation: overrides?.negotiation ?? {
       service: new NegotiationService({
         market: new MarketIntelCompRangeAdapter(marketIntelService),
+      }),
+    },
+
+    // M10 Step 5 — Personal Knowledge Management (Green, per-user).
+    // PkmService sanitizes untrusted body BEFORE persist/graph-ingest, tags
+    // derived graph nodes with `pkm:user-authored:<entryId>` provenance, and
+    // atomically purges that contribution on delete. Wired against the DB-free
+    // ports; a Prisma-backed PkmStorePort + graph-ingest adapter is the
+    // follow-up for durable multi-instance deployments (behavior is the same).
+    pkm: overrides?.pkm ?? {
+      pkm: new PkmService({
+        store: new InMemoryPkmStore(),
+        graph: new InMemoryPkmGraphIngest(),
       }),
     },
 

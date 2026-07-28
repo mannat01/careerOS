@@ -19,6 +19,7 @@
     "@careeros/cie-drafting": "workspace:*",
     "@careeros/cie-market-intel": "workspace:*",
     "@careeros/cie-metrics": "workspace:*",
+    "@careeros/cie-pkm": "workspace:*",
     "@careeros/cie-planner": "workspace:*",
     "@careeros/cie-portfolio": "workspace:*",
     "@careeros/cie-reasoning": "workspace:*",

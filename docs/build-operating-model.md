@@ -4,6 +4,42 @@ How this project gets built using Opus + Fable (and other models), one milestone
 
 ---
 
+## 0. ⚠ LAUNCH-BLOCKER — Plugin sandbox hardening (public plugins)
+
+**Status: MUST be resolved before enabling any untrusted third-party plugin.** Recorded as part of M10 Step 4 (plugin platform); reaffirmed at M10 Step 5 build closeout.
+
+The M10 plugin platform ships with a `node:vm`-based sandbox intended for FIRST-PARTY / trusted reference plugins only. **`node:vm` is not a security boundary** — it isolates *scope*, not *process*. Known escapes (e.g. `this.constructor.constructor("return process")()` off any leaked object, prototype-chain climbing, timer/microtask races) let a malicious plugin reach:
+
+- host **environment variables** (secrets, API keys, DB URLs),
+- **filesystem** (arbitrary paths under the API/worker process),
+- **outbound network** (bypasses the `SourceRegistry` allow-list at the network layer),
+- the whole in-process Node runtime and every loaded module.
+
+### Required before public plugins are enabled
+
+Replace `node:vm` with a hardened isolate. Acceptable options, preferred → acceptable:
+
+1. **Out-of-process isolate** — spawned worker process with `seccomp`/AppArmor, no filesystem, no network by default, IPC-only capability surface. Strongest boundary.
+2. **`isolated-vm`** — V8 isolates with hard memory + CPU caps and no `require`/globals leakage.
+3. **WASM / container** — `wasmtime` with WASI capabilities disabled, or per-invocation gVisor-style container.
+
+### What is (and is not) currently protecting us
+
+- Defense-in-depth **helps**: every plugin tool-call is host-scoped to the invoking `userId` (a plugin cannot address another user's data via the sanctioned tool API) and gated by the capability-gate (Green/Yellow/Red tiers, single-use `ApprovalToken` for Yellow).
+- Defense-in-depth **does NOT** cover a `node:vm` escape: once code runs outside the sandbox, `process.env`, `fs`, `net`, and every loaded module are directly reachable. The capability-gate is a control on the sanctioned tool API — not on raw Node.
+
+### Acceptance criteria to lift the blocker
+
+- [ ] Sandbox replaced (option 1/2/3); `node:vm` no longer on any untrusted code path.
+- [ ] `packages/agents/test/plugin-sandbox.security.test.ts` extended with engine-appropriate **escape attempts** (env exfiltration, `fs` reach, unsanctioned outbound network, prototype-chain escape, CPU/memory bomb) — all denied.
+- [ ] Per-plugin CPU + wall-clock + memory caps enforced by the engine, not by cooperative timers.
+- [ ] Outbound network from a plugin gated by the same `SourceRegistry` allow-list as the host, or disabled entirely.
+- [ ] Recorded in the build log and this doc; the "public plugins" feature flag stays **OFF** until every box is checked.
+
+Until then: only first-party plugins in the reference registry may be enabled, and only in trusted deployments.
+
+---
+
 ## 1. Roles
 - **Opus (orchestrator/architect/reviewer):** scopes each work unit, makes trade-off + security + product calls, writes/updates specs, and **independently verifies** every implementation (re-runs tests, reads diffs). Does not hand cheaper models any decision that changes architecture, security, or product scope.
 - **Fable (implementer):** writes real, tested code for one scoped slice at a time, following `/docs` + `CLAUDE.md`. Reports what it ran and what it stubbed. Never marks infra-dependent work "verified."

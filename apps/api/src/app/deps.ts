@@ -23,6 +23,7 @@ import type { PortfolioHandlerDeps } from '../modules/cie/portfolio.handlers.js'
 import type { CalibrationHandlerDeps } from '../modules/cie/calibration.handlers.js';
 import type { MarketIntelHandlerDeps } from '../modules/cie/market-intel.handlers.js';
 import type { NegotiationHandlerDeps } from '../modules/cie/negotiation.handlers.js';
+import type { PkmHandlerDeps } from '../modules/cie/pkm.handlers.js';
 
 import type { ObjectStorage } from '../common/storage/object-storage.js';
 import type { ExportQueue } from '../common/queue/export-queue.js';
@@ -143,6 +144,15 @@ export interface AppDeps {
    * `red_never_automated`.
    */
   negotiation: NegotiationHandlerDeps;
+  /**
+   * M10 Step 5 — Personal Knowledge Management (Green, per-user scoped).
+   * The PkmService sanitizes untrusted user text BEFORE persistence or graph
+   * ingest, tags derived graph nodes with `pkm:user-authored:<entryId>`
+   * provenance, and atomically purges the derived contribution on delete. All
+   * DB access is via narrow ports (PkmStorePort + PkmGraphIngestPort) — never
+   * @careeros/db. Cross-user reads/deletes are impossible by construction.
+   */
+  pkm: PkmHandlerDeps;
   gate: EnforceDeps;
 
   /**

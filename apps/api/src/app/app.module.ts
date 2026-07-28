@@ -11,6 +11,7 @@ import { AuditController } from './audit.controller.js';
 import { SkillsController } from './skills.controller.js';
 import { DraftsController } from './drafts.controller.js';
 import { PortfolioController, PublicPortfolioController } from './portfolio.controller.js';
+import { PkmController } from './pkm.controller.js';
 import { BearerAuthGuard } from './bearer-auth.guard.js';
 
 import { APP_DEPS, type AppDeps } from './deps.js';
@@ -26,7 +27,7 @@ export class AppModule {
   static forRoot(deps: AppDeps): DynamicModule {
     return {
       module: AppModule,
-      controllers: [MeController, ProfileController, CieController, OpportunityController, ApplicationController, TwinController, BriefingController, AuditController, SkillsController, DraftsController, PublicPortfolioController, PortfolioController],
+      controllers: [MeController, ProfileController, CieController, OpportunityController, ApplicationController, TwinController, BriefingController, AuditController, SkillsController, DraftsController, PublicPortfolioController, PortfolioController, PkmController],
 
 
       providers: [{ provide: APP_DEPS, useValue: deps }, BearerAuthGuard],
