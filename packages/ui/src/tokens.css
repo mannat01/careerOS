@@ -1,0 +1,122 @@
+/**
+ * CareerOS design tokens — CSS custom properties.
+ *
+ * SOURCE OF TRUTH lives in `packages/ui/src/tokens.ts`. This file mirrors
+ * those values so runtime CSS + build-time TS stay in lockstep. A contrast
+ * smoke test (`packages/ui/test/tokens.contrast.test.ts`) walks the TS
+ * tokens directly, so if you change a hex, change it in BOTH places (a
+ * mismatch is caught by `tokens.mirror.test.ts`).
+ *
+ * Consumed by `apps/web/app/globals.css` via `@import '@careeros/ui/tokens.css'`.
+ */
+
+:root {
+  --co-bg-base: #ffffff;
+  --co-bg-subtle: #f7f8fa;
+  --co-bg-elevated: #ffffff;
+
+  --co-border-subtle: #e4e7eb;
+  --co-border-strong: #cbd2d9;
+
+  --co-text-primary: #0f172a;
+  --co-text-secondary: #334155;
+  --co-text-muted: #64748b;
+  --co-text-inverse: #ffffff;
+
+  --co-brand-base: #1d4ed8;
+  --co-brand-emphasis: #1e40af;
+  --co-brand-subtle: #dbeafe;
+
+  --co-status-success: #15803d;
+  --co-status-warning: #b45309;
+  --co-status-danger: #b91c1c;
+  --co-status-info: #1d4ed8;
+
+  /* Autonomy tier — load-bearing product semantics (design-system.md §2). */
+  --co-tier-green: #15803d;
+  --co-tier-yellow: #b45309;
+  --co-tier-red: #b91c1c;
+
+  /* Confidence bands for calibrated CIE outputs. */
+  --co-confidence-low: #b45309;
+  --co-confidence-med: #4338ca;
+  --co-confidence-high: #15803d;
+
+  --co-focus-ring: #2563eb;
+}
+
+.dark,
+:root[data-theme='dark'] {
+  --co-bg-base: #0b1220;
+  --co-bg-subtle: #111a2e;
+  --co-bg-elevated: #172033;
+
+  --co-border-subtle: #1f2a44;
+  --co-border-strong: #334155;
+
+  --co-text-primary: #f8fafc;
+  --co-text-secondary: #cbd5e1;
+  --co-text-muted: #94a3b8;
+  --co-text-inverse: #0f172a;
+
+  --co-brand-base: #93c5fd;
+  --co-brand-emphasis: #bfdbfe;
+  --co-brand-subtle: #1e3a8a;
+
+  --co-status-success: #4ade80;
+  --co-status-warning: #fbbf24;
+  --co-status-danger: #f87171;
+  --co-status-info: #93c5fd;
+
+  --co-tier-green: #4ade80;
+  --co-tier-yellow: #fbbf24;
+  --co-tier-red: #fca5a5;
+
+  --co-confidence-low: #fbbf24;
+  --co-confidence-med: #c4b5fd;
+  --co-confidence-high: #4ade80;
+
+  --co-focus-ring: #93c5fd;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --co-bg-base: #0b1220;
+    --co-bg-subtle: #111a2e;
+    --co-bg-elevated: #172033;
+    --co-border-subtle: #1f2a44;
+    --co-border-strong: #334155;
+    --co-text-primary: #f8fafc;
+    --co-text-secondary: #cbd5e1;
+    --co-text-muted: #94a3b8;
+    --co-text-inverse: #0f172a;
+    --co-brand-base: #93c5fd;
+    --co-brand-emphasis: #bfdbfe;
+    --co-brand-subtle: #1e3a8a;
+    --co-status-success: #4ade80;
+    --co-status-warning: #fbbf24;
+    --co-status-danger: #f87171;
+    --co-status-info: #93c5fd;
+    --co-tier-green: #4ade80;
+    --co-tier-yellow: #fbbf24;
+    --co-tier-red: #fca5a5;
+    --co-confidence-low: #fbbf24;
+    --co-confidence-med: #c4b5fd;
+    --co-confidence-high: #4ade80;
+    --co-focus-ring: #93c5fd;
+  }
+}
+
+*:focus-visible {
+  outline: 2px solid var(--co-focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
