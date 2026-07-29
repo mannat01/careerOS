@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Semantic design tokens for CareerOS web.
+ *
+ * These are the neutral defaults for FM1 — the palette is deliberately
+ * conservative (grey/blue) so no brand assumption is baked in. Tokens are
+ * dual light/dark; components must reference them via Tailwind classes
+ * (e.g. `bg-bg-base`, `text-text-primary`, `bg-tier-yellow`) — never raw hex.
+ *
+ * See docs/design-system.md §2 for token surface and the source-of-truth
+ * palette rationale. Token-only styling is enforced by convention +
+ * apps/web/src/test/no-hex-in-components.test.ts (FM1 task 2).
+ */
+:root {
+  --co-bg-base: #ffffff;
+  --co-bg-subtle: #f7f8fa;
+  --co-bg-elevated: #ffffff;
+
+  --co-border-subtle: #e4e7eb;
+  --co-border-strong: #cbd2d9;
+
+  --co-text-primary: #0f172a;
+  --co-text-secondary: #334155;
+  --co-text-muted: #64748b;
+  --co-text-inverse: #ffffff;
+
+  --co-brand-base: #2563eb;
+  --co-brand-emphasis: #1d4ed8;
+  --co-brand-subtle: #dbeafe;
+
+  /* Autonomy tier semantics — hue chosen for AA contrast on bg-base. */
+  --co-tier-green: #15803d;
+  --co-tier-yellow: #b45309;
+  --co-tier-red: #b91c1c;
+
+  /* Confidence bands for CIE calibrated outputs. */
+  --co-confidence-low: #b45309;
+  --co-confidence-med: #4338ca;
+  --co-confidence-high: #15803d;
+
+  --co-focus-ring: #2563eb;
+}
+
+.dark, :root[data-theme='dark'] {
+  --co-bg-base: #0b1220;
+  --co-bg-subtle: #111a2e;
+  --co-bg-elevated: #172033;
+
+  --co-border-subtle: #1f2a44;
+  --co-border-strong: #334155;
+
+  --co-text-primary: #f8fafc;
+  --co-text-secondary: #cbd5e1;
+  --co-text-muted: #94a3b8;
+  --co-text-inverse: #0f172a;
+
+  --co-brand-base: #60a5fa;
+  --co-brand-emphasis: #93c5fd;
+  --co-brand-subtle: #1e3a8a;
+
+  --co-tier-green: #4ade80;
+  --co-tier-yellow: #fbbf24;
+  --co-tier-red: #f87171;
+
+  --co-confidence-low: #fbbf24;
+  --co-confidence-med: #a5b4fc;
+  --co-confidence-high: #4ade80;
+
+  --co-focus-ring: #93c5fd;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --co-bg-base: #0b1220;
+    --co-bg-subtle: #111a2e;
+    --co-bg-elevated: #172033;
+    --co-border-subtle: #1f2a44;
+    --co-border-strong: #334155;
+    --co-text-primary: #f8fafc;
+    --co-text-secondary: #cbd5e1;
+    --co-text-muted: #94a3b8;
+    --co-text-inverse: #0f172a;
+    --co-brand-base: #60a5fa;
+    --co-brand-emphasis: #93c5fd;
+    --co-brand-subtle: #1e3a8a;
+    --co-tier-green: #4ade80;
+    --co-tier-yellow: #fbbf24;
+    --co-tier-red: #f87171;
+    --co-confidence-low: #fbbf24;
+    --co-confidence-med: #a5b4fc;
+    --co-confidence-high: #4ade80;
+    --co-focus-ring: #93c5fd;
+  }
+}
+
+html, body { background-color: var(--co-bg-base); color: var(--co-text-primary); }
+
+*:focus-visible { outline: 2px solid var(--co-focus-ring); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

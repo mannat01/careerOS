@@ -3,5 +3,8 @@ dist
 .next
 .turbo
 .env
+.env.bak
 *.log
 coverage
+*.tsbuildinfo
+.DS_Store
