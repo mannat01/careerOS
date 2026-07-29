@@ -40,6 +40,35 @@ Until then: only first-party plugins in the reference registry may be enabled, a
 
 ---
 
+## 0b. ⚠ LAUNCH-BLOCKER — PKM persistence is not backed by a real store
+
+**Status: MUST be resolved before PKM ships to users.** Recorded at FM1 precheck (2026-07-28) after auditing the M10 Step 5 build closeout against the running database.
+
+The M10 Step 5 build-log entry claimed a `PkmEntry` table with `userId` FK and `graphNodeIds jsonb` was landed per `docs/database-schema.md`. Audit finding: **no `Pkm*` model exists in `packages/db/prisma/schema.prisma`, no `pkm*` symbol exists in `packages/db/src`, and no `pkm_*` table exists in the running Postgres.** The empty migration directory `packages/db/prisma/migrations/20260727000000_m10_pkm/` (no `migration.sql`) is the surviving fingerprint of the aborted work — its presence also breaks `prisma migrate deploy` on every clean checkout (`P3015`).
+
+What actually shipped for M10 PKM:
+- `packages/cie/pkm/src/{ports,fakes,service}.ts` — `PkmStorePort` + `PkmGraphIngestPort` interfaces with **in-memory fakes**.
+- `apps/api/src/modules/cie/pkm.handlers.ts` + `apps/api/src/app/pkm.controller.ts` — wired to the fake in `apps/api/src/app/deps.ts`.
+- `packages/cie/pkm/test/pkm.integrity.test.ts` and `apps/api/test/cie-pkm.handlers.test.ts` — pass against the fakes.
+
+That means PKM writes today do not persist across process restarts, and the M10 Step 5 report overstated persistence.
+
+### Acceptance criteria to lift the blocker
+
+- [ ] `PkmEntry` model added to `packages/db/prisma/schema.prisma` matching `docs/database-schema.md`.
+- [ ] Real migration generated (`prisma migrate dev --name m10_pkm`) that produces the promised table + indexes; empty `20260727000000_m10_pkm/` directory removed.
+- [ ] `PrismaPkmStore` implementing `PkmStorePort` added under `packages/db/src/stores/`, wired in `apps/api/src/app/deps.ts` (fake retained only for tests).
+- [ ] `apps/api/test/cie-pkm.handlers.test.ts` (or an integration variant) exercised against Postgres, not only the fake.
+- [ ] Build log updated with the fix.
+
+Until then: PKM endpoints remain "wired but non-durable" and MUST NOT be surfaced in any FM shipping to real users. FM1 does not build PKM UI — it only ships placeholder room pages — so FM1 can proceed on the M01–M09 schema, which is complete and durable.
+
+### FM1 immediate action
+
+The empty `packages/db/prisma/migrations/20260727000000_m10_pkm/` directory is being removed in the FM1 precheck commit because it blocks `prisma migrate deploy` on a clean clone. Removing the directory does **not** discharge this blocker — the acceptance criteria above are what does.
+
+---
+
 ## 1. Roles
 - **Opus (orchestrator/architect/reviewer):** scopes each work unit, makes trade-off + security + product calls, writes/updates specs, and **independently verifies** every implementation (re-runs tests, reads diffs). Does not hand cheaper models any decision that changes architecture, security, or product scope.
 - **Fable (implementer):** writes real, tested code for one scoped slice at a time, following `/docs` + `CLAUDE.md`. Reports what it ran and what it stubbed. Never marks infra-dependent work "verified."
