@@ -6,4 +6,4 @@ export * from './errors.js';
 export * from './approval.js';
 export * from './client.js';
 export * from './domains/index.js';
-// stream.js — added in Task 4 (SSE client).
+export * from './stream.js';
