@@ -34,6 +34,13 @@ import type {
 } from '@careeros/cie-reasoning';
 import { STRATEGIC_REASONER_MODEL_VERSION } from '@careeros/cie-reasoning';
 import { getActionTier, type GateAction } from '@careeros/capability-gate';
+// Shared /rt/twin SSE wire contract — the single source of truth. The local
+// TwinEvent type is a *narrower* variant of TwinStreamEvent (server-side we
+// know slice, tool, and DecisionContract shapes concretely), and it is
+// STRUCTURALLY assignable to the wire union (see the _wireCompat asserts at
+// the bottom of this file). If the wire union ever adds a required field,
+// that assert breaks and we cannot ship — no silent drift.
+import type { TwinStreamEvent } from '@careeros/contracts';
 import type { RequestContext } from '../../common/auth/request-context.js';
 import { detectYellowIntent } from './yellow-intent.js';
 
@@ -284,4 +291,17 @@ function composeAnswer(contract: DecisionContract | null): string {
 function tokenize(text: string): string[] {
   const words = text.split(/(\s+)/).filter((w) => w.length > 0);
   return words;
+}
+
+// ---------- wire-shape compat assert ----------
+//
+// Compile-time proof that every server-yielded TwinEvent variant is
+// STRUCTURALLY assignable to the shared TwinStreamEvent wire union. If the
+// contract ever adds a required field to any event kind — or one of these
+// server variants drifts — this assignment fails and the build breaks. Do
+// NOT weaken with `as` casts; the whole point is that the wire union is the
+// gate for what leaves this process.
+const _wireCompat = <T extends TwinStreamEvent>(x: T): T => x;
+export function assertTwinEventCompat(e: TwinEvent): TwinStreamEvent {
+  return _wireCompat<TwinStreamEvent>(e);
 }

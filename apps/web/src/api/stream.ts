@@ -18,6 +18,24 @@
  *   - `docs/frontend-milestone-01-workorder.md` Task 4
  */
 import { z } from 'zod';
+import {
+  twinContextEventSchema,
+  twinTokenEventSchema,
+  twinToolCallEventSchema,
+  twinToolResultEventSchema,
+  twinApprovalRequiredEventSchema,
+  twinDoneEventSchema,
+  twinErrorEventSchema,
+  twinStreamEventSchema,
+  type TwinContextEvent,
+  type TwinTokenEvent,
+  type TwinToolCallEvent,
+  type TwinToolResultEvent,
+  type TwinApprovalRequiredEvent,
+  type TwinDoneEvent,
+  type TwinErrorEvent,
+  type TwinStreamEvent,
+} from '@careeros/contracts';
 import { ApiError } from './errors.js';
 import { loadWebEnv } from '../config/env.js';
 import type { TokenProvider } from './client.js';
@@ -33,113 +51,12 @@ const nullTokenProvider: TokenProvider = {
 
 // ---------- event union ----------
 //
-// The event schema is duplicated here as zod schemas because the backend
-// realtime types have not yet been published to `@careeros/contracts`
-// (M03/M04 backend milestones). When they are, this file will switch to
-// `import { twinStreamEventSchema } from '@careeros/contracts'` and the
-// local schemas will be deleted. Keeping the runtime shape encoded in zod
-// means a server-side field addition FAILS LOUDLY (typed parse error)
-// rather than being silently dropped.
+// The Twin event union lives in `@careeros/contracts/twin-stream` — ONE
+// definition shared with the backend `/rt/twin` handler. This file only
+// re-exports the schemas + types for local consumers; a server-side field
+// addition FAILS LOUDLY at parse time in both directions.
 
-/** `context` — the min-slice evidence the Twin will reason over. */
-export const twinContextEventSchema = z.object({
-  type: z.literal('context'),
-  runId: z.string(),
-  /** Provenance IDs (opportunity/finding/note) the Twin loaded. */
-  evidenceIds: z.array(z.string()).default([]),
-  /** Optional human-readable summary rendered above the stream. */
-  summary: z.string().optional(),
-});
-
-/** `token` — one chunk of LLM output; append to the live transcript. */
-export const twinTokenEventSchema = z.object({
-  type: z.literal('token'),
-  runId: z.string(),
-  /** The token text; may be a single grapheme or a longer chunk. */
-  text: z.string(),
-  /** Monotonic index for reordering across reconnects (optional). */
-  index: z.number().int().nonnegative().optional(),
-});
-
-/** `tool_call` — the Twin invoked a tool; render "used {tool}". */
-export const twinToolCallEventSchema = z.object({
-  type: z.literal('tool_call'),
-  runId: z.string(),
-  callId: z.string(),
-  tool: z.string(),
-  /** JSON-encoded arguments (opaque to the client). */
-  argsJson: z.string(),
-});
-
-/** `tool_result` — pair with a prior `tool_call` by `callId`. */
-export const twinToolResultEventSchema = z.object({
-  type: z.literal('tool_result'),
-  runId: z.string(),
-  callId: z.string(),
-  ok: z.boolean(),
-  /** JSON-encoded result (opaque). */
-  resultJson: z.string().optional(),
-  /** Present when `ok=false`. */
-  errorMessage: z.string().optional(),
-});
-
-/**
- * `approval_required` — the Twin wants to perform a Yellow action. **Consumers
- * MUST halt** (this iterator halts automatically) and route the user through
- * the ApprovalDialog. The dialog mints a single-use ApprovalToken which the
- * feature code then submits via the api client's `postYellow` — a fresh
- * stream is opened after the approval outcome, this one is CLOSED.
- */
-export const twinApprovalRequiredEventSchema = z.object({
-  type: z.literal('approval_required'),
-  runId: z.string(),
-  /**
-   * The gate action name (must match `YellowAction` in `approval.ts` — but we
-   * intentionally do NOT constrain it here: the server is the source of truth
-   * and the ApprovalDialog cross-checks against the client's tier map. This
-   * keeps a server-side addition parseable in old clients.)
-   */
-  action: z.string(),
-  /**
-   * Structured, human-legible payload the dialog renders VERBATIM. The user
-   * is approving exactly this — no summarization or elision.
-   */
-  payload: z.unknown(),
-  /**
-   * Opaque payload hash the server computed; used later to mint an
-   * ApprovalToken bound to this exact (user, action, payloadHash) triple.
-   */
-  payloadHash: z.string(),
-  /** Optional prose explaining why the Twin proposed this action. */
-  reason: z.string().optional(),
-});
-
-/** `done` — the Twin finished its turn; iterator returns after emitting. */
-export const twinDoneEventSchema = z.object({
-  type: z.literal('done'),
-  runId: z.string(),
-  /** Optional final assistant message for consumers that want a whole string. */
-  finalText: z.string().optional(),
-  /** Optional cost/latency telemetry surfaced in dev tools. */
-  usage: z
-    .object({
-      inputTokens: z.number().int().nonnegative().optional(),
-      outputTokens: z.number().int().nonnegative().optional(),
-      elapsedMs: z.number().int().nonnegative().optional(),
-    })
-    .optional(),
-});
-
-/** `error` — server-side failure inside the run; iterator throws ApiError. */
-export const twinErrorEventSchema = z.object({
-  type: z.literal('error'),
-  runId: z.string().optional(),
-  code: z.string(),
-  message: z.string(),
-  traceId: z.string().optional(),
-});
-
-export const twinStreamEventSchema = z.discriminatedUnion('type', [
+export {
   twinContextEventSchema,
   twinTokenEventSchema,
   twinToolCallEventSchema,
@@ -147,16 +64,18 @@ export const twinStreamEventSchema = z.discriminatedUnion('type', [
   twinApprovalRequiredEventSchema,
   twinDoneEventSchema,
   twinErrorEventSchema,
-]);
-
-export type TwinContextEvent = z.infer<typeof twinContextEventSchema>;
-export type TwinTokenEvent = z.infer<typeof twinTokenEventSchema>;
-export type TwinToolCallEvent = z.infer<typeof twinToolCallEventSchema>;
-export type TwinToolResultEvent = z.infer<typeof twinToolResultEventSchema>;
-export type TwinApprovalRequiredEvent = z.infer<typeof twinApprovalRequiredEventSchema>;
-export type TwinDoneEvent = z.infer<typeof twinDoneEventSchema>;
-export type TwinErrorEvent = z.infer<typeof twinErrorEventSchema>;
-export type TwinStreamEvent = z.infer<typeof twinStreamEventSchema>;
+  twinStreamEventSchema,
+};
+export type {
+  TwinContextEvent,
+  TwinTokenEvent,
+  TwinToolCallEvent,
+  TwinToolResultEvent,
+  TwinApprovalRequiredEvent,
+  TwinDoneEvent,
+  TwinErrorEvent,
+  TwinStreamEvent,
+};
 
 // ---------- open params + options ----------
 

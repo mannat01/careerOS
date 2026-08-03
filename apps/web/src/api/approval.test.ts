@@ -86,13 +86,13 @@ describe('approval guarantee — type-level', () => {
   it('COMPILES: Yellow POST WITH an ApprovalToken typechecks', async () => {
     const token: ApprovalToken = unsafe_brandApprovalToken('valid-token-for-typecheck');
     // No @ts-expect-error — this MUST compile.
-    const promise = briefings.approveItem('run-1', 'item-1', token);
-    expect(promise).toBeInstanceOf(Promise);
-    // Await + swallow — our stub returns `{}` which fails the response schema
-    // (a real Task-3 win: contract drift surfaces as a typed ApiError). We
-    // only care here that the CALL SITE typechecks; the runtime rejection is
-    // asserted elsewhere in client.test.ts.
-    await promise.catch(() => void 0);
+    // Attach the catch handler synchronously before the microtask queue turns
+    // so the promise rejection is NOT reported as unhandled (our stub returns
+    // `{}` which fails the response schema — the real Task-3 behavior: drift
+    // surfaces as a typed ApiError; the runtime rejection itself is asserted
+    // elsewhere in client.test.ts).
+    const settled = briefings.approveItem('run-1', 'item-1', token).catch(() => 'rejected');
+    await expect(settled).resolves.toBe('rejected');
   });
 
   it('type-level: `YellowAction` and `RedAction` are disjoint', () => {

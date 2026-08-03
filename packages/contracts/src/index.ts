@@ -60,4 +60,22 @@ export {
   type ImportedEntity,
   type ProfileImportResponse,
 } from './profile.js';
+export {
+  twinContextEventSchema,
+  twinTokenEventSchema,
+  twinToolCallEventSchema,
+  twinToolResultEventSchema,
+  twinApprovalRequiredEventSchema,
+  twinDoneEventSchema,
+  twinErrorEventSchema,
+  twinStreamEventSchema,
+  type TwinContextEvent,
+  type TwinTokenEvent,
+  type TwinToolCallEvent,
+  type TwinToolResultEvent,
+  type TwinApprovalRequiredEvent,
+  type TwinDoneEvent,
+  type TwinErrorEvent,
+  type TwinStreamEvent,
+} from './twin-stream.js';
 
