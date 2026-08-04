@@ -52,3 +52,58 @@ export function loadWebEnv(): WebEnv {
 export function _resetWebEnvCacheForTests(): void {
   cached = undefined;
 }
+
+// ---------------------------------------------------------------------------
+// Server-only env (never bundled to the client).
+//
+// The rules of this repo say `process.env` is only allowed inside
+// `apps/web/src/config/env.*`. The auth factory + cookie helpers need three
+// server-only knobs, so we surface them here through a second schema. Callers
+// must be server-side (route handlers, RSCs, middleware) — the ESLint web
+// boundary prevents `use client` files from importing this module beyond the
+// `NEXT_PUBLIC_*` shape.
+// ---------------------------------------------------------------------------
+
+const serverSchema = z.object({
+  /**
+   * Server-authoritative auth provider. Must match `NEXT_PUBLIC_AUTH_PROVIDER`
+   * (the guards + factory read this one; the public one is only for the
+   * client bundle's feature flags).
+   */
+  AUTH_PROVIDER: z.enum(['dev', 'clerk']),
+  /**
+   * HS256 secret used by the dev provider. Required only when
+   * `AUTH_PROVIDER=dev`; validated by the factory (which enforces a minimum
+   * length). We accept it as an optional string here so `AUTH_PROVIDER=clerk`
+   * environments (which never see this key) don't fail schema parsing.
+   */
+  DEV_AUTH_SECRET: z.string().optional(),
+  /** NODE_ENV — used by the cookie helper to pick `Secure` on/off. */
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+});
+
+export type WebServerEnv = z.infer<typeof serverSchema>;
+
+let cachedServer: WebServerEnv | undefined;
+
+export function loadWebServerEnv(): WebServerEnv {
+  if (cachedServer) return cachedServer;
+  const parsed = serverSchema.safeParse({
+    AUTH_PROVIDER: process.env.AUTH_PROVIDER,
+    DEV_AUTH_SECRET: process.env.DEV_AUTH_SECRET,
+    NODE_ENV: process.env.NODE_ENV,
+  });
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+      .join('; ');
+    throw new Error(`Invalid web server environment: ${issues}`);
+  }
+  cachedServer = Object.freeze(parsed.data);
+  return cachedServer;
+}
+
+/** Test-only: clear the server env cache. */
+export function _resetWebServerEnvCacheForTests(): void {
+  cachedServer = undefined;
+}
