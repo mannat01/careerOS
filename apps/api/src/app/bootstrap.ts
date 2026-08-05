@@ -29,7 +29,8 @@ import {
   PrismaGapSignalReadStore,
 } from '@careeros/db';
 
-import { createLlmGateway, AnthropicProvider } from '@careeros/llm-gateway';
+import { createLlmGateway } from '@careeros/llm-gateway';
+import { buildLlmProvider } from '../common/llm/llm-provider-factory.js';
 import { LlmExtractionAgent } from '@careeros/agents';
 import { MemoryService, GraphMemoryService, FakeEmbedder, FakeLlmProvider } from '@careeros/memory';
 import {
@@ -177,11 +178,13 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
 
   const audit = createAuditClient({ sink: new PrismaAuditSink(prisma) });
 
-  // Extraction agent on the CHEAP tier (ADR-001). The AnthropicProvider is a
-  // STUB(M01) until network access exists; extraction runs live behind the
-  // FakeLlmProvider in tests via `overrides.profile`.
+  // Extraction agent on the CHEAP tier (ADR-001). The concrete provider is
+  // selected from env by `buildLlmProvider` -- the ONE place that decision is
+  // made -- and it fails closed under NODE_ENV=production for anything but
+  // Anthropic. Locally, LLM_PROVIDER=fake lets the API boot and serve real
+  // response SHAPES with no key/network; tests still override per-module.
   const gateway = createLlmGateway({
-    provider: new AnthropicProvider(env.ANTHROPIC_API_KEY ?? ''),
+    provider: buildLlmProvider(env),
 
     modelsByTier: { cheap: env.LLM_CHEAP_MODEL, frontier: env.LLM_FRONTIER_MODEL },
     pricing: {},
