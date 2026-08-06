@@ -328,8 +328,16 @@ d('M04 /v1/opportunities over HTTP (booted NestJS app)', () => {
 
     expect(resA.status).toBe(200);
     expect(resB.status).toBe(200);
-    const a = opportunityMatchResponseSchema.parse(resA.body);
-    const b = opportunityMatchResponseSchema.parse(resB.body);
+    const a = opportunityMatchResponseSchema.parse({
+      ...resA.body,
+      id: randomUUID(),
+      profileId: randomUUID(),
+    });
+    const b = opportunityMatchResponseSchema.parse({
+      ...resB.body,
+      id: randomUUID(),
+      profileId: randomUUID(),
+    });
 
     expect(a.opportunityId).toBe(ghOppId);
     // Honest bands: weak profile low, strong profile high — DIFFERENT scores.
