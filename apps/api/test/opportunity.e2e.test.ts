@@ -282,15 +282,19 @@ d('M04 /v1/opportunities over HTTP (booted NestJS app)', () => {
 
   it('cursor-paginates with limit', async () => {
     const p1 = opportunityListResponseSchema.parse(
-      await request(http).get('/v1/opportunities?limit=1').set('Authorization', `Bearer ${tokenA}`),
+      (
+        await request(http).get('/v1/opportunities?limit=1').set('Authorization', `Bearer ${tokenA}`)
+      ).body,
     );
     expect(p1.data.length).toBe(1);
     expect(p1.nextCursor).not.toBeNull();
 
     const p2 = opportunityListResponseSchema.parse(
-      await request(http)
-        .get(`/v1/opportunities?limit=1&cursor=${encodeURIComponent(p1.nextCursor!)}`)
-        .set('Authorization', `Bearer ${tokenA}`),
+      (
+        await request(http)
+          .get(`/v1/opportunities?limit=1&cursor=${encodeURIComponent(p1.nextCursor!)}`)
+          .set('Authorization', `Bearer ${tokenA}`)
+      ).body,
     );
     expect(p2.data.length).toBe(1);
     // Distinct pages — no overlap between page 1 and page 2.
