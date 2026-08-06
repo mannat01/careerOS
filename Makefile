@@ -1,9 +1,45 @@
 # CareerOS dev shortcuts
-.PHONY: up down api web db-migrate db-seed test bootstrap verify
-# Run `make api` and `make web` in separate terminals. The API uses the built
+.PHONY: up down api web env-check env-check-test db-migrate db-seed test bootstrap verify
+
+# The default is the root .env. ENV_FILE is overrideable only so env-check-test
+# can exercise missing/configured files without changing the developer's .env.
+ENV_FILE ?= .env
+
+# Run `make api` and `make web` in separate terminals. The API uses the package
 # dev runner (`tsx src/main.ts`), not `node apps/api/src/index.ts` (unbuilt TS/ESM).
 api:
-	AUTH_PROVIDER=dev LLM_PROVIDER=fake PORT=3001 pnpm --filter @careeros/api dev
+	@test -f "$(ENV_FILE)" || (echo "Missing $(ENV_FILE); copy .env.local.example to .env" && exit 1)
+	@set -a; . "$(ENV_FILE)"; set +a; \
+	  AUTH_PROVIDER=dev LLM_PROVIDER=fake \
+	  pnpm --filter @careeros/api dev
+
+# Check names and status only; never print environment values.
+env-check:
+	@test -f "$(ENV_FILE)" || (echo "Missing $(ENV_FILE); copy .env.local.example to .env" && exit 1)
+	@set -a; . "$(ENV_FILE)"; set +a; \
+	  status=0; \
+	  for key in DATABASE_URL REDIS_URL S3_BUCKET DEV_AUTH_SECRET APPROVAL_TOKEN_SECRET; do \
+	    eval "value=\$$key"; \
+	    if [ -n "$$value" ]; then printf '%s configured\n' "$$key"; \
+	    else printf '%s missing\n' "$$key"; status=1; fi; \
+	  done; \
+	  exit $$status
+
+# Lightweight, value-free verification of both failure guidance and success.
+env-check-test:
+	@tmp_dir=$$(mktemp -d); trap 'rm -rf "$$tmp_dir"' EXIT INT TERM; \
+	  if missing_output=$$( $(MAKE) --no-print-directory ENV_FILE="$$tmp_dir/missing.env" api 2>&1 ); then \
+	    echo 'Expected missing .env check to fail'; exit 1; \
+	  fi; \
+	  printf '%s\n' "$$missing_output" | grep -Fq 'Missing' || \
+	    { echo 'Missing .env guidance was not printed'; exit 1; }; \
+	  cp .env.local.example "$$tmp_dir/configured.env"; \
+	  configured_output=$$( $(MAKE) --no-print-directory ENV_FILE="$$tmp_dir/configured.env" env-check 2>&1 ) || \
+	    { echo 'Expected configured env-check to pass'; exit 1; }; \
+	  printf '%s\n' "$$configured_output"; \
+	  if printf '%s\n' "$$configured_output" | grep -Eq 'dev-auth-secret|APPROVAL_TOKEN_SECRET=.*|postgresql://|redis://'; then \
+	    echo 'Environment value disclosure detected'; exit 1; \
+	  fi
 web:
 	PORT=3000 pnpm --filter @careeros/web dev
 up:            ## start local infra (pg+pgvector, redis, minio)
