@@ -21,6 +21,8 @@ export {
   type UpdateUserSettingsRequest,
   type User,
   type UserSettings,
+  DEV_USER_ID,
+  DEV_USER_EMAIL,
 } from './user.js';
 export {
   opportunitySchema,

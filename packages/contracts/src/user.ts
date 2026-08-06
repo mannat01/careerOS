@@ -3,6 +3,23 @@ import { autonomyTierSchema, type AutonomyTier } from './autonomy.js';
 
 /** identity DTOs — database-schema.md §2 (identity), api-spec.md §4 (Auth & account). */
 
+/**
+ * Canonical LOCAL/CI dev user id — the single source of truth shared by the
+ * dev auth path and the dev seed.
+ *
+ * `users.id` is a UUID column, so a dev JWT whose `sub` is a non-UUID string
+ * (e.g. "dev-user-1") can authenticate but can never resolve to a row: every
+ * handler that scopes by `ctx.userId` then reads nothing. Pinning one UUID here
+ * — minted by the dev auth providers, seeded by `packages/db/src/seed.ts` —
+ * keeps the token subject and the seeded dataset in agreement.
+ *
+ * Never used in production: the Clerk path supplies real subjects.
+ */
+export const DEV_USER_ID = '00000000-0000-4000-8000-000000000001';
+
+/** Email of the canonical dev user (matches the seeded `users.email`). */
+export const DEV_USER_EMAIL = 'dev@careeros.local';
+
 export const userSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email(),

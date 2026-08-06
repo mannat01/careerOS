@@ -145,5 +145,9 @@
 - **X.4** Docs updated with every contract change (schema/api/milestone changelog) in the same PR.
 - **X.5** a11y (axe) AA compliance on all new UI.
 
+## Backend follow-ups (logged, not yet scheduled)
+- **B.1 Graceful degradation for authed-but-empty users** — handlers currently 500 when an authenticated principal has no corresponding DB row (`user`, `profile`, `cie_state`, briefing/audit rows). This is the *normal* state for a brand-new user right after sign-up, before onboarding writes anything. Expected behavior: 404 for a missing single resource and `{ data: [] }` / empty-state payloads for collections, never a 500. Found during D3-pre-2 while aligning the dev seed to dev-auth; worked around locally by seeding the canonical dev user. Fix belongs in the handler/store layer (nullable reads + explicit not-found mapping), with tests covering "authenticated, zero rows".
+- **B.2 Fresh-DB `migrate deploy` in CI is the standing migration guard** — CI runs `prisma migrate deploy` against an empty database on every run, so the migration history is replayed from zero each time. That is what keeps migrations honest and is why a local drift (a DB created via `db push`, no `_prisma_migrations` history → P3005) never reached CI. Do not replace this step with `db push`; local drift should be repaired with `prisma migrate reset --force` (local-only), not by weakening the CI guard.
+
 ## Prioritization rationale
 Ordered by dependency + value-at-risk. E01–E05 build the standalone wedge **plus** the reasoning core (the CIE's minimum viable strategist). E06–E08 deliver the strategist promise (plans → research → legible trajectory) that differentiates CareerOS from every point tool. E09 deepens; E10 compounds and opens the platform. Security/eval/cost items are standing, not deferrable — they gate every epic.
