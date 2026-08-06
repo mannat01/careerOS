@@ -49,6 +49,25 @@ The canonical pre-push command is **`make verify`**. It mirrors CI exactly — s
 
 For fast iteration inside a single package, `pnpm run lint:cached` and per-package `vitest` are fine. **Never push based on cached or per-package runs alone** — always run `make verify` immediately before push. If a local-vs-CI gap is ever discovered (as with Batch C: CI Node 20 ran deps requiring Node ≥22, added by Task 5), the fix is to **extend `make verify` to catch that class**, never to weaken a test or skip a gate.
 
+### 5b. Canonical local run
+
+Run the API and web app in **separate terminals**:
+
+```sh
+# terminal 1 — API, fixed at http://localhost:3001
+make api
+
+# terminal 2 — Next web app, fixed at http://localhost:3000
+make web
+```
+
+`make api` uses `AUTH_PROVIDER=dev`, `LLM_PROVIDER=fake`, `PORT=3001`, and the
+working `pnpm --filter @careeros/api dev` runner (`tsx src/main.ts`). Do **not**
+use `node apps/api/src/index.ts`; that is an unbuilt TypeScript/ESM entrypoint.
+The liveness check is unauthenticated `GET http://localhost:3001/healthz`, which
+must return HTTP 200 with `{ "status": "ok" }` and has no database dependency.
+If the API is already responding, probe it — **never kill a server you didn't start.**
+
 ## 6. Golden-dataset rule (greenfield)
 No historical data exists. An agent's **first** deliverable is its hand-authored golden set (10–30 labeled cases) under `evals/<agent>/`, committed before the agent logic. An eval gate with no dataset is not "done."
 

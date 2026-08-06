@@ -1,5 +1,11 @@
 # CareerOS dev shortcuts
-.PHONY: up down db-migrate db-seed test bootstrap verify
+.PHONY: up down api web db-migrate db-seed test bootstrap verify
+# Run `make api` and `make web` in separate terminals. The API uses the built
+# dev runner (`tsx src/main.ts`), not `node apps/api/src/index.ts` (unbuilt TS/ESM).
+api:
+	AUTH_PROVIDER=dev LLM_PROVIDER=fake PORT=3001 pnpm --filter @careeros/api dev
+web:
+	PORT=3000 pnpm --filter @careeros/web dev
 up:            ## start local infra (pg+pgvector, redis, minio)
 	docker compose -f infra/docker-compose.yml up -d
 down:
