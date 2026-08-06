@@ -18,91 +18,26 @@
  * ApprovalDialog which mints an `ApprovalToken`; the item-execute path
  * demonstrates the type-level guard: no token → compile error.
  */
-import { z } from 'zod';
+import {
+  briefingItemSchema,
+  briefingRunDetailSchema,
+  editBriefingItemRequestSchema,
+  runManualBriefingRequestSchema,
+  type BriefingItem,
+  type BriefingRunDetail,
+  type EditBriefingItemRequest,
+  type RunManualBriefingRequest,
+} from '@careeros/contracts';
 import type { ApiClient, RequestOptions } from '../client.js';
 import type { ApprovalToken } from '../approval.js';
 
 // ---------- wire schemas ----------
 
-export const briefingItemKindSchema = z.enum([
-  'opportunity',
-  'tailored_resume',
-  'draft',
-  'prep',
-  'gap',
-  'note',
-  'focus',
-  'suggestion',
-]);
-
-export const briefingItemStateSchema = z.enum([
-  'proposed',
-  'approved',
-  'edited',
-  'skipped',
-  'failed',
-]);
-
-export const autonomyTierWireSchema = z.enum(['green', 'yellow', 'red']);
-
-export const briefingItemSchema = z.object({
-  id: z.string().uuid(),
-  kind: briefingItemKindSchema,
-  refId: z.string().nullable(),
-  autonomyTier: autonomyTierWireSchema,
-  state: briefingItemStateSchema,
-  payload: z.record(z.string(), z.unknown()),
-  createdAt: z.string().datetime(),
-});
-export type BriefingItem = z.infer<typeof briefingItemSchema>;
-
-export const briefingStepRecordSchema = z.object({
-  name: z.string().min(1),
-  status: z.enum(['ok', 'failed', 'skipped']),
-  costUsd: z.number().nonnegative(),
-  traceId: z.string(),
-  startedAt: z.string().datetime(),
-  finishedAt: z.string().datetime(),
-  itemsProduced: z.number().int().nonnegative(),
-  error: z.string().optional(),
-  retryable: z.boolean().optional(),
-});
-
-export const briefingRunSchema = z.object({
-  id: z.string().uuid(),
-  userId: z.string().uuid(),
-  trigger: z.enum(['scheduled', 'manual']),
-  status: z.enum(['queued', 'running', 'partial', 'complete', 'failed']),
-  inputs: z.record(z.string(), z.unknown()),
-  steps: z.array(briefingStepRecordSchema),
-  costTotal: z.number().nonnegative(),
-  startedAt: z.string().datetime(),
-  finishedAt: z.string().datetime().nullable(),
-});
-export type BriefingRun = z.infer<typeof briefingRunSchema>;
-
-export const briefingRunDetailSchema = briefingRunSchema.extend({
-  items: z.array(briefingItemSchema),
-});
-export type BriefingRunDetail = z.infer<typeof briefingRunDetailSchema>;
+export type BriefingRun = BriefingRunDetail;
 
 /** Run-manual request. `trigger` is always `manual` from the web client. */
-export const runManualBriefingRequestSchema = z.object({
-  trigger: z.literal('manual'),
-});
-export type RunManualBriefingRequest = z.infer<typeof runManualBriefingRequestSchema>;
-
-export const runManualBriefingResponseSchema = z.object({
-  briefingRunId: z.string().uuid(),
-});
-export type RunManualBriefingResponse = z.infer<typeof runManualBriefingResponseSchema>;
-
-/** Edit payload — fields the user tweaked before approving. Free-form record so we
- *  don't need to re-declare item-kind-specific shapes here (server enforces). */
-export const editBriefingItemRequestSchema = z.object({
-  payload: z.record(z.string(), z.unknown()),
-});
-export type EditBriefingItemRequest = z.infer<typeof editBriefingItemRequestSchema>;
+export const runManualBriefingResponseSchema = briefingRunDetailSchema;
+export type RunManualBriefingResponse = BriefingRunDetail;
 
 // ---------- api surface ----------
 
@@ -142,7 +77,7 @@ export function createBriefingsApi(client: ApiClient): BriefingsApi {
       client.postGreen(
         'briefing.generate',
         '/v1/briefings/run',
-        { trigger: 'manual' } satisfies RunManualBriefingRequest,
+        runManualBriefingRequestSchema.parse({ trigger: 'manual' }) satisfies RunManualBriefingRequest,
         runManualBriefingResponseSchema,
         opts,
       ),

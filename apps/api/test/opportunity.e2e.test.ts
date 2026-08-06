@@ -39,7 +39,12 @@ import { DevAuthProvider } from '../src/common/auth/dev-auth-provider.js';
 import { InMemoryObjectStorage } from '../src/common/storage/object-storage.js';
 import { BullMqExportQueue } from '../src/common/queue/export-queue.js';
 import { MemoryResumeFactAdapter } from '../src/index.js';
-import type { OpportunityDetail, OpportunityPage } from '../src/index.js';
+import type { OpportunityPage } from '../src/index.js';
+import {
+  opportunityDetailSchema,
+  opportunityListResponseSchema,
+  opportunityMatchResponseSchema,
+} from '@careeros/contracts';
 
 
 /**
@@ -276,13 +281,13 @@ d('M04 /v1/opportunities over HTTP (booted NestJS app)', () => {
   });
 
   it('cursor-paginates with limit', async () => {
-    const p1 = body<OpportunityPage>(
+    const p1 = opportunityListResponseSchema.parse(
       await request(http).get('/v1/opportunities?limit=1').set('Authorization', `Bearer ${tokenA}`),
     );
     expect(p1.data.length).toBe(1);
     expect(p1.nextCursor).not.toBeNull();
 
-    const p2 = body<OpportunityPage>(
+    const p2 = opportunityListResponseSchema.parse(
       await request(http)
         .get(`/v1/opportunities?limit=1&cursor=${encodeURIComponent(p1.nextCursor!)}`)
         .set('Authorization', `Bearer ${tokenA}`),
@@ -297,7 +302,7 @@ d('M04 /v1/opportunities over HTTP (booted NestJS app)', () => {
       .get(`/v1/opportunities/${ghOppId}`)
       .set('Authorization', `Bearer ${tokenA}`);
     expect(res.status).toBe(200);
-    const detail = body<OpportunityDetail>(res);
+    const detail = opportunityDetailSchema.parse(res.body);
     expect(detail.id).toBe(ghOppId);
     expect(detail.rawPayload.contentSanitized).toBe(SANITIZED);
   });
@@ -319,8 +324,8 @@ d('M04 /v1/opportunities over HTTP (booted NestJS app)', () => {
 
     expect(resA.status).toBe(200);
     expect(resB.status).toBe(200);
-    const a = body<MatchScore & { opportunityId: string }>(resA);
-    const b = body<MatchScore & { opportunityId: string }>(resB);
+    const a = opportunityMatchResponseSchema.parse(resA.body);
+    const b = opportunityMatchResponseSchema.parse(resB.body);
 
     expect(a.opportunityId).toBe(ghOppId);
     // Honest bands: weak profile low, strong profile high — DIFFERENT scores.

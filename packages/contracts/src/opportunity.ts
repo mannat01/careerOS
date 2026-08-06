@@ -21,6 +21,59 @@ export const opportunitySchema = z.object({
 });
 export type Opportunity = z.infer<typeof opportunitySchema>;
 
+/** Strict list projection emitted by GET /v1/opportunities. */
+export const opportunityListItemSchema = z
+  .object({
+    id: z.string().min(1),
+    source: z.string().min(1),
+    sourceRef: z.string().min(1),
+    company: z.string().min(1),
+    role: z.string().min(1),
+    comp: z.record(z.string(), z.unknown()).nullable(),
+    location: z.string().nullable(),
+    remote: z.boolean().nullable(),
+    ingestedAt: z.string().datetime(),
+  })
+  .strict();
+export type OpportunityListItem = z.infer<typeof opportunityListItemSchema>;
+
+/** Canonical pagination envelope; the backend calls the collection `data`. */
+export const opportunityListResponseSchema = z
+  .object({
+    data: z.array(opportunityListItemSchema),
+    nextCursor: z.string().nullable(),
+  })
+  .strict();
+export type OpportunityListResponse = z.infer<typeof opportunityListResponseSchema>;
+
+/** Detail-only fields are deliberately separate from the stored/internal shape. */
+export const opportunityDetailSchema = opportunityListItemSchema
+  .extend({
+    requirementsParsed: z.record(z.string(), z.unknown()).nullable(),
+    rawPayload: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+export type OpportunityDetail = z.infer<typeof opportunityDetailSchema>;
+
+export const opportunityMatchSubscoreSchema = z
+  .object({ key: z.string().min(1), value: z.number().min(0).max(100) })
+  .strict();
+
+/** Strict response for GET /v1/opportunities/:id/match. */
+export const opportunityMatchResponseSchema = z
+  .object({
+    id: z.string().min(1),
+    profileId: z.string().min(1),
+    opportunityId: z.string().min(1),
+    overall: z.number().int().min(0).max(100),
+    subscores: z.array(opportunityMatchSubscoreSchema),
+    explanation: z.string(),
+    evidenceRefs: z.array(z.string()),
+    modelVersion: z.string().min(1).optional(),
+  })
+  .strict();
+export type OpportunityMatchResponse = z.infer<typeof opportunityMatchResponseSchema>;
+
 /** SourceRegistry entry (global allow-list) — database-schema.md §2 (connectors). */
 export const sourceRegistryEntrySchema = z.object({
   key: z.string().min(1),

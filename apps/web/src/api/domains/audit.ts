@@ -9,28 +9,14 @@
  * wire schema is defined here as a transport contract, matching
  * `apps/api/src/modules/audit/audit.handlers.ts` 1:1.
  */
-import { z } from 'zod';
+import {
+  auditListResponseSchema,
+  type AuditEntry,
+  type AuditListResponse,
+} from '@careeros/contracts';
 import type { ApiClient, RequestOptions } from '../client.js';
 
-export const auditRowSchema = z.object({
-  id: z.string().uuid(),
-  userId: z.string().uuid(),
-  actor: z.enum(['user', 'twin', 'system']),
-  action: z.string().min(1),
-  target: z.string().nullable(),
-  reason: z.string(),
-  modelVersion: z.string().nullable(),
-  traceId: z.string().nullable(),
-  at: z.string().datetime(),
-});
-export type AuditRow = z.infer<typeof auditRowSchema>;
-
-export const auditListResponseSchema = z.object({
-  data: z.array(auditRowSchema),
-  /** ISO timestamp c‍ursor for the next page; `null` when done. */
-  nextBefore: z.string().datetime().nullable(),
-});
-export type AuditListResponse = z.infer<typeof auditListResponseSchema>;
+export type AuditRow = AuditEntry;
 
 export interface AuditListQuery {
   /** Page size, server-clamped to a max (see handler). */

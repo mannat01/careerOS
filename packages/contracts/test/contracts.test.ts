@@ -10,6 +10,15 @@ import {
   opportunitySchema,
   updateUserSettingsRequestSchema,
   userSettingsSchema,
+  opportunityListItemSchema,
+  opportunityListResponseSchema,
+  opportunityDetailSchema,
+  opportunityMatchResponseSchema,
+  cieStateResponseSchema,
+  auditEntrySchema,
+  auditListResponseSchema,
+  briefingItemSchema,
+  briefingLatestResponseSchema,
 } from '../src/index.js';
 
 const NOW = '2026-07-08T00:00:00.000Z';
@@ -108,7 +117,130 @@ describe('canonical Opportunity', () => {
     expect(opportunitySchema.parse(opp)).toEqual(opp);
   });
 
+  it('parses the authoritative list envelope and rejects the old items envelope', () => {
+    const item = {
+      id: UID,
+      source: 'greenhouse',
+      sourceRef: '4011001',
+      company: 'Acme Corp',
+      role: 'Senior Backend Engineer',
+      comp: null,
+      location: null,
+      remote: null,
+      ingestedAt: NOW,
+    };
+    expect(opportunityListResponseSchema.parse({ data: [item], nextCursor: null })).toEqual({
+      data: [item],
+      nextCursor: null,
+    });
+    expect(opportunityListResponseSchema.safeParse({ items: [item], nextCursor: null }).success).toBe(false);
+  });
+
+  it('allows list projections without internal ingestion fields and keeps the real id', () => {
+    const item = {
+      id: UID,
+      source: 'lever',
+      sourceRef: 'job-1',
+      company: 'Acme Corp',
+      role: 'Platform Engineer',
+      comp: { min: 150000 },
+      location: 'Remote',
+      remote: true,
+      ingestedAt: NOW,
+    };
+    expect(opportunityListItemSchema.parse(item)).toEqual(item);
+    expect(opportunityListItemSchema.safeParse({ ...item, rawPayload: {} }).success).toBe(false);
+    expect(opportunityDetailSchema.safeParse({ ...item, requirementsParsed: null, rawPayload: {} }).success).toBe(true);
+  });
+
+  it('parses a persisted match response with id, subscores, explanation, evidence, and model version', () => {
+    const match = {
+      id: UID,
+      profileId: 'profile-1',
+      opportunityId: 'opportunity-1',
+      overall: 97,
+      subscores: [{ key: 'skills_match', value: 98 }, { key: 'seniority_fit', value: 96 }],
+      explanation: 'Strong match grounded in the candidate profile.',
+      evidenceRefs: ['skill:1'],
+      modelVersion: 'match-scorer@1.0.0',
+    };
+    expect(opportunityMatchResponseSchema.parse(match)).toEqual(match);
+  });
+
   it('rejects an opportunity missing provenance of source', () => {
     expect(opportunitySchema.safeParse({ role: 'x' }).success).toBe(false);
+  });
+});
+
+describe('authoritative CIE, audit, and briefing wire fixtures', () => {
+  it('parses a no-signal CIE dimension with confidence 0 and no evidence', () => {
+    const response = {
+      profileId: UID,
+      version: 1,
+      updatedAt: NOW,
+      dimensions: [{
+        dimension: 'geographic_preferences',
+        value: { values: [] },
+        confidence: 0,
+        provenance: 'no-signal',
+        evidenceRefs: [],
+        freshnessAt: NOW,
+        modelVersion: 'state-updater@1.0.0',
+      }],
+    };
+    expect(cieStateResponseSchema.parse(response)).toEqual(response);
+  });
+
+  it('parses seeded audit rows and pagination', () => {
+    const entry = {
+      id: UID,
+      userId: UID,
+      actor: 'system' as const,
+      action: 'briefing.generate',
+      target: null,
+      reason: 'scheduled briefing',
+      modelVersion: null,
+      traceId: 'trace-1',
+      at: NOW,
+    };
+    expect(auditEntrySchema.parse(entry)).toEqual(entry);
+    expect(auditListResponseSchema.parse({ data: [entry], nextBefore: null })).toEqual({
+      data: [entry],
+      nextBefore: null,
+    });
+  });
+
+  it('parses a seeded Yellow briefing item and latest run', () => {
+    const item = {
+      id: UID,
+      kind: 'opportunity' as const,
+      refId: 'opportunity-1',
+      autonomyTier: 'yellow' as const,
+      state: 'proposed' as const,
+      payload: { title: 'Platform Engineer' },
+      createdAt: NOW,
+    };
+    const run = {
+      id: 'run-1',
+      userId: UID,
+      trigger: 'manual' as const,
+      status: 'complete' as const,
+      inputs: {},
+      steps: [{
+        name: 'scored_opportunities',
+        status: 'ok' as const,
+        costUsd: 0,
+        traceId: 'trace-2',
+        startedAt: NOW,
+        finishedAt: NOW,
+        itemsProduced: 1,
+      }],
+      costTotal: 0,
+      startedAt: NOW,
+      finishedAt: NOW,
+      items: [item],
+    };
+    expect(briefingItemSchema.parse(item)).toEqual(item);
+    expect(briefingLatestResponseSchema.parse(run)).toEqual(run);
   });
 });

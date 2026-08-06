@@ -14,40 +14,15 @@
  *
  * `userId` is server-derived from the bearer.
  */
-import { z } from 'zod';
+import {
+  cieStateExplainResponseSchema,
+  cieStateResponseSchema,
+  type CieStateExplainResponse,
+  type CieStateResponse,
+} from '@careeros/contracts';
 import type { ApiClient, RequestOptions } from '../client.js';
 
 /** Transport shape for one CareerStateDimension row. */
-export const cieDimensionWireSchema = z.object({
-  dimension: z.string().min(1),
-  value: z.object({ values: z.array(z.string()) }),
-  confidence: z.number().min(0).max(1),
-  provenance: z.string(),
-  evidenceRefs: z.array(z.string()),
-  freshnessAt: z.string().datetime(),
-  modelVersion: z.string().min(1),
-});
-export type CieDimensionWire = z.infer<typeof cieDimensionWireSchema>;
-
-/** Transport shape for the CareerStateModel returned by `GET /v1/cie/state`. */
-export const cieStateResponseSchema = z.object({
-  profileId: z.string().uuid(),
-  version: z.number().int().nonnegative(),
-  updatedAt: z.string().datetime(),
-  dimensions: z.array(cieDimensionWireSchema),
-});
-export type CieStateResponse = z.infer<typeof cieStateResponseSchema>;
-
-/** Transport shape for the explain endpoint (evidence + reasoning for one dimension). */
-export const cieStateExplainResponseSchema = z.object({
-  dimension: z.string().min(1),
-  reasoning: z.string(),
-  /** Referenced graph nodes / profile facts. Free-form JSON per node. */
-  evidence: z.array(z.record(z.string(), z.unknown())),
-  confidence: z.number().min(0).max(1),
-});
-export type CieStateExplainResponse = z.infer<typeof cieStateExplainResponseSchema>;
-
 export interface CieStateApi {
   /** GET /v1/cie/state — the current Career State Model. */
   get(opts?: RequestOptions): Promise<CieStateResponse>;

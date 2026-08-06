@@ -8,8 +8,14 @@
  *
  * `userId` never crosses this boundary — server derives from the bearer.
  */
-import { z } from 'zod';
-import { opportunitySchema, type Opportunity } from '@careeros/contracts';
+import {
+  opportunityDetailSchema,
+  opportunityListResponseSchema,
+  opportunityMatchResponseSchema,
+  type OpportunityDetail,
+  type OpportunityListResponse,
+  type OpportunityMatchResponse,
+} from '@careeros/contracts';
 import type { ApiClient, RequestOptions } from '../client.js';
 
 /**
@@ -18,13 +24,6 @@ import type { ApiClient, RequestOptions } from '../client.js';
  * the pagination envelope is defined here (it is a client-facing convenience
  * layer and does not live in the domain contracts).
  */
-export const opportunityListResponseSchema = z.object({
-  items: z.array(opportunitySchema),
-  /** Opaque server cursor for the next page; `null` when no more. */
-  nextCursor: z.string().nullable(),
-});
-export type OpportunityListResponse = z.infer<typeof opportunityListResponseSchema>;
-
 export interface OpportunitiesListQuery {
   /** Pagination cursor from a previous response's `nextCursor`. */
   cursor?: string;
@@ -38,7 +37,9 @@ export interface OpportunitiesApi {
   /** GET /v1/opportunities — paginated list of scored opportunities. */
   list(query?: OpportunitiesListQuery, opts?: RequestOptions): Promise<OpportunityListResponse>;
   /** GET /v1/opportunities/:id — one opportunity, with parsed requirements. */
-  get(id: string, opts?: RequestOptions): Promise<Opportunity>;
+  get(id: string, opts?: RequestOptions): Promise<OpportunityDetail>;
+  /** GET /v1/opportunities/:id/match — the caller's grounded match score. */
+  match(id: string, opts?: RequestOptions): Promise<OpportunityMatchResponse>;
 }
 
 export function createOpportunitiesApi(client: ApiClient): OpportunitiesApi {
@@ -52,6 +53,8 @@ export function createOpportunitiesApi(client: ApiClient): OpportunitiesApi {
           ...(query?.q !== undefined ? { q: query.q } : {}),
         },
       }),
-    get: (id, opts) => client.get(`/v1/opportunities/${encodeURIComponent(id)}`, opportunitySchema, opts),
+    get: (id, opts) => client.get(`/v1/opportunities/${encodeURIComponent(id)}`, opportunityDetailSchema, opts),
+    match: (id, opts) =>
+      client.get(`/v1/opportunities/${encodeURIComponent(id)}/match`, opportunityMatchResponseSchema, opts),
   };
 }
