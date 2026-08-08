@@ -7,7 +7,7 @@
  * disagree with each other — so we lock them at the registry.
  */
 import { describe, expect, it } from 'vitest';
-import { findRoomForPath, ROOMS, type Room } from './rooms.js';
+import { findRoomForPath, ROOMS, type Room } from './rooms';
 
 describe('ROOMS registry', () => {
   it('exposes exactly the five product rooms in canonical order', () => {

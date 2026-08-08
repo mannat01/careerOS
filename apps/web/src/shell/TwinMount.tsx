@@ -12,7 +12,7 @@
  * palette / conversation UI lands with the CIE + Twin milestones.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { pushToast } from './ToastRegion.js';
+import { pushToast } from './ToastRegion';
 
 export function TwinMount(): JSX.Element {
   const [open, setOpen] = useState(false);

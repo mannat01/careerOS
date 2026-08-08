@@ -13,7 +13,7 @@
  * Next.js. The route handler in `app/(app)/layout.tsx` wires it to
  * `next/headers` + a live fetch to the API.
  */
-import type { ServerAuthProvider, Session } from './types.js';
+import type { ServerAuthProvider, Session } from './types';
 
 export type GuardOutcome =
   | { kind: 'ok'; session: Session }

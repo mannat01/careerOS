@@ -17,7 +17,7 @@ import {
   type UpdateUserSettingsRequest,
   type UserSettings,
 } from '@careeros/contracts';
-import type { ApiClient, RequestOptions } from '../client.js';
+import type { ApiClient, RequestOptions } from '../client';
 
 export interface MeApi {
   /** GET /v1/me — current user + settings. */

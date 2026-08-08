@@ -26,10 +26,10 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
-import { ROOMS, findRoomForPath, type Room } from './rooms.js';
-import { usePendingApprovalsCount } from './approvals-store.js';
-import { TwinMount } from './TwinMount.js';
-import { ToastRegion } from './ToastRegion.js';
+import { ROOMS, findRoomForPath, type Room } from './rooms';
+import { usePendingApprovalsCount } from './approvals-store';
+import { TwinMount } from './TwinMount';
+import { ToastRegion } from './ToastRegion';
 
 export interface AppShellProps {
   children: ReactNode;

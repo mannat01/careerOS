@@ -27,21 +27,21 @@ import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 import { axe } from 'vitest-axe';
 import { errorCodeSchema, type ErrorCode } from '@careeros/contracts';
 
-import { RouteSkeleton, ListSkeleton } from './Skeleton.js';
+import { RouteSkeleton, ListSkeleton } from './Skeleton';
 import {
   LiveRegion,
   StreamingLiveRegion,
   announcePolitely,
   announceAssertively,
   _resetLiveRegionForTests,
-} from './LiveRegion.js';
-import { runOptimistic, buildOptimistic } from './optimistic.js';
+} from './LiveRegion';
+import { runOptimistic, buildOptimistic } from './optimistic';
 import {
   ErrorRecoveryRenderer,
   PartialResultRecovery,
   renderRecovery,
-} from './ErrorRecovery.js';
-import { ApiError, type ErrorRecovery } from '../../api/errors.js';
+} from './ErrorRecovery';
+import { ApiError, type ErrorRecovery } from '../../api/errors';
 
 beforeEach(() => {
   cleanup();

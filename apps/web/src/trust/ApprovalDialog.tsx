@@ -3,9 +3,9 @@ import {
   unsafe_brandApprovalToken,
   type ApprovalToken,
   type YellowAction,
-} from '../api/approval.js';
-import type { Tier } from './types.js';
-import { TierBadge } from './TierBadge.js';
+} from '../api/approval';
+import type { Tier } from './types';
+import { TierBadge } from './TierBadge';
 
 /**
  * `<ApprovalDialog>` — the ONLY path to a Yellow action.

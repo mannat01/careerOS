@@ -23,7 +23,7 @@
  * optimistic UI. Callers should pick this up as a plain function returning
  * the domain type.
  */
-import { ApiError } from '../../api/errors.js';
+import { ApiError } from '../../api/errors';
 
 /**
  * A snapshot + a patch + a commit → an optimistic mutation.

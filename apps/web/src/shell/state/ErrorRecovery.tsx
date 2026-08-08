@@ -34,7 +34,7 @@
  *     so structure is discoverable.
  */
 import type { JSX } from 'react';
-import { recoveryForError, type ApiError, type ErrorRecovery } from '../../api/errors.js';
+import { recoveryForError, type ApiError, type ErrorRecovery } from '../../api/errors';
 
 export interface ErrorRecoveryRendererProps {
   readonly error: ApiError;

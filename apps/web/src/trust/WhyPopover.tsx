@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { Evidence, Subject } from './types.js';
+import type { Evidence, Subject } from './types';
 
 /**
  * `<WhyPopover subject evidence[] reasoning>` — the universal "why."

@@ -1,5 +1,5 @@
 # CareerOS dev shortcuts
-.PHONY: up down api web env-check env-check-test db-migrate db-seed test bootstrap verify
+.PHONY: up down api web web-build env-check env-check-test db-migrate db-seed test bootstrap verify
 
 # The default is the root .env. ENV_FILE is overrideable only so env-check-test
 # can exercise missing/configured files without changing the developer's .env.
@@ -42,6 +42,8 @@ env-check-test:
 	  fi
 web:
 	PORT=3000 pnpm --filter @careeros/web dev
+web-build:
+	NEXT_PUBLIC_API_BASE_URL=http://localhost:3001 NEXT_PUBLIC_AUTH_PROVIDER=clerk AUTH_PROVIDER=clerk pnpm --filter @careeros/web build
 up:            ## start local infra (pg+pgvector, redis, minio)
 	docker compose -f infra/docker-compose.yml up -d
 down:
@@ -68,6 +70,7 @@ verify:
 	pnpm --filter @careeros/db exec prisma generate
 	pnpm -w typecheck
 	pnpm -w lint
+	$(MAKE) --no-print-directory web-build
 	pnpm -w test
 
 bootstrap: up   ## one command to get a working local env

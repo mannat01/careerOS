@@ -1,6 +1,6 @@
 /* eslint-disable no-restricted-properties -- test harness mutates process.env to exercise the boundary */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { _resetWebEnvCacheForTests, loadWebEnv } from './env.js';
+import { _resetWebEnvCacheForTests, loadWebEnv } from './env';
 
 /**
  * The typed-env boundary is load-bearing (FM1 task 1): the rest of apps/web

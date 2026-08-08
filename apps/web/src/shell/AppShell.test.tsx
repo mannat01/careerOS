@@ -50,21 +50,21 @@ vi.mock('next/navigation', () => ({
 }));
 
 let approvalsCount = 0;
-vi.mock('./approvals-store.js', () => ({
+vi.mock('./approvals-store', () => ({
   usePendingApprovalsCount: () => approvalsCount,
 }));
 
-vi.mock('./TwinMount.js', () => ({
+vi.mock('./TwinMount', () => ({
   TwinMount: () => <div data-testid="twin-mount" aria-hidden="true" />,
 }));
 
-vi.mock('./ToastRegion.js', () => ({
+vi.mock('./ToastRegion', () => ({
   ToastRegion: () => <div data-testid="toast-region" role="status" aria-live="polite" />,
 }));
 
 // Placeholder-room contents (copied to plain strings — the real pages live in
 // app/(app)/*/page.tsx and are exercised separately by the axe assertions).
-import { AppShell, shouldConsumeRoomShortcut } from './AppShell.js';
+import { AppShell, shouldConsumeRoomShortcut } from './AppShell';
 
 interface RoomFixture {
   path: string;

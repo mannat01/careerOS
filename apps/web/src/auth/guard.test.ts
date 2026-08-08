@@ -14,8 +14,8 @@
  *   - happy path            → ok + session { userId, token, onboardingComplete }
  */
 import { describe, expect, it, vi } from 'vitest';
-import { evaluateAuthGuard, type GuardDeps } from './guard.js';
-import type { ServerAuthProvider } from './types.js';
+import { evaluateAuthGuard, type GuardDeps } from './guard';
+import type { ServerAuthProvider } from './types';
 
 function makeProvider(overrides: Partial<ServerAuthProvider> = {}): ServerAuthProvider {
   return {

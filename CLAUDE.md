@@ -38,14 +38,15 @@ If the product *why* is ever unclear, the authority is `CareerOS-Master-PRD-and-
 typecheck · lint (incl. import-boundary rules) · unit + integration · **contract tests** (responses match `packages/contracts` zod) · **eval gates** (per-agent regression + zero-fabrication + calibration where relevant) · **security tests** (capability-gate, source allow-list, prompt-injection, cross-user isolation) · a11y (axe AA) · migration check.
 
 ### 5a. Pre-push canonical check (local ↔ CI parity)
-The canonical pre-push command is **`make verify`**. It mirrors CI exactly — same install mode (`--frozen-lockfile`), same order (typecheck → lint → test), same Node engine gate — so a green local `make verify` guarantees a green CI `build-test` job for the deterministic (non-DB/Redis) steps:
+The canonical pre-push command is **`make verify`**. It mirrors CI exactly — same install mode (`--frozen-lockfile`), same order (typecheck → lint → web production build → test), same Node engine gate — so a green local `make verify` guarantees a green CI `build-test` job for the deterministic (non-DB/Redis) steps:
 
 1. **Node engine gate.** Fails fast if local Node < 22. `package.json#engines.node` is `>=22` (Node 22+ is required because `jsdom@30` / `@testing-library/jest-dom@7` demand it, and CI runs Node 22). This closes the class of failure where a permissive local Node runs deps that then explode on CI's stricter runtime.
 2. **`pnpm install --frozen-lockfile`.** Same install mode CI uses. Fails the whole run if `pnpm-lock.yaml` is stale (e.g. a devDep was added to a `package.json` without committing the regenerated lockfile).
 3. **`pnpm --filter @careeros/db exec prisma generate`.** CI regenerates Prisma types before lint. The type-aware ESLint rules (`@typescript-eslint/no-unnecessary-type-assertion`, `require-await`, `no-floating-promises`) resolve against `@prisma/client` types; a stale generated client silently changes their verdict.
 4. **`pnpm -w typecheck`.**
 5. **`pnpm -w lint`** — invokes `turbo run lint --force`, bypassing Turbo's per-package hash cache so a green cached log can never mask a rule that would now flag. CI has no turbo cache; local must not either.
-6. **`pnpm -w test`.**
+6. **Web production build.** `make verify` and CI run `pnpm --filter @careeros/web build` with only non-secret build-time values (`NEXT_PUBLIC_API_BASE_URL=http://localhost:3001`, `NEXT_PUBLIC_AUTH_PROVIDER=clerk`, `AUTH_PROVIDER=clerk`). This catches Next/Webpack module-resolution, lint, type, and prerender failures before push without requiring local credentials or a running API.
+7. **`pnpm -w test`.**
 
 For fast iteration inside a single package, `pnpm run lint:cached` and per-package `vitest` are fine. **Never push based on cached or per-package runs alone** — always run `make verify` immediately before push. If a local-vs-CI gap is ever discovered (as with Batch C: CI Node 20 ran deps requiring Node ≥22, added by Task 5), the fix is to **extend `make verify` to catch that class**, never to weaken a test or skip a gate.
 

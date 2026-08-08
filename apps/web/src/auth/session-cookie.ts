@@ -10,7 +10,7 @@
  * Cookie name is stable so tests + e2e can set it deterministically.
  */
 
-import { loadWebServerEnv } from '../config/env.js';
+import { loadWebServerEnv } from '../config/env';
 
 /** Cookie name — kept stable so the API client + tests agree. */
 export const SESSION_COOKIE_NAME = 'careeros_session';

@@ -22,12 +22,12 @@
  */
 /* eslint-disable @typescript-eslint/require-await */
 import { describe, expect, it } from 'vitest';
-import { ApiError } from './errors.js';
+import { ApiError } from './errors';
 import {
   openTwinStream,
   TwinStreamParseError,
   type TwinStreamEvent,
-} from './stream.js';
+} from './stream';
 
 // ---------- helpers ----------
 

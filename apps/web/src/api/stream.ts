@@ -36,9 +36,9 @@ import {
   type TwinErrorEvent,
   type TwinStreamEvent,
 } from '@careeros/contracts';
-import { ApiError } from './errors.js';
-import { loadWebEnv } from '../config/env.js';
-import type { TokenProvider } from './client.js';
+import { ApiError } from './errors';
+import { loadWebEnv } from '../config/env';
+import type { TokenProvider } from './client';
 
 // Match the module-level `defaultTokenProvider` in client.ts (no bearer =>
 // unauthenticated request). Deliberately duplicated so this file has no

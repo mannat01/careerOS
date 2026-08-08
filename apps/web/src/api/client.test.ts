@@ -18,9 +18,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { createApiClient, type TokenProvider } from './client.js';
-import { ApiError, recoveryForError } from './errors.js';
-import { unsafe_brandApprovalToken } from './approval.js';
+import { createApiClient, type TokenProvider } from './client';
+import { ApiError, recoveryForError } from './errors';
+import { unsafe_brandApprovalToken } from './approval';
 import type { ErrorCode } from '@careeros/contracts';
 
 const BASE = 'https://api.example.test';

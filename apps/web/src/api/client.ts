@@ -21,9 +21,9 @@
  *     token.
  */
 import type { z } from 'zod';
-import { loadWebEnv } from '../config/env.js';
-import { ApiError, parseApiErrorPayload } from './errors.js';
-import type { ApprovalToken, YellowAction, GreenAction } from './approval.js';
+import { loadWebEnv } from '../config/env';
+import { ApiError, parseApiErrorPayload } from './errors';
+import type { ApprovalToken, YellowAction, GreenAction } from './approval';
 
 // ---------- token provider abstraction ----------
 

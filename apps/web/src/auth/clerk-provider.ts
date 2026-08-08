@@ -14,7 +14,7 @@
  *     directly or use a template. `mintToken` is not called by app code —
  *     only the dev provider needs it (dev sign-in) — so it can throw.
  */
-import type { ServerAuthProvider } from './types.js';
+import type { ServerAuthProvider } from './types';
 
 /**
  * Return a Clerk-shaped provider whose methods throw with a clear stub

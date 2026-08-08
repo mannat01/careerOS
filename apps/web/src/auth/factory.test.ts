@@ -22,7 +22,7 @@ import {
   buildServerAuthProvider,
   getServerAuthProvider,
   readAuthEnv,
-} from './factory.js';
+} from './factory';
 
 const STRONG_SECRET = 'test-secret-16-chars-or-more-please';
 

@@ -4,11 +4,11 @@
  * All Trust Kit components + shared types are re-exported here so
  * consumers get one canonical entry.
  */
-export * from './types.js';
-export * from './TierBadge.js';
-export * from './ConfidenceChip.js';
-export * from './ProvenanceTag.js';
-export * from './WhyPopover.js';
-export * from './InsufficientData.js';
-export * from './AiSurface.js';
-export * from './ApprovalDialog.js';
+export * from './types';
+export * from './TierBadge';
+export * from './ConfidenceChip';
+export * from './ProvenanceTag';
+export * from './WhyPopover';
+export * from './InsufficientData';
+export * from './AiSurface';
+export * from './ApprovalDialog';

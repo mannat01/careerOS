@@ -18,7 +18,7 @@
  * pattern for httpOnly-cookie auth.
  */
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
-import { setDefaultTokenProvider, type TokenProvider } from '../api/client.js';
+import { setDefaultTokenProvider, type TokenProvider } from '../api/client';
 
 export interface PublicSession {
   readonly userId: string;

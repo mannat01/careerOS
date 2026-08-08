@@ -27,12 +27,12 @@ import {
   type ApprovalToken,
   type RedAction,
   type YellowAction,
-} from './approval.js';
-import { createApiClient, type ApiClient } from './client.js';
-import * as clientModule from './client.js';
-import * as approvalModule from './approval.js';
-import * as domainsModule from './domains/index.js';
-import { createBriefingsApi } from './domains/briefings.js';
+} from './approval';
+import { createApiClient, type ApiClient } from './client';
+import * as clientModule from './client';
+import * as approvalModule from './approval';
+import * as domainsModule from './domains/index';
+import { createBriefingsApi } from './domains/briefings';
 
 // A minimal client we can use for type-level checks (fetch never runs at
 // typecheck time; we still provide a stub so instantiation is well-formed).

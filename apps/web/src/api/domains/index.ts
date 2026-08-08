@@ -6,20 +6,20 @@
  * instead of hand-crafting fetch calls. `createApi` composes all six FM1
  * domains against a single `ApiClient`.
  */
-import type { ApiClient } from '../client.js';
-import { createMeApi, type MeApi } from './me.js';
-import { createProfileApi, type ProfileApi } from './profile.js';
-import { createOpportunitiesApi, type OpportunitiesApi } from './opportunities.js';
-import { createCieStateApi, type CieStateApi } from './cie-state.js';
-import { createBriefingsApi, type BriefingsApi } from './briefings.js';
-import { createAuditApi, type AuditApi } from './audit.js';
+import type { ApiClient } from '../client';
+import { createMeApi, type MeApi } from './me';
+import { createProfileApi, type ProfileApi } from './profile';
+import { createOpportunitiesApi, type OpportunitiesApi } from './opportunities';
+import { createCieStateApi, type CieStateApi } from './cie-state';
+import { createBriefingsApi, type BriefingsApi } from './briefings';
+import { createAuditApi, type AuditApi } from './audit';
 
-export * from './me.js';
-export * from './profile.js';
-export * from './opportunities.js';
-export * from './cie-state.js';
-export * from './briefings.js';
-export * from './audit.js';
+export * from './me';
+export * from './profile';
+export * from './opportunities';
+export * from './cie-state';
+export * from './briefings';
+export * from './audit';
 
 export interface Api {
   me: MeApi;

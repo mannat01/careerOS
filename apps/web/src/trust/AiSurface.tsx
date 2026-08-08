@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Confidence, Evidence, Tier } from './types.js';
+import type { Confidence, Evidence, Tier } from './types';
 
 /**
  * `<AiSurface>` — the *structural discipline* every AI-produced surface

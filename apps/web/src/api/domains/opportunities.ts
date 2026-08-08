@@ -16,7 +16,7 @@ import {
   type OpportunityListResponse,
   type OpportunityMatchResponse,
 } from '@careeros/contracts';
-import type { ApiClient, RequestOptions } from '../client.js';
+import type { ApiClient, RequestOptions } from '../client';
 
 /**
  * List envelope — the wire shape for `GET /v1/opportunities`. The individual

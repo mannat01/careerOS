@@ -18,7 +18,7 @@
  *  `use client` files from importing `src/auth/dev-provider`.)
  */
 import { SignJWT, jwtVerify } from 'jose';
-import type { ServerAuthProvider } from './types.js';
+import type { ServerAuthProvider } from './types';
 
 /** Test-visible so unit tests can drive `mintToken`/`verifyToken` without env. */
 export interface DevProviderOptions {

@@ -1,4 +1,4 @@
-import type { Tier } from './types.js';
+import type { Tier } from './types';
 
 /**
  * `<TierBadge tier>` — Green / Yellow / Red rendered as **icon + label +

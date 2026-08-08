@@ -52,6 +52,12 @@ jobs:
         run: pnpm -w typecheck
       - name: Lint (incl. import-boundary rules)
         run: pnpm -w lint
+      - name: Web production build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:3001
+          NEXT_PUBLIC_AUTH_PROVIDER: clerk
+          AUTH_PROVIDER: clerk
+        run: pnpm --filter @careeros/web build
       - name: Prisma schema validate
         run: pnpm --filter @careeros/db schema:validate
       - name: Migration check (deploy is a no-op if migrations are in sync)

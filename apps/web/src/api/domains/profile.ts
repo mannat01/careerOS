@@ -17,7 +17,7 @@ import {
   type ProfileImportRequest,
   type ProfileImportResponse,
 } from '@careeros/contracts';
-import type { ApiClient, RequestOptions } from '../client.js';
+import type { ApiClient, RequestOptions } from '../client';
 
 export interface ProfileApi {
   /**

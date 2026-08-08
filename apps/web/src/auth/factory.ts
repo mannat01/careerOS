@@ -15,10 +15,10 @@
  * call `getServerAuthProvider()`. The client side reads the bearer token
  * from an httpOnly cookie via the SessionProvider bridge.
  */
-import { createDevAuthProvider } from './dev-provider.js';
-import { createClerkAuthProviderStub } from './clerk-provider.js';
-import type { AuthProviderKind, ServerAuthProvider } from './types.js';
-import { loadWebServerEnv } from '../config/env.js';
+import { createDevAuthProvider } from './dev-provider';
+import { createClerkAuthProviderStub } from './clerk-provider';
+import type { AuthProviderKind, ServerAuthProvider } from './types';
+import { loadWebServerEnv } from '../config/env';
 
 export interface AuthEnv {
   /** Which backend to activate. Must be one of `AuthProviderKind`. */

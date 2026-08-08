@@ -17,14 +17,14 @@ import { render, screen, fireEvent, cleanup, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 
-import { TierBadge } from './TierBadge.js';
-import { ConfidenceChip } from './ConfidenceChip.js';
-import { ProvenanceTag } from './ProvenanceTag.js';
-import { WhyPopover } from './WhyPopover.js';
-import { InsufficientData } from './InsufficientData.js';
-import { AiSurface } from './AiSurface.js';
-import { ApprovalDialog } from './ApprovalDialog.js';
-import type { Confidence, Evidence, Provenance, Subject, Tier } from './types.js';
+import { TierBadge } from './TierBadge';
+import { ConfidenceChip } from './ConfidenceChip';
+import { ProvenanceTag } from './ProvenanceTag';
+import { WhyPopover } from './WhyPopover';
+import { InsufficientData } from './InsufficientData';
+import { AiSurface } from './AiSurface';
+import { ApprovalDialog } from './ApprovalDialog';
+import type { Confidence, Evidence, Provenance, Subject, Tier } from './types';
 
 // A minimal "user" from testing-library — kept per-suite to keep timers sane.
 function u(): ReturnType<typeof userEvent.setup> {
