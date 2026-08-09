@@ -1,6 +1,7 @@
-import { Body, Controller, Inject, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { importProfile } from '../modules/profile/import.handlers.js';
+import { getProfile } from '../modules/profile/read.handlers.js';
 import type { HandlerResponse } from '../common/errors/http-error.js';
 import { BearerAuthGuard, type AuthedRequest } from './bearer-auth.guard.js';
 import { APP_DEPS, type AppDeps } from './deps.js';
@@ -20,6 +21,12 @@ function send<T>(res: Response, r: HandlerResponse<T>): void {
 @UseGuards(BearerAuthGuard)
 export class ProfileController {
   constructor(@Inject(APP_DEPS) private readonly deps: AppDeps) {}
+
+  /** GET /v1/profile — explicit 404 when the caller has no profile. */
+  @Get()
+  async get(@Req() req: AuthedRequest, @Res() res: Response): Promise<void> {
+    send(res, await getProfile(req.ctx, this.deps.profile.profiles));
+  }
 
   /** POST /v1/profile/import — resume text (or parsed payload) → persisted entities. */
   @Post('import')

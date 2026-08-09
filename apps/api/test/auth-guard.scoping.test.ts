@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { MeResponse, User } from '@careeros/contracts';
+import { defaultUserSettings, type MeResponse, type User } from '@careeros/contracts';
 import {
   DevAuthProvider,
   getMe,
   InMemoryUserLifecycleRepo,
+  InMemoryIdentityBootstrapRepo,
   InMemoryUserRepo,
   InMemoryUserSettingsRepo,
   resolveBearerToken,
@@ -20,6 +21,7 @@ function makeUser(id: string, email: string): User {
   return {
     id, email, authProviderId: `dev_${id.slice(0, 8)}`,
     subscriptionTier: 'free', status: 'active',
+    onboardingCompletedAt: NOW.toISOString(),
     createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(),
   };
 }
@@ -32,10 +34,13 @@ describe('auth guard + per-user scoping (handler level)', () => {
     const users = new InMemoryUserRepo();
     users.seed(makeUser(USER_A, 'a@example.com'));
     users.seed(makeUser(USER_B, 'b@example.com'));
+    const settings = new InMemoryUserSettingsRepo();
+    awaitSettings(settings);
     deps = {
       users,
-      settings: new InMemoryUserSettingsRepo(),
+      settings,
       lifecycle: new InMemoryUserLifecycleRepo(),
+      bootstrap: new InMemoryIdentityBootstrapRepo(users, settings),
       clock: () => NOW,
     };
     provider = new DevAuthProvider(SECRET);
@@ -84,3 +89,8 @@ describe('auth guard + per-user scoping (handler level)', () => {
     expect(ctx).toBeNull();
   });
 });
+
+function awaitSettings(settings: InMemoryUserSettingsRepo): void {
+  void settings.save(defaultUserSettings(USER_A, NOW.toISOString()));
+  void settings.save(defaultUserSettings(USER_B, NOW.toISOString()));
+}

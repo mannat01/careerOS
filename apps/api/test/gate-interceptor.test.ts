@@ -11,6 +11,7 @@ import {
   contextFromVerifiedClaims,
   deleteMe,
   InMemoryUserLifecycleRepo,
+  InMemoryIdentityBootstrapRepo,
   InMemoryUserRepo,
   InMemoryUserSettingsRepo,
   withCapabilityGate,
@@ -25,6 +26,7 @@ function makeUser(id: string): User {
   return {
     id, email: 'a@example.com', authProviderId: 'clerk_a',
     subscriptionTier: 'free', status: 'active',
+    onboardingCompletedAt: NOW.toISOString(),
     createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(),
   };
 }
@@ -48,7 +50,14 @@ describe('capability-gate interceptor on DELETE /v1/me (Yellow)', () => {
     const users = new InMemoryUserRepo();
     users.seed(makeUser(USER_A));
     lifecycle = new InMemoryUserLifecycleRepo();
-    identityDeps = { users, settings: new InMemoryUserSettingsRepo(), lifecycle, clock: () => NOW };
+    const settings = new InMemoryUserSettingsRepo();
+    identityDeps = {
+      users,
+      settings,
+      lifecycle,
+      bootstrap: new InMemoryIdentityBootstrapRepo(users, settings),
+      clock: () => NOW,
+    };
   });
 
   const route = (deps: EnforceDeps) =>

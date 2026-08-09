@@ -79,12 +79,35 @@ describe('UserSettings defaults (conservative autonomy)', () => {
         authProviderId: 'clerk_123',
         subscriptionTier: 'free',
         status: 'active',
+        onboardingCompletedAt: null,
         createdAt: NOW,
         updatedAt: NOW,
       },
       settings: defaultUserSettings(UID, NOW),
+      onboarding: { status: 'required', completedAt: null },
     };
     expect(meResponseSchema.parse(me)).toEqual(me);
+  });
+
+  it('onboarding state is an explicit discriminated union', () => {
+    expect(meResponseSchema.safeParse({
+      user: {
+        id: UID, email: 'a@example.com', authProviderId: 'clerk_123',
+        subscriptionTier: 'free', status: 'active', onboardingCompletedAt: NOW,
+        createdAt: NOW, updatedAt: NOW,
+      },
+      settings: defaultUserSettings(UID, NOW),
+      onboarding: { status: 'complete', completedAt: NOW },
+    }).success).toBe(true);
+    expect(meResponseSchema.safeParse({
+      user: {
+        id: UID, email: 'a@example.com', authProviderId: 'clerk_123',
+        subscriptionTier: 'free', status: 'active', onboardingCompletedAt: null,
+        createdAt: NOW, updatedAt: NOW,
+      },
+      settings: defaultUserSettings(UID, NOW),
+      onboarding: { status: 'complete', completedAt: null },
+    }).success).toBe(false);
   });
 
   it('settings PATCH body is strict — unknown keys rejected', () => {

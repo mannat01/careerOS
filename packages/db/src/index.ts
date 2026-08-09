@@ -21,7 +21,12 @@ export {
   type AuditReadPortShape,
 } from './stores/prisma-audit-read-store.js';
 export { PrismaSourceRegistry } from './stores/prisma-source-registry.js';
-export { PrismaUserRepo, PrismaUserSettingsRepo, PrismaUserLifecycleRepo } from './stores/prisma-identity-repos.js';
+export {
+  PrismaIdentityBootstrapRepo,
+  PrismaUserRepo,
+  PrismaUserSettingsRepo,
+  PrismaUserLifecycleRepo,
+} from './stores/prisma-identity-repos.js';
 export { PrismaProfileRepo } from './stores/prisma-profile-repo.js';
 export {
   PrismaProfileReader,

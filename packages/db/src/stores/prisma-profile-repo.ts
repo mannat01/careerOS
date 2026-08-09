@@ -1,5 +1,5 @@
 import { PrismaClient, Prisma, type SkillLevel } from '@prisma/client';
-import type { ImportedEntity, ParsedEntity } from '@careeros/contracts';
+import { profileResponseSchema, type ImportedEntity, type ParsedEntity, type ProfileResponse } from '@careeros/contracts';
 import type { ProfileRepo, ProfileImportResult } from '../../../../apps/api/src/modules/profile/repos.js';
 
 /**
@@ -17,6 +17,51 @@ import type { ProfileRepo, ProfileImportResult } from '../../../../apps/api/src/
  */
 export class PrismaProfileRepo implements ProfileRepo {
   constructor(private readonly prisma: PrismaClient) {}
+
+  async findByUserId(userId: string): Promise<ProfileResponse | null> {
+    const profile = await this.prisma.profile.findUnique({
+      where: { userId },
+      include: { experiences: true, projects: true, education: true, skillClaims: true },
+    });
+    if (!profile) return null;
+    const strings = (value: Prisma.JsonValue | null): string[] =>
+      Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+    return profileResponseSchema.parse({
+      id: profile.id,
+      headline: profile.headline,
+      summary: profile.summary,
+      targetRoles: strings(profile.targetRoles),
+      locations: strings(profile.locations),
+      remotePreference: profile.remotePref,
+      goals: strings(profile.goals),
+      experiences: profile.experiences.map((row) => ({
+        id: row.id,
+        label: row.title,
+        detail: row.company,
+        provenance: row.provenance,
+      })),
+      projects: profile.projects.map((row) => ({
+        id: row.id,
+        label: row.name,
+        detail: row.description,
+        provenance: row.provenance,
+      })),
+      education: profile.education.map((row) => ({
+        id: row.id,
+        label: row.credential ?? row.institution,
+        detail: row.field,
+        provenance: row.provenance,
+      })),
+      skills: profile.skillClaims.map((row) => ({
+        id: row.id,
+        label: row.skill,
+        detail: row.level,
+        provenance: row.provenance,
+      })),
+      createdAt: profile.createdAt.toISOString(),
+      updatedAt: profile.updatedAt.toISOString(),
+    });
+  }
 
   async importEntities(userId: string, entities: ParsedEntity[]): Promise<ProfileImportResult> {
     return this.prisma.$transaction(async (tx) => {

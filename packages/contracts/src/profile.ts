@@ -70,3 +70,29 @@ export const profileImportResponseSchema = z.object({
   entities: z.array(importedEntitySchema),
 });
 export type ProfileImportResponse = z.infer<typeof profileImportResponseSchema>;
+
+/** Existing profile projection returned by GET /v1/profile. */
+const storedProvenanceSchema = z.enum(['imported', 'user', 'inferred_confirmed']);
+const storedFactSchema = z.object({
+  id: z.string().uuid(),
+  label: z.string(),
+  detail: z.string().nullable(),
+  provenance: storedProvenanceSchema,
+});
+
+export const profileResponseSchema = z.object({
+  id: z.string().uuid(),
+  headline: z.string().nullable(),
+  summary: z.string().nullable(),
+  targetRoles: z.array(z.string()),
+  locations: z.array(z.string()),
+  remotePreference: z.string().nullable(),
+  goals: z.array(z.string()),
+  experiences: z.array(storedFactSchema),
+  projects: z.array(storedFactSchema),
+  education: z.array(storedFactSchema),
+  skills: z.array(storedFactSchema),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type ProfileResponse = z.infer<typeof profileResponseSchema>;

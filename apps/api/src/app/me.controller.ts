@@ -1,7 +1,7 @@
 
 import { Body, Controller, Delete, Get, Inject, Patch, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
-import { deleteMe, getMe, patchMeSettings } from '../modules/identity/me.handlers.js';
+import { bootstrapMe, deleteMe, getMe, patchMeSettings } from '../modules/identity/me.handlers.js';
 import { withCapabilityGate } from '../common/capability-gate/gate-interceptor.js';
 import { ok, type HandlerResponse } from '../common/errors/http-error.js';
 import type { RequestContext } from '../common/auth/request-context.js';
@@ -27,6 +27,16 @@ export class MeController {
   @Get()
   async getMe(@Req() req: AuthedRequest, @Res() res: Response): Promise<void> {
     send(res, await getMe(req.ctx, this.deps.identity));
+  }
+
+  /** POST /v1/me/bootstrap — Green, identity-only, no ApprovalToken. */
+  @Post('bootstrap')
+  async bootstrap(
+    @Req() req: AuthedRequest,
+    @Body() body: unknown,
+    @Res() res: Response,
+  ): Promise<void> {
+    send(res, await bootstrapMe(req.ctx, body, this.deps.identity));
   }
 
   @Patch('settings')

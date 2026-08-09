@@ -3,18 +3,21 @@
 // bind 1:1 (controller → handler, interceptor → withCapabilityGate). See README.
 export { errorResponse, ok, type HandlerResponse } from './common/errors/http-error.js';
 export { contextFromVerifiedClaims, type RequestContext } from './common/auth/request-context.js';
+export { subjectToUserId } from './common/auth/dev-auth-provider.js';
 export { assertUserScope, scopedWhere, ScopeViolationError } from './common/auth/scope.js';
 export {
   withCapabilityGate,
   type UserAutonomyResolver,
 } from './common/capability-gate/gate-interceptor.js';
 export { makeUserAutonomyResolver } from './common/capability-gate/user-autonomy-resolver.js';
-export { deleteMe, getMe, patchMeSettings, type IdentityDeps } from './modules/identity/me.handlers.js';
+export { bootstrapMe, deleteMe, getMe, patchMeSettings, type IdentityDeps } from './modules/identity/me.handlers.js';
 export {
   InMemoryUserLifecycleRepo,
+  InMemoryIdentityBootstrapRepo,
   InMemoryUserRepo,
   InMemoryUserSettingsRepo,
   type UserLifecycleRepo,
+  type IdentityBootstrapRepo,
   type UserRepo,
   type UserSettingsRepo,
 } from './modules/identity/repos.js';
@@ -24,6 +27,7 @@ export {
   type MemoryEventPort,
   type ProfileImportDeps,
 } from './modules/profile/import.handlers.js';
+export { getProfile } from './modules/profile/read.handlers.js';
 export { MemoryServiceEventAdapter } from './modules/profile/memory-adapter.js';
 export {
   queryGraph,

@@ -17,6 +17,7 @@ import {
   PrismaProfileResolver,
   PrismaSemanticStore,
   PrismaUserLifecycleRepo,
+  PrismaIdentityBootstrapRepo,
   PrismaUserRepo,
   PrismaUserSettingsRepo,
   PrismaApplicationStore,
@@ -151,6 +152,7 @@ import { BullMqExportQueue, type ExportQueue } from '../common/queue/export-queu
 import { AgentExtractionAdapter } from '../modules/profile/extractor-adapter.js';
 import { MemoryServiceEventAdapter } from '../modules/profile/memory-adapter.js';
 import { makeUserAutonomyResolver } from '../common/capability-gate/user-autonomy-resolver.js';
+import { ApiExceptionFilter } from '../common/errors/api-exception.filter.js';
 
 
 /**
@@ -311,6 +313,7 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     users: new PrismaUserRepo(prisma),
     settings: new PrismaUserSettingsRepo(prisma),
     lifecycle: new PrismaUserLifecycleRepo(prisma),
+    bootstrap: new PrismaIdentityBootstrapRepo(prisma),
   };
 
   // M10 Step 2 — cross-user Market Intelligence pipeline. PRIVACY-CRITICAL.
@@ -696,5 +699,6 @@ function buildDashboardDeps(input: {
 /** Create (but do not listen) a Nest application bound to the given deps. */
 export async function createApp(deps: AppDeps): Promise<INestApplication> {
   const app = await NestFactory.create(AppModule.forRoot(deps), { logger: ['warn', 'error'] });
+  app.useGlobalFilters(new ApiExceptionFilter());
   return app;
 }

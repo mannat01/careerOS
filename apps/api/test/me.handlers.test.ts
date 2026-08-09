@@ -1,10 +1,17 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { CONSERVATIVE_AUTONOMY_DEFAULTS, type MeResponse, type User } from '@careeros/contracts';
+import {
+  CONSERVATIVE_AUTONOMY_DEFAULTS,
+  defaultUserSettings,
+  type MeResponse,
+  type User,
+} from '@careeros/contracts';
 import {
   assertUserScope,
+  bootstrapMe,
   contextFromVerifiedClaims,
   getMe,
   InMemoryUserLifecycleRepo,
+  InMemoryIdentityBootstrapRepo,
   InMemoryUserRepo,
   InMemoryUserSettingsRepo,
   patchMeSettings,
@@ -20,6 +27,7 @@ function makeUser(id: string, email: string): User {
   return {
     id, email, authProviderId: `clerk_${id.slice(0, 8)}`,
     subscriptionTier: 'free', status: 'active',
+    onboardingCompletedAt: NOW.toISOString(),
     createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(),
   };
 }
@@ -27,22 +35,27 @@ function makeUser(id: string, email: string): User {
 describe('GET /v1/me + PATCH /v1/me/settings handlers', () => {
   let deps: IdentityDeps;
   let users: InMemoryUserRepo;
+  let settings: InMemoryUserSettingsRepo;
 
   beforeEach(() => {
     users = new InMemoryUserRepo();
     users.seed(makeUser(USER_A, 'a@example.com'));
     users.seed(makeUser(USER_B, 'b@example.com'));
+    settings = new InMemoryUserSettingsRepo();
+    void settings.save(defaultUserSettings(USER_A, NOW.toISOString()));
+    void settings.save(defaultUserSettings(USER_B, NOW.toISOString()));
     deps = {
       users,
-      settings: new InMemoryUserSettingsRepo(),
+      settings,
       lifecycle: new InMemoryUserLifecycleRepo(),
+      bootstrap: new InMemoryIdentityBootstrapRepo(users, settings),
       clock: () => NOW,
     };
   });
 
   const ctxA = contextFromVerifiedClaims({ userId: USER_A, traceId: 't-a' });
 
-  it('returns the user with conservative default settings on first read', async () => {
+  it('returns an existing complete user without changing onboarding', async () => {
     const res = await getMe(ctxA, deps);
     expect(res.status).toBe(200);
     const body = res.body as MeResponse;
@@ -50,6 +63,7 @@ describe('GET /v1/me + PATCH /v1/me/settings handlers', () => {
     expect(body.settings.autonomyDefaults).toEqual(CONSERVATIVE_AUTONOMY_DEFAULTS);
     expect(body.settings.dataUseOptIns).toEqual({ training: false, crossUserIntel: false });
     expect(body.settings.briefingSchedule).toBeNull();
+    expect(body.onboarding).toEqual({ status: 'complete', completedAt: NOW.toISOString() });
   });
 
   it('is row-scoped: user A only ever reads their own settings', async () => {
@@ -74,6 +88,74 @@ describe('GET /v1/me + PATCH /v1/me/settings handlers', () => {
   it('returns not_found for an unknown user', async () => {
     const res = await getMe(contextFromVerifiedClaims({ userId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', traceId: 't' }), deps);
     expect(res.status).toBe(404);
+  });
+
+  it('first bootstrap creates one user/settings identity and second returns the same account', async () => {
+    const firstRunId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const firstRun = contextFromVerifiedClaims({
+      userId: firstRunId,
+      traceId: 'bootstrap-1',
+      provider: 'dev',
+      providerSubject: firstRunId,
+      email: 'first@example.com',
+    });
+    const first = await bootstrapMe(firstRun, undefined, deps);
+    const second = await bootstrapMe(firstRun, undefined, deps);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect((first.body as MeResponse).user.id).toBe(firstRunId);
+    expect((second.body as MeResponse).user.id).toBe(firstRunId);
+    expect((first.body as MeResponse).onboarding).toEqual({ status: 'required', completedAt: null });
+    expect((await settings.findByUserId(firstRunId))?.autonomyDefaults)
+      .toEqual(CONSERVATIVE_AUTONOMY_DEFAULTS);
+  });
+
+  it('bootstrap does not overwrite existing settings or complete/suspended/deleted state', async () => {
+    const custom = defaultUserSettings(USER_A, NOW.toISOString());
+    custom.autonomyDefaults = { 'resume.tailor': 'yellow' };
+    await settings.save(custom);
+    for (const status of ['active', 'suspended', 'deleted'] as const) {
+      users.seed({ ...makeUser(USER_A, 'a@example.com'), status });
+      const response = await bootstrapMe(ctxA, undefined, deps);
+      const me = response.body as MeResponse;
+      expect(me.user.status).toBe(status);
+      expect(me.onboarding.status).toBe('complete');
+      expect(me.settings.autonomyDefaults).toEqual({ 'resume.tailor': 'yellow' });
+    }
+  });
+
+  it('body-supplied identity cannot affect ownership', async () => {
+    const response = await bootstrapMe(
+      ctxA,
+      { userId: USER_B, providerSubject: USER_B, status: 'active' },
+      deps,
+    );
+    expect((response.body as MeResponse).user.id).toBe(USER_A);
+  });
+
+  it('GET with a missing settings row is internal and never provisions through the read', async () => {
+    const emptySettings = new InMemoryUserSettingsRepo();
+    const localDeps: IdentityDeps = {
+      ...deps,
+      settings: emptySettings,
+      bootstrap: new InMemoryIdentityBootstrapRepo(users, emptySettings),
+    };
+    const response = await getMe(ctxA, localDeps);
+    expect(response.status).toBe(500);
+    expect((response.body as { error: { code: string; traceId?: string } }).error)
+      .toMatchObject({ code: 'internal', traceId: 't-a' });
+    expect(await emptySettings.findByUserId(USER_A)).toBeNull();
+  });
+
+  it('database/dependency failure remains typed internal with trace id', async () => {
+    const response = await getMe(ctxA, {
+      ...deps,
+      users: { findById: () => Promise.reject(new Error('db unavailable')) },
+    });
+    expect(response.status).toBe(500);
+    expect((response.body as { error: { code: string; traceId?: string } }).error)
+      .toMatchObject({ code: 'internal', traceId: 't-a' });
   });
 
   it('PATCH updates settings and merges partial autonomy overrides', async () => {

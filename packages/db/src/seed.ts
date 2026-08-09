@@ -68,6 +68,7 @@ const DEV_AUTONOMY_DEFAULTS: Prisma.InputJsonValue = {
 
 const DEV_BRIEFING_STARTED_AT = new Date('2026-01-06T06:00:00Z');
 const DEV_BRIEFING_FINISHED_AT = new Date('2026-01-06T06:00:42Z');
+const DEV_ONBOARDING_COMPLETED_AT = new Date('2026-01-06T05:59:00Z');
 const DEV_BRIEFING_STEPS: Prisma.InputJsonValue = [
   {
     name: 'ingest',
@@ -145,8 +146,13 @@ async function seedDevDataset(): Promise<void> {
       authProviderId: `dev|${DEV_USER_ID}`,
       subscriptionTier: 'pro', // pro so capability-gated dev surfaces are reachable
       status: 'active',
+      onboardingCompletedAt: DEV_ONBOARDING_COMPLETED_AT,
     },
-    update: { email: DEV_USER_EMAIL, status: 'active' },
+    update: {
+      email: DEV_USER_EMAIL,
+      status: 'active',
+      onboardingCompletedAt: DEV_ONBOARDING_COMPLETED_AT,
+    },
   });
 
   await prisma.userSettings.upsert({

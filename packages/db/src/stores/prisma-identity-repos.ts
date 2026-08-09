@@ -1,7 +1,17 @@
-import type { AutonomyTier } from '@careeros/contracts';
-import type { User, UserSettings } from '@careeros/contracts';
+import {
+  onboardingStateFromCompletedAt,
+  type AutonomyTier,
+  type MeResponse,
+  type User,
+  type UserSettings,
+} from '@careeros/contracts';
 import { PrismaClient, Prisma } from '@prisma/client';
-import type { UserRepo, UserSettingsRepo, UserLifecycleRepo } from '../../../../apps/api/src/modules/identity/repos.js';
+import type {
+  IdentityBootstrapRepo,
+  UserRepo,
+  UserSettingsRepo,
+  UserLifecycleRepo,
+} from '../../../../apps/api/src/modules/identity/repos.js';
 
 /**
  * Prisma-backed identity repos.
@@ -22,10 +32,77 @@ export class PrismaUserRepo implements UserRepo {
       authProviderId: row.authProviderId,
       subscriptionTier: row.subscriptionTier,
       status: row.status,
+      onboardingCompletedAt: row.onboardingCompletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
   }
+}
+
+export class PrismaIdentityBootstrapRepo implements IdentityBootstrapRepo {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async bootstrap(input: {
+    userId: string;
+    authProviderId: string;
+    email: string;
+    settings: UserSettings;
+  }): Promise<MeResponse> {
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const legacy = await tx.user.findUnique({ where: { id: input.userId } });
+          const user = legacy ?? await tx.user.upsert({
+            where: { authProviderId: input.authProviderId },
+            create: {
+              id: input.userId,
+              email: input.email,
+              authProviderId: input.authProviderId,
+              onboardingCompletedAt: null,
+            },
+            update: {},
+          });
+
+          const settings = await tx.userSettings.upsert({
+            where: { userId: user.id },
+            create: {
+              userId: user.id,
+              autonomyDefaults: input.settings.autonomyDefaults,
+              quietHours: input.settings.quietHours as Prisma.InputJsonValue,
+              briefingSchedule: input.settings.briefingSchedule as Prisma.InputJsonValue,
+              sourcePrefs: input.settings.sourcePrefs,
+              dataUseOptins: input.settings.dataUseOptIns,
+            },
+            update: {},
+          });
+
+          const userDto: User = {
+            id: user.id,
+            email: user.email,
+            authProviderId: user.authProviderId,
+            subscriptionTier: user.subscriptionTier,
+            status: user.status,
+            onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
+            createdAt: user.createdAt.toISOString(),
+            updatedAt: user.updatedAt.toISOString(),
+          };
+          return {
+            user: userDto,
+            settings: toSettings(settings),
+            onboarding: onboardingStateFromCompletedAt(userDto.onboardingCompletedAt),
+          };
+        });
+      } catch (error) {
+        if (attempt === 4 || !isConcurrencyConflict(error)) throw error;
+      }
+    }
+    throw new Error('unreachable bootstrap retry state');
+  }
+}
+
+function isConcurrencyConflict(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === 'P2002' || error.code === 'P2034');
 }
 
 export class PrismaUserSettingsRepo implements UserSettingsRepo {
@@ -34,16 +111,7 @@ export class PrismaUserSettingsRepo implements UserSettingsRepo {
   async findByUserId(userId: string): Promise<UserSettings | null> {
     const row = await this.prisma.userSettings.findUnique({ where: { userId } });
     if (!row) return null;
-    return {
-      userId: row.userId,
-      autonomyDefaults: row.autonomyDefaults as Record<string, AutonomyTier>,
-      quietHours: row.quietHours as { start: string; end: string; timezone: string } | null,
-      briefingSchedule: row.briefingSchedule as { cron: string; timezone: string } | null,
-      sourcePrefs: row.sourcePrefs as Record<string, boolean>,
-      dataUseOptIns: row.dataUseOptins as { training: boolean; crossUserIntel: boolean },
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
-    };
+    return toSettings(row);
   }
 
   async save(settings: UserSettings): Promise<UserSettings> {
@@ -65,17 +133,30 @@ export class PrismaUserSettingsRepo implements UserSettingsRepo {
         dataUseOptins: settings.dataUseOptIns,
       },
     });
-    return {
-      userId: row.userId,
-      autonomyDefaults: row.autonomyDefaults as Record<string, AutonomyTier>,
-      quietHours: row.quietHours as { start: string; end: string; timezone: string } | null,
-      briefingSchedule: row.briefingSchedule as { cron: string; timezone: string } | null,
-      sourcePrefs: row.sourcePrefs as Record<string, boolean>,
-      dataUseOptIns: row.dataUseOptins as { training: boolean; crossUserIntel: boolean },
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
-    };
+    return toSettings(row);
   }
+}
+
+function toSettings(row: {
+  userId: string;
+  autonomyDefaults: Prisma.JsonValue;
+  quietHours: Prisma.JsonValue | null;
+  briefingSchedule: Prisma.JsonValue | null;
+  sourcePrefs: Prisma.JsonValue;
+  dataUseOptins: Prisma.JsonValue;
+  createdAt: Date;
+  updatedAt: Date;
+}): UserSettings {
+  return {
+    userId: row.userId,
+    autonomyDefaults: row.autonomyDefaults as Record<string, AutonomyTier>,
+    quietHours: row.quietHours as { start: string; end: string; timezone: string } | null,
+    briefingSchedule: row.briefingSchedule as { cron: string; timezone: string } | null,
+    sourcePrefs: row.sourcePrefs as Record<string, boolean>,
+    dataUseOptIns: row.dataUseOptins as { training: boolean; crossUserIntel: boolean },
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
 }
 
 export class PrismaUserLifecycleRepo implements UserLifecycleRepo {

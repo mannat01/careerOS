@@ -158,6 +158,7 @@ model User {
   authProviderId   String           @unique @map("auth_provider_id")
   subscriptionTier SubscriptionTier @default(free) @map("subscription_tier")
   status           UserStatus       @default(active)
+  onboardingCompletedAt DateTime?    @map("onboarding_completed_at") @db.Timestamptz(6)
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 

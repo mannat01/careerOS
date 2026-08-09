@@ -27,8 +27,10 @@ import {
   type SkillsHandlerDeps,
 } from '../src/modules/cie/skills.handlers.js';
 import type { RequestContext } from '../src/common/auth/request-context.js';
+import { contextFromVerifiedClaims } from '../src/common/auth/request-context.js';
 
-const ctx = (userId: string): RequestContext => ({ userId, traceId: 't-1', headers: {} });
+const ctx = (userId: string): RequestContext =>
+  contextFromVerifiedClaims({ userId, traceId: 't-1' });
 
 const ANALYSIS: GapAnalysis = {
   modelVersion: 'gap-analyzer-v1',

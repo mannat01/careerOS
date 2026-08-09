@@ -4,7 +4,7 @@
  * StateUpdater guardrail agent on a scripted FakeLlm). No Nest, no Postgres.
  *
  * Locks the things the e2e can't cheaply prove per-branch:
- *  - GET computes lazily then returns the persisted model (≥12 dimensions),
+ *  - GET is read-only and returns 404 until explicit recompute persists a model,
  *  - per-user scoping — one user's recompute never leaks into another's read,
  *  - /explain resolves evidence refs back to their source facts,
  *  - unknown dimension → 404,
@@ -113,15 +113,14 @@ function buildDeps(): { deps: StateHandlerDeps; facts: FakeFactPort; events: Rec
 const skillFact = (id: string, summary: string): StateProfileFact => ({ id, kind: 'skill', summary });
 
 describe('GET /v1/cie/state', () => {
-  it('computes lazily on first read and returns the persisted model', async () => {
+  it('returns typed 404 when no state has been computed', async () => {
     const { deps, facts } = buildDeps();
     facts.byUser.set(USER_A, [skillFact('f1', 'Kubernetes'), skillFact('f2', 'Terraform')]);
 
     const res = await getState(ctx(USER_A), deps);
-    expect(res.status).toBe(200);
-    const model = res.body as CareerStateModel;
-    const demonstrated = model.dimensions.find((d) => d.dimension === 'demonstrated_skills');
-    expect(demonstrated?.value.values).toEqual(['Kubernetes', 'Terraform']);
+    expect(res.status).toBe(404);
+    expect((res.body as { error: { code: string; traceId?: string } }).error)
+      .toMatchObject({ code: 'not_found', traceId: 'trace-1' });
   });
 
   it('scopes per-user — B never sees A\'s computed state', async () => {
@@ -129,11 +128,22 @@ describe('GET /v1/cie/state', () => {
     facts.byUser.set(USER_A, [skillFact('f1', 'Kubernetes')]);
     facts.byUser.set(USER_B, [skillFact('f9', 'Figma')]);
 
+    await recomputeState(ctx(USER_A), undefined, deps);
+    await recomputeState(ctx(USER_B), undefined, deps);
     const a = (await getState(ctx(USER_A), deps)).body as CareerStateModel;
     const b = (await getState(ctx(USER_B), deps)).body as CareerStateModel;
 
     expect(a.dimensions.find((d) => d.dimension === 'demonstrated_skills')?.value.values).toEqual(['Kubernetes']);
     expect(b.dimensions.find((d) => d.dimension === 'demonstrated_skills')?.value.values).toEqual(['Figma']);
+  });
+
+  it('dependency failure remains typed internal with trace id', async () => {
+    const { deps } = buildDeps();
+    deps.service.getState = () => Promise.reject(new Error('state store unavailable'));
+    const res = await getState(ctx(USER_A), deps);
+    expect(res.status).toBe(500);
+    expect((res.body as { error: { code: string; traceId?: string } }).error)
+      .toMatchObject({ code: 'internal', traceId: 'trace-1' });
   });
 });
 
@@ -141,7 +151,7 @@ describe('GET /v1/cie/state/:dimension/explain', () => {
   it('resolves evidence refs back to their source facts', async () => {
     const { deps, facts } = buildDeps();
     facts.byUser.set(USER_A, [skillFact('f1', 'Kubernetes')]);
-    await getState(ctx(USER_A), deps);
+    await recomputeState(ctx(USER_A), undefined, deps);
 
     const res = await explainDimension(ctx(USER_A), 'demonstrated_skills', deps);
     expect(res.status).toBe(200);
@@ -153,7 +163,7 @@ describe('GET /v1/cie/state/:dimension/explain', () => {
   it('returns 404 for an unknown dimension', async () => {
     const { deps, facts } = buildDeps();
     facts.byUser.set(USER_A, [skillFact('f1', 'Kubernetes')]);
-    await getState(ctx(USER_A), deps);
+    await recomputeState(ctx(USER_A), undefined, deps);
 
     const res = await explainDimension(ctx(USER_A), 'not_a_dimension', deps);
     expect(res.status).toBe(404);
@@ -164,7 +174,7 @@ describe('POST /v1/cie/state/recompute — change hook', () => {
   it('emits a MemoryEvent recording WHY a dimension moved after a fact edit', async () => {
     const { deps, facts, events } = buildDeps();
     facts.byUser.set(USER_A, [skillFact('f1', 'Kubernetes')]);
-    await getState(ctx(USER_A), deps); // v1
+    await recomputeState(ctx(USER_A), undefined, deps); // v1
 
     // Edit the profile: add a demonstrated skill, then route through the change hook.
     facts.byUser.set(USER_A, [skillFact('f1', 'Kubernetes'), skillFact('f2', 'Terraform')]);

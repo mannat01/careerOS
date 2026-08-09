@@ -8,11 +8,14 @@ const USER_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 describe('DevAuthProvider', () => {
   it('verifies a valid token', async () => {
     const provider = new DevAuthProvider(SECRET);
-    const token = await DevAuthProvider.mint(USER_ID, SECRET);
+    const token = await DevAuthProvider.mint(USER_ID, SECRET, 'verified@example.com');
     const ctx = await provider.verify(token);
     expect(ctx).not.toBeNull();
     expect(ctx!.userId).toBe(USER_ID);
     expect(ctx!.traceId).toBeDefined();
+    expect(ctx!.identity).toEqual({
+      provider: 'dev', subject: USER_ID, email: 'verified@example.com',
+    });
   });
 
   it('rejects an expired token', async () => {

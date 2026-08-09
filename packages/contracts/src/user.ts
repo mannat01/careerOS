@@ -26,10 +26,26 @@ export const userSchema = z.object({
   authProviderId: z.string().min(1),
   subscriptionTier: z.enum(['free', 'pro']),
   status: z.enum(['active', 'suspended', 'deleted']),
+  onboardingCompletedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
 export type User = z.infer<typeof userSchema>;
+
+/** Backend-owned onboarding state. Resource presence is never a completion signal. */
+export const onboardingStateSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('required'), completedAt: z.null() }),
+  z.object({ status: z.literal('complete'), completedAt: z.string().datetime() }),
+]);
+export type OnboardingState = z.infer<typeof onboardingStateSchema>;
+
+export function onboardingStateFromCompletedAt(
+  completedAt: string | null,
+): OnboardingState {
+  return completedAt === null
+    ? { status: 'required', completedAt: null }
+    : { status: 'complete', completedAt };
+}
 
 export const quietHoursSchema = z.object({
   start: z.string().regex(/^\d{2}:\d{2}$/, 'HH:MM'),
@@ -103,6 +119,7 @@ export function defaultUserSettings(userId: string, nowIso: string): UserSetting
 export const meResponseSchema = z.object({
   user: userSchema,
   settings: userSettingsSchema,
+  onboarding: onboardingStateSchema,
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;
 

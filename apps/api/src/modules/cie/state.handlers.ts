@@ -94,18 +94,20 @@ export interface StateHandlerDeps {
 // ---------- GET /v1/cie/state ----------
 
 /**
- * GET /v1/cie/state — the caller's current Career State Model. When it was never
- * computed, we compute it once (lazily) so a fresh profile still returns a
- * well-shaped model rather than 404. PER-USER: the userId comes ONLY from ctx.
+ * GET /v1/cie/state — the caller's current Career State Model. Reads never
+ * create state; a missing model is an intentional typed 404.
  */
 export async function getState(
   ctx: RequestContext,
   deps: StateHandlerDeps,
 ): Promise<HandlerResponse<CareerStateModel>> {
-  const existing = await deps.service.getState(ctx.userId);
-  if (existing) return ok(existing);
-  const computed = await deps.service.recompute(ctx.userId, ctx.userId);
-  return ok(computed);
+  try {
+    const existing = await deps.service.getState(ctx.userId);
+    if (existing) return ok(existing);
+    return errorResponse('not_found', 'Career state not found.', { traceId: ctx.traceId });
+  } catch {
+    return errorResponse('internal', 'Career state dependency failed.', { traceId: ctx.traceId });
+  }
 }
 
 // ---------- GET /v1/cie/state/:dimension/explain ----------
@@ -119,9 +121,10 @@ export async function explainDimension(
   dimension: string,
   deps: StateHandlerDeps,
 ): Promise<HandlerResponse<DimensionExplanation>> {
-  // Ensure a model exists so an explain on a never-computed state still works.
   const existing = await deps.service.getState(ctx.userId);
-  if (!existing) await deps.service.recompute(ctx.userId, ctx.userId);
+  if (!existing) {
+    return errorResponse('not_found', 'Career state not found.', { traceId: ctx.traceId });
+  }
 
   const explanation = await deps.service.explainDimension(ctx.userId, dimension);
   if (!explanation) {

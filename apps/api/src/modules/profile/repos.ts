@@ -1,4 +1,4 @@
-import type { ParsedEntity, ImportedEntity } from '@careeros/contracts';
+import type { ParsedEntity, ImportedEntity, ProfileResponse } from '@careeros/contracts';
 
 /**
  * Profile persistence boundary — apps/api owns the interface; the Prisma-backed
@@ -15,6 +15,7 @@ export interface ProfileImportResult {
 }
 
 export interface ProfileRepo {
+  findByUserId(userId: string): Promise<ProfileResponse | null>;
   /**
    * Upsert the user's Profile, then persist every extracted entity under it,
    * preserving provenance. Returns the profile id + the persisted entities
@@ -49,6 +50,10 @@ export class InMemoryProfileRepo implements ProfileRepo {
     }));
     this.entitiesByProfile.get(profileId)?.push(...persisted);
     return Promise.resolve({ profileId, entities: persisted });
+  }
+
+  findByUserId(_userId: string): Promise<ProfileResponse | null> {
+    return Promise.resolve(null);
   }
 
   /** Test helper: everything persisted for a user (asserts scoping). */

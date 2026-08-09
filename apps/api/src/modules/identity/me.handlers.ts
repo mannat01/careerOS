@@ -1,6 +1,7 @@
 import {
   defaultUserSettings,
   meResponseSchema,
+  onboardingStateFromCompletedAt,
   updateUserSettingsRequestSchema,
   userSettingsSchema,
   type MeResponse,
@@ -9,35 +10,64 @@ import {
 import { errorResponse, ok, type HandlerResponse } from '../../common/errors/http-error.js';
 import type { RequestContext } from '../../common/auth/request-context.js';
 import { assertUserScope } from '../../common/auth/scope.js';
-import type { UserLifecycleRepo, UserRepo, UserSettingsRepo } from './repos.js';
+import type { IdentityBootstrapRepo, UserLifecycleRepo, UserRepo, UserSettingsRepo } from './repos.js';
 
 export interface IdentityDeps {
   users: UserRepo;
   settings: UserSettingsRepo;
   lifecycle: UserLifecycleRepo;
+  bootstrap: IdentityBootstrapRepo;
   clock?: () => Date;
 }
 
 const nowIso = (deps: IdentityDeps): string => (deps.clock ?? (() => new Date()))().toISOString();
 
-/** GET /v1/me — user + settings; first read provisions conservative defaults. */
+/** GET /v1/me — a read only. Account creation belongs exclusively to bootstrap. */
 export async function getMe(
   ctx: RequestContext,
   deps: IdentityDeps,
 ): Promise<HandlerResponse<MeResponse>> {
-  const user = await deps.users.findById(ctx.userId);
-  if (user === null) {
-    return errorResponse('not_found', 'User not found.', { traceId: ctx.traceId });
-  }
-  assertUserScope(ctx.userId, user.id);
+  try {
+    const user = await deps.users.findById(ctx.userId);
+    if (user === null) {
+      return errorResponse('not_found', 'User not found.', { traceId: ctx.traceId });
+    }
+    assertUserScope(ctx.userId, user.id);
 
-  let settings = await deps.settings.findByUserId(ctx.userId);
-  if (settings === null) {
-    settings = await deps.settings.save(defaultUserSettings(ctx.userId, nowIso(deps)));
-  }
+    const settings = await deps.settings.findByUserId(ctx.userId);
+    if (settings === null) {
+      return errorResponse('internal', 'Account settings are unavailable.', { traceId: ctx.traceId });
+    }
 
-  // Contract test in-line: the response must validate against the shared schema.
-  return ok(meResponseSchema.parse({ user, settings }));
+    return ok(meResponseSchema.parse({
+      user,
+      settings,
+      onboarding: onboardingStateFromCompletedAt(user.onboardingCompletedAt),
+    }));
+  } catch {
+    return errorResponse('internal', 'Identity dependency failed.', { traceId: ctx.traceId });
+  }
+}
+
+/** POST /v1/me/bootstrap — idempotent first-run account/settings creation (Green). */
+export async function bootstrapMe(
+  ctx: RequestContext,
+  _body: unknown,
+  deps: IdentityDeps,
+): Promise<HandlerResponse<MeResponse>> {
+  try {
+    const created = await deps.bootstrap.bootstrap({
+      userId: ctx.userId,
+      authProviderId: `${ctx.identity.provider}|${ctx.identity.subject}`,
+      email: ctx.identity.email ?? `${ctx.userId}@${ctx.identity.provider}.careeros.local`,
+      settings: defaultUserSettings(ctx.userId, nowIso(deps)),
+    });
+    return ok(meResponseSchema.parse(created));
+  } catch {
+    return errorResponse('internal', 'Identity bootstrap dependency failed.', {
+      traceId: ctx.traceId,
+    });
+  }
 }
 
 /** PATCH /v1/me/settings — boundary-validated partial update (Green). */

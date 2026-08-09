@@ -80,7 +80,19 @@ d('M01 /v1/me over HTTP (booted NestJS app)', () => {
     prisma = new PrismaClient({ datasourceUrl: env.DATABASE_URL });
     for (const u of [userA, userB]) {
       await prisma.user.create({
-        data: { id: u.id, email: u.email, authProviderId: `dev_${u.id.slice(0, 8)}` },
+        data: {
+          id: u.id,
+          email: u.email,
+          authProviderId: `dev_${u.id.slice(0, 8)}`,
+          onboardingCompletedAt: new Date('2026-07-01T00:00:00.000Z'),
+          settings: {
+            create: {
+              autonomyDefaults: { 'me.export': 'green', 'me.delete': 'yellow' },
+              sourcePrefs: {},
+              dataUseOptins: { training: false, crossUserIntel: false },
+            },
+          },
+        },
       });
     }
 
@@ -109,7 +121,7 @@ d('M01 /v1/me over HTTP (booted NestJS app)', () => {
 
   // ---------- happy paths + scoping ----------
 
-  it('GET /v1/me returns the token owner and provisions default settings', async () => {
+  it('GET /v1/me returns the token owner without provisioning through the read', async () => {
     const res = await request(http).get('/v1/me').set('Authorization', `Bearer ${tokenA}`);
     expect(res.status).toBe(200);
     const me = body<{ user: { id: string; email: string }; settings: { userId: string } }>(res);
