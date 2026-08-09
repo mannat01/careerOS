@@ -69,6 +69,18 @@ The liveness check is unauthenticated `GET http://localhost:3001/healthz`, which
 must return HTTP 200 with `{ "status": "ok" }` and has no database dependency.
 If the API is already responding, probe it — **never kill a server you didn't start.**
 
+### 5c. Database migration workflow
+
+- **Apply:** `make db-migrate` is deployment-only. It safely loads and validates
+  the root `.env`, then runs `prisma migrate deploy`. It applies committed
+  migrations only, is noninteractive, and is safe to rerun.
+- **Author:** migration authoring is a separate, deliberate workflow using the
+  `@careeros/db` Prisma authoring script. Never use the canonical apply target to
+  generate migration SQL.
+- **Review custom SQL:** custom SQL indexes such as pgvector HNSW indexes must be
+  preserved. Review every generated migration for destructive drift before it is
+  committed; an unexplained `DROP INDEX` is a stop condition, not cleanup.
+
 ## 6. Golden-dataset rule (greenfield)
 No historical data exists. An agent's **first** deliverable is its hand-authored golden set (10–30 labeled cases) under `evals/<agent>/`, committed before the agent logic. An eval gate with no dataset is not "done."
 

@@ -44,6 +44,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Canonical DB tooling is deploy-only and value-free
+        run: make db-tooling-test
       - name: Circular dependency check (madge)
         run: pnpm exec madge --circular --extensions ts packages/config/src packages/contracts/src packages/capability-gate/src packages/connectors/src packages/observability/src packages/db/src packages/cie/resume/src apps/api/src
       - name: Prisma generate (typed client for @careeros/db)

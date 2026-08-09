@@ -1,8 +1,8 @@
 # CareerOS dev shortcuts
-.PHONY: up down api web web-build env-check env-check-test db-migrate db-seed test bootstrap verify
+.PHONY: up down api web web-build env-check env-check-test db-migrate db-seed db-tooling-test test bootstrap verify
 
-# The default is the root .env. ENV_FILE is overrideable only so env-check-test
-# can exercise missing/configured files without changing the developer's .env.
+# The default is the root .env. ENV_FILE is overrideable only so lightweight
+# tooling tests can exercise missing/configured files without changing it.
 ENV_FILE ?= .env
 
 # Run `make api` and `make web` in separate terminals. The API uses the package
@@ -48,10 +48,43 @@ up:            ## start local infra (pg+pgvector, redis, minio)
 	docker compose -f infra/docker-compose.yml up -d
 down:
 	docker compose -f infra/docker-compose.yml down
+# Canonical migration is deployment-only: apply committed migrations without
+# prompting or generating migration SQL. Author migrations separately and
+# deliberately with the @careeros/db authoring script.
 db-migrate:
-	pnpm --filter @careeros/db exec prisma migrate dev
+	@test -f "$(ENV_FILE)" || (echo "Missing $(ENV_FILE); copy .env.local.example to .env" && exit 1)
+	@set -a; . "$(ENV_FILE)"; set +a; \
+	  test -n "$$DATABASE_URL" || { echo 'DATABASE_URL missing'; exit 1; }; \
+	  pnpm --filter @careeros/db exec prisma migrate deploy
 db-seed:
-	pnpm --filter @careeros/db exec tsx src/seed.ts
+	@test -f "$(ENV_FILE)" || (echo "Missing $(ENV_FILE); copy .env.local.example to .env" && exit 1)
+	@set -a; . "$(ENV_FILE)"; set +a; \
+	  test -n "$$DATABASE_URL" || { echo 'DATABASE_URL missing'; exit 1; }; \
+	  pnpm --filter @careeros/db exec tsx src/seed.ts
+
+# DB-free regression proof: the canonical target loads its env, invokes deploy
+# (never dev), remains noninteractive, and does not disclose environment values.
+db-tooling-test:
+	@tmp_dir=$$(mktemp -d); trap 'rm -rf "$$tmp_dir"' EXIT INT TERM; \
+	  canary_url='postgresql://canary-user:canary-password@localhost:5432/canary-db'; \
+	  printf 'DATABASE_URL=%s\n' "$$canary_url" > "$$tmp_dir/configured.env"; \
+	  mkdir "$$tmp_dir/bin"; \
+	  printf '%s\n' '#!/bin/sh' \
+	    'printf "%s\n" "$$*" > "$$DB_TOOLING_TEST_LOG"' \
+	    'test "$$DATABASE_URL" = "$$DB_TOOLING_TEST_DATABASE_URL"' \
+	    > "$$tmp_dir/bin/pnpm"; \
+	  chmod +x "$$tmp_dir/bin/pnpm"; \
+	  output=$$(PATH="$$tmp_dir/bin:$$PATH" \
+	    DB_TOOLING_TEST_LOG="$$tmp_dir/args.log" \
+	    DB_TOOLING_TEST_DATABASE_URL="$$canary_url" \
+	    $(MAKE) --no-print-directory ENV_FILE="$$tmp_dir/configured.env" db-migrate 2>&1) || \
+	    { printf '%s\n' "$$output"; echo 'Expected db-migrate tooling probe to pass'; exit 1; }; \
+	  test "$$(cat "$$tmp_dir/args.log")" = '--filter @careeros/db exec prisma migrate deploy' || \
+	    { echo 'db-migrate did not invoke prisma migrate deploy'; exit 1; }; \
+	  if printf '%s\n' "$$output" | grep -Eq 'migrate dev|canary-user|canary-password|canary-db|postgresql://'; then \
+	    echo 'Interactive migration command or environment value disclosure detected'; exit 1; \
+	  fi; \
+	  echo 'db tooling regression: deploy-only and value-free'
 test:
 	pnpm -w test
 
@@ -67,6 +100,7 @@ test:
 verify:
 	@node -e "const [maj]=process.versions.node.split('.').map(Number); if(maj<22){console.error('Node >=22 required (matches CI + engines.node). Current: '+process.versions.node); process.exit(1);}"
 	pnpm install --frozen-lockfile
+	$(MAKE) --no-print-directory db-tooling-test
 	pnpm --filter @careeros/db exec prisma generate
 	pnpm -w typecheck
 	pnpm -w lint
