@@ -15,7 +15,19 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      testIgnore: '**/dependency-failure.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'dependency-failure',
+      dependencies: ['chromium'],
+      testMatch: '**/dependency-failure.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
   webServer: [
     {
       command: `cd ${root} && ${loadLocalEnv} AUTH_PROVIDER=dev LLM_PROVIDER=fake PORT=3001 pnpm --filter @careeros/api dev`,

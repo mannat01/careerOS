@@ -29,6 +29,12 @@ describe('contract-backed MSW fixtures', () => {
     expect(meResponseSchema.parse(await response.json()).user.email).toBe('dev@careeros.local');
   });
 
+  it('serves the same canonical contract from explicit bootstrap', async () => {
+    const response = await fetch('https://api.example.test/v1/me/bootstrap', { method: 'POST' });
+    expect(response.status).toBe(200);
+    expect(meResponseSchema.parse(await response.json()).onboarding.status).toBe('complete');
+  });
+
   it('rejects a malformed fixture before a handler or UI test can consume it', () => {
     expect(() => parseFixtureForTest({ data: [{ id: 42 }], nextCursor: null })).toThrow(z.ZodError);
   });

@@ -7,6 +7,7 @@ export type FixtureScenario = 'success' | 'insufficient-data' | 'capability-deni
 export function createContractHandlers(scenario: FixtureScenario = 'success'): HttpHandler[] {
   const handlers: HttpHandler[] = [
     http.get('*/v1/me', () => HttpResponse.json(successFixtures.me())),
+    http.post('*/v1/me/bootstrap', () => HttpResponse.json(successFixtures.me())),
     http.get('*/v1/opportunities', () => HttpResponse.json(successFixtures.opportunities())),
     http.get('*/v1/opportunities/:id/match', () => HttpResponse.json(successFixtures.match())),
   ];

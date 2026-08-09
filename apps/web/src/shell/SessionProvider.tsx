@@ -2,7 +2,7 @@
 
 /**
  * SessionProvider — client-side shim that:
- *   1. Exposes the signed-in `userId` + `onboardingComplete` to the shell via
+ *   1. Exposes only the signed-in `userId` to the shell via
  *      React context (server hands them in as props from the guard).
  *   2. Wires the API client's TokenProvider so every fetch through
  *      `src/api/client.ts` carries the session cookie via a same-origin
@@ -22,7 +22,6 @@ import { setDefaultTokenProvider, type TokenProvider } from '../api/client';
 
 export interface PublicSession {
   readonly userId: string;
-  readonly onboardingComplete: boolean;
 }
 
 const SessionContext = createContext<PublicSession | null>(null);
@@ -129,7 +128,7 @@ export function createBridgeTokenProvider(
 /**
  * Client-side session boundary. The (app) layout renders this once with the
  * verified `PublicSession` prop; any client component under it can call
- * `useSession()` to read the userId + onboarding flag.
+ * `useSession()` to read the userId.
  */
 export function SessionProvider({
   session,

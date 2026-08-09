@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import RootPage from '../../app/page';
 import SignInPage from '../../app/(auth)/sign-in/page';
 import AuthLayout from '../../app/(auth)/layout';
-import OnboardingPage from '../../app/onboarding/page';
+import { OnboardingPlaceholder } from '../../app/onboarding/page';
 import TodayPage from '../../app/(app)/today/page';
 import OpportunitiesPage from '../../app/(app)/opportunities/page';
 import PlanPage from '../../app/(app)/plan/page';
@@ -14,6 +14,8 @@ import YouPage from '../../app/(app)/you/page';
 import ApprovalsPage from '../../app/(app)/approvals/page';
 import { TrustKitClient } from '../../app/(app)/%5Fdev/trust/TrustKitClient';
 import { AppShell } from '../shell';
+import { RoutingRecovery } from '../auth';
+import { ApiError } from '../api/errors';
 import { ApprovalDialog } from '../trust';
 import { successFixtures } from '../test/msw/fixtures';
 
@@ -26,7 +28,8 @@ afterEach(cleanup);
 const routes: ReadonlyArray<{ name: string; path: string; renderRoute: () => ReactNode }> = [
   { name: 'Marketing/root', path: '/', renderRoute: () => <RootPage /> },
   { name: 'Sign-in', path: '/sign-in', renderRoute: () => <AuthLayout><SignInPage /></AuthLayout> },
-  { name: 'Onboarding', path: '/onboarding', renderRoute: () => <OnboardingPage /> },
+  { name: 'Onboarding', path: '/onboarding', renderRoute: () => <OnboardingPlaceholder /> },
+  { name: 'Routing dependency recovery', path: '/today', renderRoute: () => <RoutingRecovery error={new ApiError({ code: 'internal', message: 'Dependency unavailable.', traceId: 'axe-trace' })} retryHref="/today" /> },
   { name: 'Today', path: '/today', renderRoute: () => <AppShell><TodayPage /></AppShell> },
   { name: 'Opportunities', path: '/opportunities', renderRoute: () => <AppShell><OpportunitiesPage /></AppShell> },
   { name: 'Plan', path: '/plan', renderRoute: () => <AppShell><PlanPage /></AppShell> },

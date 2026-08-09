@@ -43,11 +43,11 @@ export function createDevAuthProvider(options: DevProviderOptions): ServerAuthPr
 
   return {
     kind: 'dev',
-    mintToken: async (userId: string): Promise<string> => {
+    mintToken: async (userId: string, email?: string): Promise<string> => {
       if (userId.length === 0) {
         throw new Error('mintToken: userId must be non-empty');
       }
-      return new SignJWT({ sub: userId })
+      return new SignJWT({ sub: userId, ...(email ? { email } : {}) })
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
         .setExpirationTime(expiresIn)

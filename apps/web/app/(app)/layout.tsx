@@ -1,4 +1,3 @@
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import {
@@ -7,12 +6,10 @@ import {
   type PublicSession,
 } from '@/shell';
 import {
-  evaluateAuthGuard,
-  fetchOnboardingComplete,
-  getServerAuthProvider,
-  SESSION_COOKIE_NAME,
+  evaluateCurrentAuthenticatedRoute,
+  actionForAuthenticatedRoute,
+  RoutingRecovery,
 } from '@/auth';
-import { loadWebEnv } from '@/config/env';
 
 /**
  * `(app)` route group — the authenticated shell.
@@ -22,31 +19,28 @@ import { loadWebEnv } from '@/config/env';
  *
  *   1. Reads the httpOnly session cookie.
  *   2. Verifies the JWT via the active `ServerAuthProvider`.
- *   3. Confirms the user has completed onboarding by calling `/v1/me`.
+ *   3. Explicitly bootstraps identity/settings and reads backend-owned onboarding
+ *      state via `POST /v1/me/bootstrap`.
  *
- * Any failure short-circuits into a `redirect(...)` — Next.js unwinds the
- * render and the client never sees the shell (or any child room). The
- * verified `PublicSession` (userId + onboardingComplete only — the raw JWT
- * stays server-side) is handed to the client SessionProvider, which wires
+ * Unauthenticated/required states redirect; dependency failures render visible
+ * recovery. The verified `PublicSession` (userId only — the raw JWT stays
+ * server-side) is handed to the client SessionProvider, which wires
  * the API client to fetch tokens over a same-origin bridge.
  */
 export default async function AppLayout({ children }: { children: ReactNode }): Promise<JSX.Element> {
-  const env = loadWebEnv();
-  const outcome = await evaluateAuthGuard({
-    authProvider: getServerAuthProvider(),
-    readSessionCookie: () => cookies().get(SESSION_COOKIE_NAME)?.value ?? null,
-    isOnboardingComplete: async ({ token }) =>
-      fetchOnboardingComplete({ token }, { apiBaseUrl: env.NEXT_PUBLIC_API_BASE_URL }),
-  });
-
-  if (outcome.kind === 'redirect') {
-    redirect(outcome.to);
+  const action = actionForAuthenticatedRoute(await evaluateCurrentAuthenticatedRoute(), 'app');
+  switch (action.kind) {
+    case 'redirect': redirect(action.to);
+    case 'render_recovery': return <RoutingRecovery error={action.error} retryHref="/today" />;
+    case 'render_app': break;
+    case 'render_onboarding': throw new Error('App guard cannot render onboarding content.');
+    default: {
+      const exhaustive: never = action;
+      return exhaustive;
+    }
   }
 
-  const publicSession: PublicSession = {
-    userId: outcome.session.userId,
-    onboardingComplete: outcome.session.onboardingComplete,
-  };
+  const publicSession: PublicSession = { userId: action.me.user.id };
 
   return (
     <SessionProvider session={publicSession}>

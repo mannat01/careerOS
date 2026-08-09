@@ -1,11 +1,8 @@
-/**
- * `/onboarding` — FM1 stub.
- *
- * The (app) guard redirects users here when they're signed in but haven't
- * completed onboarding (per `/v1/me`). The real onboarding flow lands in
- * FM2; this placeholder just tells the user why they're here.
- */
-export default function OnboardingPage(): JSX.Element {
+import { redirect } from 'next/navigation';
+import { actionForAuthenticatedRoute, evaluateCurrentAuthenticatedRoute, RoutingRecovery } from '@/auth';
+
+/** Existing placeholder only. No onboarding content is implemented in Step 0. */
+export function OnboardingPlaceholder(): JSX.Element {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-3 px-6">
       <h1 className="text-2xl font-semibold text-text-primary">
@@ -21,4 +18,19 @@ export default function OnboardingPage(): JSX.Element {
       </p>
     </main>
   );
+}
+
+/** `/onboarding` inverse guard: required renders; complete returns to Today. */
+export default async function OnboardingPage(): Promise<JSX.Element> {
+  const action = actionForAuthenticatedRoute(await evaluateCurrentAuthenticatedRoute(), 'onboarding');
+  switch (action.kind) {
+    case 'redirect': redirect(action.to);
+    case 'render_onboarding': return <OnboardingPlaceholder />;
+    case 'render_recovery': return <RoutingRecovery error={action.error} retryHref="/onboarding" />;
+    case 'render_app': throw new Error('Onboarding guard cannot render the app shell.');
+    default: {
+      const exhaustive: never = action;
+      return exhaustive;
+    }
+  }
 }

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
-import { DEV_USER_ID } from '@careeros/contracts';
+import { devPrincipalForEmail } from '@/auth/dev-principal';
 import { getServerAuthProvider, sessionCookieAttrs } from '@/auth';
 
 /**
@@ -24,13 +24,7 @@ export default function SignInPage(): JSX.Element {
       redirect('/sign-in?error=invalid_email');
     }
 
-    // Every dev sign-in resolves to the ONE canonical dev user (`DEV_USER_ID`),
-    // which is also what `packages/db/src/seed.ts` seeds. `users.id` is a UUID
-    // column, so an email-derived subject like `dev-me-example-com` would
-    // authenticate but never match a row — every scoped read would come back
-    // empty. Real per-email accounts arrive with FM2 onboarding (which creates
-    // the row); until then the dev session must point at seeded data.
-    const userId = DEV_USER_ID;
+    const userId = devPrincipalForEmail(email);
 
     const provider = getServerAuthProvider();
     if (provider.kind !== 'dev') {
@@ -38,7 +32,7 @@ export default function SignInPage(): JSX.Element {
       // rather than silently rendering the dev form against a Clerk backend.
       throw new Error('Dev sign-in is only available when AUTH_PROVIDER=dev.');
     }
-    const token = await provider.mintToken(userId);
+    const token = await provider.mintToken(userId, email);
 
     const attrs = sessionCookieAttrs();
     cookies().set({

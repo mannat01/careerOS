@@ -24,8 +24,9 @@ const USER_ID = '00000000-0000-4000-8000-000000000001';
 /** Parse at fixture construction time so malformed data never reaches MSW/UI. */
 export const successFixtures = Object.freeze({
   me: (): MeResponse => meResponseSchema.parse({
-    user: { id: USER_ID, email: 'dev@careeros.local', authProviderId: 'dev-user', subscriptionTier: 'pro', status: 'active', createdAt: NOW, updatedAt: NOW },
+    user: { id: USER_ID, email: 'dev@careeros.local', authProviderId: 'dev-user', subscriptionTier: 'pro', status: 'active', onboardingCompletedAt: NOW, createdAt: NOW, updatedAt: NOW },
     settings: { userId: USER_ID, autonomyDefaults: { 'briefing.item.execute': 'yellow' }, quietHours: null, briefingSchedule: null, sourcePrefs: {}, dataUseOptIns: { training: false, crossUserIntel: false }, createdAt: NOW, updatedAt: NOW },
+    onboarding: { status: 'complete', completedAt: NOW },
   }),
   state: (): CieStateResponse => cieStateResponseSchema.parse({
     profileId: 'profile-1', version: 1, updatedAt: NOW,

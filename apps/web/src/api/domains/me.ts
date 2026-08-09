@@ -22,6 +22,8 @@ import type { ApiClient, RequestOptions } from '../client';
 export interface MeApi {
   /** GET /v1/me — current user + settings. */
   get(opts?: RequestOptions): Promise<MeResponse>;
+  /** POST /v1/me/bootstrap — idempotent first-run identity (Green). */
+  bootstrap(opts?: RequestOptions): Promise<MeResponse>;
   /**
    * PATCH /v1/me/settings — update autonomy defaults / quiet hours / etc.
    * Green (no external side effect on account state).
@@ -32,6 +34,7 @@ export interface MeApi {
 export function createMeApi(client: ApiClient): MeApi {
   return {
     get: (opts) => client.get('/v1/me', meResponseSchema, opts),
+    bootstrap: (opts) => client.postGreen(null, '/v1/me/bootstrap', undefined, meResponseSchema, opts),
     updateSettings: (body, opts) => {
       // Validate the request body against the shared schema BEFORE going over
       // the wire — the server enforces this too, but a client-side check

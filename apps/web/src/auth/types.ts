@@ -17,15 +17,13 @@
 
 /**
  * Server-side session as verified by the guard. `token` is the raw bearer
- * that the API client will send in `Authorization: Bearer …`; `userId` is
- * the verified subject. `onboardingComplete` is derived from `/v1/me`
- * (see `onboarding.ts`) so the guard can redirect to `/onboarding` when
- * the user hasn't finished setup.
+ * that the server route guard sends in `Authorization: Bearer …`; `userId` is
+ * the verified subject. Onboarding is intentionally not duplicated here: the
+ * guard consumes `MeResponse.onboarding` directly.
  */
 export interface Session {
   readonly userId: string;
   readonly token: string;
-  readonly onboardingComplete: boolean;
 }
 
 /**
@@ -46,7 +44,7 @@ export interface ServerAuthProvider {
    * Mint a bearer token for the given userId. Dev only in FM1 (Clerk
    * mints tokens via its own flow); the dev sign-in route uses this.
    */
-  mintToken(userId: string): Promise<string>;
+  mintToken(userId: string, email?: string): Promise<string>;
   /**
    * Verify a bearer token. Returns the userId on success, `null` on
    * expiry / signature failure / malformed input. Never throws on a

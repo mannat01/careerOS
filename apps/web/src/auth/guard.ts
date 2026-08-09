@@ -1,75 +1,104 @@
-/**
- * Server-side auth guard for the (app) route group.
- *
- * Enforces two invariants at the boundary:
- *   1. Signed-in: the session cookie carries a valid JWT (verified by the
- *      active `ServerAuthProvider`); otherwise redirect to `/sign-in`.
- *   2. Onboarding complete: `/v1/me` reports `onboardingComplete=true`;
- *      otherwise redirect to `/onboarding` (a stub in FM1 — the actual
- *      onboarding flow lands with FM2).
- *
- * The guard is intentionally infrastructure-agnostic: it takes readers for
- * the cookie + onboarding lookup so it can be unit-tested without booting
- * Next.js. The route handler in `app/(app)/layout.tsx` wires it to
- * `next/headers` + a live fetch to the API.
- */
-import type { ServerAuthProvider, Session } from './types';
+import type { MeResponse } from '@careeros/contracts';
+import { ApiError } from '../api/errors';
+import type { ServerAuthProvider } from './types';
 
-export type GuardOutcome =
-  | { kind: 'ok'; session: Session }
-  | { kind: 'redirect'; to: '/sign-in' | '/onboarding' };
+export type AuthenticatedRouteDecision =
+  | { kind: 'unauthenticated' }
+  | { kind: 'onboarding_required'; me: MeResponse }
+  | { kind: 'ready'; me: MeResponse }
+  | { kind: 'dependency_error'; error: ApiError };
 
-/**
- * Injectable dependencies for the guard. Tests substitute deterministic
- * stubs; the Next.js layout provides real implementations.
- */
+export type AuthenticatedRouteAction =
+  | { kind: 'redirect'; to: '/sign-in' | '/onboarding' | '/today' }
+  | { kind: 'render_app'; me: MeResponse }
+  | { kind: 'render_onboarding'; me: MeResponse }
+  | { kind: 'render_recovery'; error: ApiError };
+
 export interface GuardDeps {
-  /** The active auth provider (dev-JWT or Clerk stub). */
   authProvider: ServerAuthProvider;
-  /** Return the raw session cookie value, or null when the user has none. */
   readSessionCookie: () => string | null;
-  /**
-   * Given a verified `token` + `userId`, return whether the user has
-   * completed onboarding. Wraps a call to the API's `/v1/me`.
-   *
-   * Returning `null` means the API call failed (network / 5xx); the guard
-   * treats that as "not authenticated" and redirects to sign-in, since we
-   * cannot prove the user is allowed to see (app) content.
-   */
-  isOnboardingComplete: (args: { userId: string; token: string }) => Promise<boolean | null>;
+  bootstrap: (token: string) => Promise<MeResponse>;
+  refresh: (token: string) => Promise<string | null>;
 }
 
-/**
- * Evaluate the guard for the current request. Callers apply the redirect;
- * the guard itself returns a value (pure) so tests can assert every branch
- * without mocking `next/navigation`.
- */
-export async function evaluateAuthGuard(deps: GuardDeps): Promise<GuardOutcome> {
+/** Exhaustive backend-owned route decision. No resource/timestamp inference exists here. */
+export async function evaluateAuthenticatedRoute(
+  deps: GuardDeps,
+): Promise<AuthenticatedRouteDecision> {
   const token = deps.readSessionCookie();
-  if (token === null || token.length === 0) {
-    return { kind: 'redirect', to: '/sign-in' };
+  if (!token) return { kind: 'unauthenticated' };
+
+  try {
+    if (await deps.authProvider.verifyToken(token) === null) return { kind: 'unauthenticated' };
+  } catch (cause) {
+    return { kind: 'dependency_error', error: dependencyError(cause) };
   }
 
-  const userId = await deps.authProvider.verifyToken(token);
-  if (userId === null) {
-    // Expired / signature failed / malformed — treat as signed-out. The
-    // API client's 401→refresh-once path handles in-flight requests; the
-    // guard just picks up the sign-out on the next server render.
-    return { kind: 'redirect', to: '/sign-in' };
+  let currentToken = token;
+  let refreshed = false;
+  for (;;) {
+    try {
+      const me = await deps.bootstrap(currentToken);
+      switch (me.onboarding.status) {
+        case 'required': return { kind: 'onboarding_required', me };
+        case 'complete': return { kind: 'ready', me };
+        default: {
+          const exhaustive: never = me.onboarding;
+          return exhaustive;
+        }
+      }
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.code === 'unauthenticated' && !refreshed) {
+        refreshed = true;
+        let next: string | null;
+        try {
+          next = await deps.refresh(currentToken);
+        } catch (refreshCause) {
+          return { kind: 'dependency_error', error: dependencyError(refreshCause) };
+        }
+        if (next !== null) {
+          currentToken = next;
+          continue;
+        }
+        return { kind: 'unauthenticated' };
+      }
+      if (cause instanceof ApiError && cause.code === 'unauthenticated') {
+        return { kind: 'unauthenticated' };
+      }
+      return {
+        kind: 'dependency_error',
+        error: cause instanceof ApiError ? cause : dependencyError(cause),
+      };
+    }
   }
+}
 
-  const onboarded = await deps.isOnboardingComplete({ userId, token });
-  if (onboarded === null) {
-    // API unavailable — safer to bounce to sign-in than to render (app)
-    // shell against unknown identity state.
-    return { kind: 'redirect', to: '/sign-in' };
+/** Maps one decision to either the normal app guard or inverse onboarding guard. */
+export function actionForAuthenticatedRoute(
+  decision: AuthenticatedRouteDecision,
+  route: 'app' | 'onboarding',
+): AuthenticatedRouteAction {
+  switch (decision.kind) {
+    case 'unauthenticated': return { kind: 'redirect', to: '/sign-in' };
+    case 'dependency_error': return { kind: 'render_recovery', error: decision.error };
+    case 'onboarding_required':
+      return route === 'app'
+        ? { kind: 'redirect', to: '/onboarding' }
+        : { kind: 'render_onboarding', me: decision.me };
+    case 'ready':
+      return route === 'app'
+        ? { kind: 'render_app', me: decision.me }
+        : { kind: 'redirect', to: '/today' };
+    default: {
+      const exhaustive: never = decision;
+      return exhaustive;
+    }
   }
-  if (!onboarded) {
-    return { kind: 'redirect', to: '/onboarding' };
-  }
+}
 
-  return {
-    kind: 'ok',
-    session: { userId, token, onboardingComplete: true },
-  };
+function dependencyError(cause: unknown): ApiError {
+  return new ApiError({
+    code: 'internal',
+    message: cause instanceof Error ? cause.message : 'Identity dependency failed.',
+  });
 }
