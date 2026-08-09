@@ -38,16 +38,7 @@ import {
 } from '@careeros/contracts';
 import { ApiError } from './errors';
 import { loadWebEnv } from '../config/env';
-import type { TokenProvider } from './client';
-
-// Match the module-level `defaultTokenProvider` in client.ts (no bearer =>
-// unauthenticated request). Deliberately duplicated so this file has no
-// coupling to client.ts internals — features that need auth pass their own
-// provider via `deps.tokens`.
-const nullTokenProvider: TokenProvider = {
-  // eslint-disable-next-line @typescript-eslint/require-await
-  getBearerToken: async () => null,
-};
+import { getDefaultTokenProvider, type TokenProvider } from './client';
 
 // ---------- event union ----------
 //
@@ -80,7 +71,7 @@ export type {
 // ---------- open params + options ----------
 
 export interface OpenTwinStreamParams {
-  /** The `/v1/rt/twin` route accepts a prompt + optional context handle. */
+  /** The `/rt/twin` route accepts a message; `prompt` is the UI-facing name. */
   prompt: string;
   /** Optional server-side session/context id to resume within. */
   sessionId?: string;
@@ -154,7 +145,7 @@ export function openTwinStream(
   deps: OpenTwinStreamDeps = {},
 ): AsyncIterable<TwinStreamEvent | TwinStreamParseError> & { close: () => void } {
   const baseUrl = deps.baseUrl ?? loadWebEnv().NEXT_PUBLIC_API_BASE_URL;
-  const tokens = deps.tokens ?? nullTokenProvider;
+  const tokens = deps.tokens ?? getDefaultTokenProvider();
   const fetchImpl = deps.fetchImpl ?? fetch;
   const maxReconnects = options.maxReconnects ?? 3;
   const baseBackoffMs = options.baseBackoffMs ?? 250;
@@ -181,12 +172,11 @@ export function openTwinStream(
           };
           if (bearer !== null) headers['authorization'] = `Bearer ${bearer}`;
 
-          const response = await fetchImpl(joinUrl(baseUrl, '/v1/rt/twin'), {
+          const response = await fetchImpl(joinUrl(baseUrl, '/rt/twin'), {
             method: 'POST',
             headers,
             body: JSON.stringify({
-              prompt: params.prompt,
-              sessionId: params.sessionId,
+              message: params.prompt,
             }),
             signal: internalController.signal,
             credentials: 'include',
@@ -212,12 +202,6 @@ export function openTwinStream(
           // Consume SSE frames. yield events; watch for `approval_required`
           // / `done` / `error`.
           for await (const frame of readSseFrames(response.body, internalController.signal)) {
-            if (frame.event !== null && frame.event !== 'message') {
-              // Named SSE events are not used by /rt/twin — every event's
-              // discriminator is inside the `data` JSON. Ignore stray
-              // event lines rather than throwing.
-              continue;
-            }
             if (frame.data.length === 0) continue;
 
             let parsedJson: unknown;
@@ -243,6 +227,16 @@ export function openTwinStream(
             }
 
             const event = parsed.data;
+
+            // The canonical backend emits named frames and repeats the same
+            // discriminator in JSON. They must agree; otherwise surface drift.
+            if (frame.event !== null && frame.event !== 'message' && frame.event !== event.type) {
+              yield new TwinStreamParseError(
+                `SSE event name '${frame.event}' did not match payload type '${event.type}'`,
+                frame.data,
+              );
+              continue;
+            }
 
             // approval_required: HALT. Yield event, then RETURN (no reconnect).
             if (event.type === 'approval_required') {

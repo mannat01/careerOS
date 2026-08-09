@@ -82,4 +82,18 @@ jobs:
         # GREEN_EVAL_SUITES allowlist in that config and it becomes a permanent
         # gate here too.
         run: pnpm --filter @careeros/evals eval:ci
+      - name: FM1 six guarantees (compile-fail + runtime) — BLOCKING
+        run: pnpm --filter @careeros/web test:guarantees
+      - name: FM1 contract-backed MSW fixture regression — BLOCKING
+        run: pnpm --filter @careeros/web test:fixtures
+      - name: FM1 route axe matrix + keyboard ApprovalDialog — BLOCKING
+        run: pnpm --filter @careeros/web test:axe
+      - name: Install Playwright Chromium
+        run: pnpm --filter @careeros/web exec playwright install --with-deps chromium
+      - name: FM1 real local-stack Twin SSE smoke — BLOCKING
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:3001
+          NEXT_PUBLIC_AUTH_PROVIDER: dev
+          LLM_PROVIDER: fake
+        run: pnpm --filter @careeros/web test:e2e
 

@@ -68,7 +68,6 @@ describe('<RouteSkeleton>', () => {
 
   it('is axe-clean', async () => {
     const { container } = render(<RouteSkeleton />);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(await axe(container)).toHaveNoViolations();
   });
 });
@@ -304,7 +303,6 @@ describe('<ErrorRecoveryRenderer> — every ApiError.code renders an affordance 
     // Sanity check — the factory + expected-variant map must cover every code.
     for (const code of ALL_CODES) {
       expect(EXPECTED_VARIANT[code]).toBeDefined();
-      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
       makeErrorForCode(code);
     }
     // If contracts ever adds a new code, at least one of the below explicit

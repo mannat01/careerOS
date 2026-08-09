@@ -63,6 +63,19 @@ function sseResponse(frames: readonly SseFrameInput[]): Response {
   });
 }
 
+function canonicalNamedSseResponse(events: readonly EventJson[]): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(encoder.encode(`event: ${String(event['type'])}\ndata: ${JSON.stringify(event)}\n\n`));
+      }
+      controller.close();
+    },
+  });
+  return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+}
+
 async function collect(
   it: AsyncIterable<TwinStreamEvent | TwinStreamParseError>,
 ): Promise<Array<TwinStreamEvent | TwinStreamParseError>> {
@@ -96,6 +109,27 @@ describe('openTwinStream — happy path', () => {
       'token',
       'done',
     ]);
+  });
+
+  it('uses the canonical /rt/twin message body and consumes backend named SSE frames', async () => {
+    let capturedUrl = '';
+    let capturedBody = '';
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      capturedUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const body = init?.body;
+      capturedBody = typeof body === 'string' ? body : '';
+      return canonicalNamedSseResponse([
+        { type: 'context', evidenceIds: ['experience:1'] },
+        { type: 'tool_call', tool: 'strategic_reasoner' },
+        { type: 'token', text: 'Grounded' },
+        { type: 'done', outcome: 'grounded_answer' },
+      ]);
+    }) as typeof fetch;
+
+    const events = await collect(openTwinStream({ prompt: 'Should I apply?' }, { maxReconnects: 0 }, { baseUrl: 'https://x.test', fetchImpl }));
+    expect(capturedUrl).toBe('https://x.test/rt/twin');
+    expect(JSON.parse(capturedBody)).toEqual({ message: 'Should I apply?' });
+    expect(events.map((event) => (event as TwinStreamEvent).type)).toEqual(['context', 'tool_call', 'token', 'done']);
   });
 });
 

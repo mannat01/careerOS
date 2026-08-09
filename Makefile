@@ -1,5 +1,5 @@
 # CareerOS dev shortcuts
-.PHONY: up down api web web-build env-check env-check-test db-migrate db-seed db-tooling-test test bootstrap verify
+.PHONY: up down api web web-build env-check env-check-test db-migrate db-seed db-tooling-test test fm1-guarantees fm1-axe fm1-smoke fm1-gates bootstrap verify full-parity
 
 # The default is the root .env. ENV_FILE is overrideable only so lightweight
 # tooling tests can exercise missing/configured files without changing it.
@@ -88,6 +88,19 @@ db-tooling-test:
 test:
 	pnpm -w test
 
+fm1-guarantees:
+	pnpm --filter @careeros/web test:guarantees
+	pnpm --filter @careeros/web test:fixtures
+
+fm1-axe:
+	pnpm --filter @careeros/web test:axe
+
+fm1-smoke:
+	pnpm --filter @careeros/web exec playwright install chromium
+	pnpm --filter @careeros/web test:e2e
+
+fm1-gates: fm1-guarantees fm1-axe fm1-smoke
+
 # `make verify` — canonical pre-push check that MIRRORS CI EXACTLY.
 # Runs the same sequence CI runs, in the same order, using the same
 # frozen-lockfile install. Purpose: catch environment/lockfile/engine
@@ -101,11 +114,22 @@ verify:
 	@node -e "const [maj]=process.versions.node.split('.').map(Number); if(maj<22){console.error('Node >=22 required (matches CI + engines.node). Current: '+process.versions.node); process.exit(1);}"
 	pnpm install --frozen-lockfile
 	$(MAKE) --no-print-directory db-tooling-test
+	pnpm exec madge --circular --extensions ts packages/config/src packages/contracts/src packages/capability-gate/src packages/connectors/src packages/observability/src packages/db/src packages/cie/resume/src apps/api/src
 	pnpm --filter @careeros/db exec prisma generate
 	pnpm -w typecheck
 	pnpm -w lint
 	$(MAKE) --no-print-directory web-build
+	pnpm --filter @careeros/db schema:validate
+	$(MAKE) --no-print-directory db-migrate
+	$(MAKE) --no-print-directory db-seed
+	pnpm --filter @careeros/db test:integration
+	pnpm --filter @careeros/api test:integration
 	pnpm -w test
+	pnpm --filter @careeros/evals eval:ci
+	$(MAKE) --no-print-directory fm1-gates
+
+# Explicit alias used by release reports; `verify` is the canonical full parity.
+full-parity: verify
 
 bootstrap: up   ## one command to get a working local env
 	corepack prepare pnpm@9.0.0 --activate

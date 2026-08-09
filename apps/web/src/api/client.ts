@@ -54,6 +54,15 @@ export function setDefaultTokenProvider(provider: TokenProvider): void {
   defaultTokenProvider = provider;
 }
 
+/**
+ * Read the provider installed by the authenticated SessionProvider.
+ * Streaming and JSON clients share this exact source so neither transport can
+ * accidentally fall back to an unauthenticated request after sign-in.
+ */
+export function getDefaultTokenProvider(): TokenProvider {
+  return defaultTokenProvider;
+}
+
 // ---------- trace propagation ----------
 
 /**

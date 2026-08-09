@@ -93,6 +93,7 @@ On a fresh session: read `CLAUDE.md` → `docs/build-operating-model.md` (this f
 ## 5. Build log (update every slice)
 | Date | Slice | Model | Logic-complete (tests green here) | Infra stubs remaining | Verified by Opus |
 |---|---|---|---|---|---|
+| 2026-08-09 | **FM1 — Foundation + Trust Kit: COMPLETE (Task 9).** Six guarantees consolidated as a named blocking suite; schema-parsed `@careeros/contracts` MSW fixtures; all current route states axe/keyboard gated; real dev-auth + fake-LLM Playwright smoke through canonical `/rt/twin` SSE; CI/local full parity wired. | Cline | ✅ guarantees 6/6 · fixtures 3/3 · axe/keyboard 19/19 · Playwright 1/1 · workspace 970 · frontend 192 · eval CI 216 · production build + `make verify` green | Managed Clerk remains the declared FM1 auth follow-up; no FM2 work started. Existing DB/API integration config skips unchanged. | ✅ full parity + diff check |
 | 2026-07-08 | M01 Foundations (config, contracts, capability-gate, connectors, observability, llm-gateway, db schema, api handlers) | Fable | ✅ 80/80 tests, 2 security suites | pg/redis/s3/clerk/otel/live-http/nest-boot | ✅ re-ran, 80/80 |
 | 2026-07-08 | M01 starter kit (docker-compose, CI, eslint boundaries, Makefile) | Opus | ✅ YAML+preset validated | CI unproven until a real push | ✅ |
 | 2026-07-09 | M01 re-verified on user machine (VS Code + Cline + Fable via OmniRoute) | Fable | ✅ 80/80, both security suites | (unchanged — infra close-out next) | ✅ report reviewed |
