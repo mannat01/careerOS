@@ -49,7 +49,7 @@ export interface Confidence {
 }
 
 /** Provenance of a user profile fact — never omitted, never guessed. */
-export type Provenance = 'imported' | 'user' | 'inferred_confirmed' | 'from_notes';
+export type Provenance = 'imported' | 'user' | 'inferred_confirmed' | 'from_notes' | 'no_signal';
 
 /**
  * Subject of a "why" — the thing being explained. Kept small so it's

@@ -9,10 +9,8 @@
  *   POST   /v1/briefings/:id/items/:itemId/edit     (Green — item is still proposed)
  *   POST   /v1/briefings/:id/items/:itemId/skip     (Green — user opts out)
  *
- * The BriefingRun / BriefingItem persisted shapes live in
- * `apps/api/src/modules/briefing` and are not (yet) surfaced through
- * `@careeros/contracts` — this module defines the wire schema locally as a
- * transport contract. When contracts are extended, we swap the import.
+ * The BriefingRun / BriefingItem wire shapes are parsed by the shared schemas
+ * exported from `@careeros/contracts`; this module only composes the client.
  *
  * `userId` is server-derived. Approval of a Yellow item goes through the
  * ApprovalDialog which mints an `ApprovalToken`; the item-execute path

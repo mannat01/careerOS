@@ -1,13 +1,8 @@
 /**
  * `cie/state` domain — Career State Model reads for FM1.
  *
- * The persisted CIE state model shape lives in the server package
- * `@careeros/cie-state`, and its zod schema is not (yet) surfaced through
- * `@careeros/contracts` — so this module defines a MINIMAL wire schema that
- * validates only the shape the web app reads. It is intentionally the
- * transport contract, NOT a redeclaration of the domain (values are `unknown`,
- * evidence refs are `string[]`); if the server tightens, only this file needs
- * to update.
+ * The wire response is parsed by the shared schema exported from
+ * `@careeros/contracts`; this module only composes the typed client.
  *
  * Read-only. `POST /v1/cie/state/recompute` is a Green mutation and lives on
  * the API but is deferred out of FM1's client (no UI need it today).

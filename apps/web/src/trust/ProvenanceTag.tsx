@@ -22,6 +22,7 @@ const PROV_LABEL: Record<Provenance, string> = {
   user: 'You added',
   inferred_confirmed: 'AI — confirmed',
   from_notes: 'From your notes',
+  no_signal: 'No signal yet',
 };
 
 /** Small tokens describe the *category*, not decoration. Text says it all,
@@ -31,6 +32,7 @@ const PROV_COLOR: Record<Provenance, string> = {
   user: 'border-brand-base text-brand-base',
   inferred_confirmed: 'border-confidence-high text-confidence-high',
   from_notes: 'border-confidence-med text-confidence-med',
+  no_signal: 'border-border-subtle text-text-secondary',
 };
 
 export function ProvenanceTag({

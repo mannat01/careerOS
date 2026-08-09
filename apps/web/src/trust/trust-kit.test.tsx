@@ -133,6 +133,7 @@ describe('<ProvenanceTag>', () => {
     ['user', 'You added'],
     ['inferred_confirmed', 'AI — confirmed'],
     ['from_notes', 'From your notes'],
+    ['no_signal', 'No signal yet'],
   ];
   it.each(cases)('renders provenance=%s with label "%s"', (prov, label) => {
     render(<ProvenanceTag provenance={prov} />);
@@ -152,6 +153,13 @@ describe('<ProvenanceTag>', () => {
     );
      
     expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('uses the AA text-secondary on bg-subtle pair for no-signal provenance', () => {
+    render(<ProvenanceTag provenance="no_signal" />);
+    const tag = screen.getByTestId('provenance-tag');
+    expect(tag).toHaveClass('bg-bg-subtle', 'text-text-secondary');
+    expect(tag).not.toHaveClass('text-text-muted');
   });
 });
 
@@ -238,6 +246,16 @@ describe('<InsufficientData>', () => {
     const region = screen.getByTestId('insufficient-data');
     // No stray digits should appear in the component's text.
     expect(region.textContent ?? '').not.toMatch(/\b\d+(?:\.\d+)?%?\b/);
+  });
+
+  it('uses the AA text-secondary on bg-subtle pair for its uppercase label', () => {
+    render(
+      <InsufficientData reason="No data yet." next={[{ id: 's', label: 'Do a thing' }]} />,
+    );
+    expect(screen.getByTestId('insufficient-data')).toHaveClass('bg-bg-subtle');
+    const label = screen.getByTestId('insufficient-next-label');
+    expect(label).toHaveClass('text-text-secondary');
+    expect(label).not.toHaveClass('text-text-muted');
   });
 
   it('is axe-clean', async () => {

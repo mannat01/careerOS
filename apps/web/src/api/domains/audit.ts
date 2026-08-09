@@ -5,9 +5,8 @@
  * READ-ONLY; the server enforces per-user scoping from the bearer, and the
  * store itself is append-only (no client mutation is possible).
  *
- * The `AuditRow` shape is not yet exported through `@careeros/contracts`; the
- * wire schema is defined here as a transport contract, matching
- * `apps/api/src/modules/audit/audit.handlers.ts` 1:1.
+ * The wire response is parsed by the shared schema exported from
+ * `@careeros/contracts`; this module only composes the typed client.
  */
 import {
   auditListResponseSchema,

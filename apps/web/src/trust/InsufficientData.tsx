@@ -58,7 +58,10 @@ export function InsufficientData({
       </p>
       {next.length > 0 ? (
         <>
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+          <div
+            className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text-secondary"
+            data-testid="insufficient-next-label"
+          >
             How to build it
           </div>
           <ol

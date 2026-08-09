@@ -14,6 +14,8 @@ import type { Confidence } from './types.js';
  */
 export interface ConfidenceChipProps {
   readonly confidence: Confidence;
+  /** Hide the numeric value when the source explicitly has no signal. */
+  readonly showValue?: boolean;
   /** Route the chip links to. Defaults to the calibration room anchor. */
   readonly to?: string;
   /** Optional class name to compose with the token base. */
@@ -40,6 +42,7 @@ function fmtPct(v: number): string {
 
 export function ConfidenceChip({
   confidence,
+  showValue = true,
   to,
   className,
 }: ConfidenceChipProps): JSX.Element {
@@ -47,7 +50,6 @@ export function ConfidenceChip({
   const href = to ?? `/you/calibration#${encodeURIComponent(source)}`;
   const label = BAND_LABEL[band];
   const pct = fmtPct(value);
-
   const classes = [
     'inline-flex items-center gap-1 rounded-full border bg-bg-subtle px-2 py-0.5 text-xs font-medium',
     'outline-none focus-visible:ring-2 focus-visible:ring-brand-base',
@@ -61,14 +63,18 @@ export function ConfidenceChip({
     <a
       href={href}
       role="link"
-      aria-label={`Confidence: ${label}, ${pct}. Source: ${source}. Open calibration.`}
+      aria-label={`Confidence: ${label}${showValue ? `, ${pct}` : ''}. Source: ${source}. Open calibration.`}
       data-band={band}
       data-testid="confidence-chip"
       className={classes}
     >
       <span data-testid="confidence-band">{label}</span>
-      <span aria-hidden="true">·</span>
-      <span data-testid="confidence-value">{pct}</span>
+      {showValue ? (
+        <>
+          <span aria-hidden="true">·</span>
+          <span data-testid="confidence-value">{pct}</span>
+        </>
+      ) : null}
     </a>
   );
 }
