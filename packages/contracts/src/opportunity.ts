@@ -59,11 +59,15 @@ export const opportunityMatchSubscoreSchema = z
   .object({ key: z.string().min(1), value: z.number().min(0).max(100) })
   .strict();
 
-/** Strict response for GET /v1/opportunities/:id/match. */
+/**
+ * Strict public projection for GET /v1/opportunities/:id/match.
+ *
+ * Persistence identifiers (`match_scores.id` and `profile_id`) are deliberately
+ * not transported. Internal scorer/store models retain those concerns in their
+ * own package-local types; this schema models only the API response.
+ */
 export const opportunityMatchResponseSchema = z
   .object({
-    id: z.string().min(1),
-    profileId: z.string().min(1),
     opportunityId: z.string().min(1),
     overall: z.number().int().min(0).max(100),
     subscores: z.array(opportunityMatchSubscoreSchema),

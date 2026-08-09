@@ -328,16 +328,8 @@ d('M04 /v1/opportunities over HTTP (booted NestJS app)', () => {
 
     expect(resA.status).toBe(200);
     expect(resB.status).toBe(200);
-    const a = opportunityMatchResponseSchema.parse({
-      ...resA.body,
-      id: randomUUID(),
-      profileId: randomUUID(),
-    });
-    const b = opportunityMatchResponseSchema.parse({
-      ...resB.body,
-      id: randomUUID(),
-      profileId: randomUUID(),
-    });
+    const a = opportunityMatchResponseSchema.parse(resA.body);
+    const b = opportunityMatchResponseSchema.parse(resB.body);
 
     expect(a.opportunityId).toBe(ghOppId);
     // Honest bands: weak profile low, strong profile high — DIFFERENT scores.
@@ -378,11 +370,15 @@ d('M04 /v1/opportunities over HTTP (booted NestJS app)', () => {
   });
 
   it('returns the persisted, reproducible score on a second call', async () => {
-    const first = body<MatchScore>(
-      await request(http).get(`/v1/opportunities/${ghOppId}/match`).set('Authorization', `Bearer ${tokenA}`),
+    const first = opportunityMatchResponseSchema.parse(
+      (
+        await request(http).get(`/v1/opportunities/${ghOppId}/match`).set('Authorization', `Bearer ${tokenA}`)
+      ).body,
     );
-    const second = body<MatchScore>(
-      await request(http).get(`/v1/opportunities/${ghOppId}/match`).set('Authorization', `Bearer ${tokenA}`),
+    const second = opportunityMatchResponseSchema.parse(
+      (
+        await request(http).get(`/v1/opportunities/${ghOppId}/match`).set('Authorization', `Bearer ${tokenA}`)
+      ).body,
     );
     expect(second.overall).toBe(first.overall);
     expect(second.explanation).toBe(first.explanation);

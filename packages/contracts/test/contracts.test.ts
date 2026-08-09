@@ -19,6 +19,7 @@ import {
   auditListResponseSchema,
   briefingItemSchema,
   briefingLatestResponseSchema,
+  type OpportunityMatchResponse,
 } from '../src/index.js';
 
 const NOW = '2026-07-08T00:00:00.000Z';
@@ -153,10 +154,8 @@ describe('canonical Opportunity', () => {
     expect(opportunityDetailSchema.safeParse({ ...item, requirementsParsed: null, rawPayload: {} }).success).toBe(true);
   });
 
-  it('parses a persisted match response with id, subscores, explanation, evidence, and model version', () => {
+  it('parses the exact public match projection without persistence identifiers', () => {
     const match = {
-      id: UID,
-      profileId: 'profile-1',
       opportunityId: 'opportunity-1',
       overall: 97,
       subscores: [{ key: 'skills_match', value: 98 }, { key: 'seniority_fit', value: 96 }],
@@ -165,6 +164,25 @@ describe('canonical Opportunity', () => {
       modelVersion: 'match-scorer@1.0.0',
     };
     expect(opportunityMatchResponseSchema.parse(match)).toEqual(match);
+  });
+
+  it('keeps persistence identifiers out of the public match type and rejects a profileId leak', () => {
+    type PublicHasId = 'id' extends keyof OpportunityMatchResponse ? true : false;
+    type PublicHasProfileId = 'profileId' extends keyof OpportunityMatchResponse ? true : false;
+    const publicHasId: PublicHasId = false;
+    const publicHasProfileId: PublicHasProfileId = false;
+    expect(publicHasId).toBe(false);
+    expect(publicHasProfileId).toBe(false);
+
+    const publicProjection: OpportunityMatchResponse = {
+      opportunityId: 'opportunity-1',
+      overall: 97,
+      subscores: [{ key: 'skills_match', value: 98 }],
+      explanation: 'Strong match grounded in the candidate profile.',
+      evidenceRefs: ['skill:1'],
+      modelVersion: 'match-scorer@1.0.0',
+    };
+    expect(opportunityMatchResponseSchema.safeParse({ ...publicProjection, profileId: 'profile-1' }).success).toBe(false);
   });
 
   it('rejects an opportunity missing provenance of source', () => {
