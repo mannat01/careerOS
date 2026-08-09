@@ -7,7 +7,7 @@
 ## 1. Conventions
 
 - Base: `/v1`. Realtime namespace: `/rt`.
-- Auth: bearer token from managed provider; every request resolves to a `userId`; all queries row-scoped to it.
+- Auth: bearer token from the configured provider. Verification yields a stable `(provider, subject)` independently of database rows; the server maps that principal to an internal UUID and all queries are row-scoped to it. Request bodies never supply identity.
 - Content: JSON. IDs are uuids. Timestamps ISO-8601 UTC.
 - Pagination: cursor-based `?cursor=&limit=` → `{ data, nextCursor }`. Default `limit=25`, max `100`.
 - Rate limits (defaults, tunable per env): 120 req/min/user on reads, 20/min on mutations; per-source limits from `SourceRegistry.rate_policy`; LLM calls gated by per-user daily budget (free tier lower). Exceeding → `rate_limited` with `Retry-After`.
@@ -28,7 +28,8 @@ Any side-effecting route tagged Yellow requires a valid `ApprovalToken` (header 
 ## 4. Endpoints by domain
 
 ### Auth & account
-- `GET /v1/me` → user + settings.
+- `POST /v1/me/bootstrap` → idempotently and atomically ensure exactly one `User` + `UserSettings` for the verified principal; Green, no `ApprovalToken`, accepts no identity/account/onboarding/autonomy body fields. Repeated and concurrent calls return the same canonical `MeResponse` without overwriting settings or reactivating suspended/deleted accounts. Creates no profile/state/onboarding content.
+- `GET /v1/me` → existing user + settings + authoritative `onboarding`; read-only and never bootstraps. A valid principal with no user row receives typed `404 not_found`.
 - `PATCH /v1/me/settings` → update autonomy defaults, quiet hours, schedule, source prefs, data-use opt-ins.
 - `POST /v1/me/export` → enqueue full data export (Green) → returns job id.
 - `DELETE /v1/me` → hard delete (Yellow; requires confirmation token).
@@ -39,6 +40,10 @@ Any side-effecting route tagged Yellow requires a valid `ApprovalToken` (header 
 - `POST|PATCH|DELETE /v1/profile/experiences/:id` (and `/projects`, `/education`, `/skills`) → user edits; edits persist as authoritative + emit `MemoryEvent`.
 - `POST /v1/profile/insights/regenerate` → rebuild `DerivedInsight` (Green).
 - `GET /v1/profile/insights` → derived beliefs + source refs + freshness.
+
+**Authoritative onboarding response:** `MeResponse.onboarding` is the exported `@careeros/contracts` discriminated union `{ status: 'required', completedAt: null } | { status: 'complete', completedAt: ISO datetime }`. The frontend must not infer it from profile/fact/state/match existence, seed identity, or timestamps. The completion-write endpoint and its validated criteria are intentionally deferred to a later FM2 step.
+
+**Authenticated empty-state reads:** missing singular resources are typed `404 not_found` (`/v1/me`, `/v1/profile`, `/v1/cie/state`, `/v1/briefings/latest`); semantically empty collections return their schema-valid empty envelope (`applications`, `audit`, and analogous list reads). Database/dependency failures remain typed `500 internal` with a trace ID and are never reported as onboarding-required.
 
 ### Resume
 - `GET|POST /v1/resumes` → list/create `ResumeModel`.

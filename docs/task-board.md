@@ -146,7 +146,7 @@
 - **X.5** a11y (axe) AA compliance on all new UI.
 
 ## Backend follow-ups (logged, not yet scheduled)
-- **B.1 Graceful degradation for authed-but-empty users** — handlers currently 500 when an authenticated principal has no corresponding DB row (`user`, `profile`, `cie_state`, briefing/audit rows). This is the *normal* state for a brand-new user right after sign-up, before onboarding writes anything. Expected behavior: 404 for a missing single resource and `{ data: [] }` / empty-state payloads for collections, never a 500. Found during D3-pre-2 while aligning the dev seed to dev-auth; worked around locally by seeding the canonical dev user. Fix belongs in the handler/store layer (nullable reads + explicit not-found mapping), with tests covering "authenticated, zero rows".
+- **B.1 Graceful degradation for authed-but-empty users — RESOLVED (FM2 Step 0, 2026-08-09).** Live HTTP acceptance covers valid principal/no user → `/v1/me` typed 404; explicit bootstrap → 200; missing profile/state/latest briefing → typed 404; applications/audit → schema-valid empty collections; dependency failures → typed internal with trace ID; cross-user reads remain 404. GET never silently provisions.
 - **B.2 Fresh-DB `migrate deploy` in CI is the standing migration guard** — CI runs `prisma migrate deploy` against an empty database on every run, so the migration history is replayed from zero each time. That is what keeps migrations honest and is why a local drift (a DB created via `db push`, no `_prisma_migrations` history → P3005) never reached CI. Do not replace this step with `db push`; local drift should be repaired with `prisma migrate reset --force` (local-only), not by weakening the CI guard.
 
 ## Prioritization rationale

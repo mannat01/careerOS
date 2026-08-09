@@ -22,7 +22,7 @@ User ─1:N─ ConnectedSource (OAuth)  |  SourceRegistry (global allow-list)
 ## 2. Tables
 
 ### identity
-- **User** — `email`, `auth_provider_id`, `subscription_tier` (enum: free|pro), `status`. Settings child below.
+- **User** — `email`, unique `auth_provider_id`, `subscription_tier` (enum: free|pro), `status`, `onboarding_completed_at timestamptz null`. `NULL` means onboarding is required; a timestamp means complete. This column is the sole onboarding source of truth.
 - **UserSettings** — `user_id`, `autonomy_defaults` (jsonb: per action-type Green/Yellow/Red), `quiet_hours` (jsonb), `briefing_schedule` (cron/tz), `source_prefs` (jsonb), `data_use_optins` (jsonb: training, cross_user_intel).
 - **Profile** — `user_id (unique)`, `headline`, `summary`, `target_roles` (jsonb), `target_comp` (jsonb), `locations`/`remote_pref`, `goals` (jsonb). Canonical identity root.
 - **Experience** — `profile_id`, `company`, `title`, `start`/`end`, `bullets` (jsonb[]), `skills` (text[]), `provenance` (enum: imported|user|inferred_confirmed), `version`, `embedding vector`.
@@ -100,3 +100,7 @@ User ─1:N─ ConnectedSource (OAuth)  |  SourceRegistry (global allow-list)
 ## 5. Migration policy
 
 Prisma migrations only; no manual DDL. Every schema change ships with the code that uses it in the same PR, is backward-compatible or gated by a two-step expand/contract migration, and updates this doc's changelog.
+
+### FM2 Step 0 migration note (2026-08-09)
+
+Migration `20260809000000_fm2_first_run_identity` additively creates nullable `users.onboarding_completed_at` and explicitly backfills every pre-existing user from its existing `updated_at`, preserving status, subscription, settings, ownership, autonomy tiers, indexes, and delete cascades. New bootstrap rows leave the field `NULL`. The canonical dev seed sets `2026-01-06T05:59:00.000Z` deterministically and remains idempotent. Fresh deploy, populated upgrade/backfill, and second deploy/no-op are integration-tested; no prior migration is edited and `db push` is not used.

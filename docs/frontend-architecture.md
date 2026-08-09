@@ -79,7 +79,7 @@ apps/web/
 - **Route groups** separate the three shells: marketing/public, auth, and the authenticated app. The public portfolio (`/p/[slug]`) is deliberately in the *marketing* group: no auth, no app chrome, its own minimal layout, and it renders only the **frozen published snapshot** the backend serves.
 - **Server components** for shell/layout and initial data; **client components** for anything interactive/streaming.
 - **Deep-linkable state:** filters, board vs list, selected horizon, and drill-downs live in the URL — sharing a link reproduces the view (and makes e2e specs stable).
-- **Guarded routes:** unauthenticated access to `(app)` redirects to sign-in; onboarding is enforced by a *server-side* check of profile completeness (never a client-only redirect).
+- **Guarded routes:** the server verifies the httpOnly session and calls explicit Green `POST /v1/me/bootstrap`. The exhaustive decision is `unauthenticated | onboarding_required(MeResponse) | ready(MeResponse) | dependency_error(ApiError)`. `(app)` maps these to sign-in, onboarding, requested route, and visible recovery respectively. `/onboarding` is the inverse guard: sign-in, existing placeholder, Today, visible recovery. Dependency failures never masquerade as signed-out/not-onboarded, and a genuine 401 refreshes once before re-authentication. The only onboarding signal is `MeResponse.onboarding`; profile/fact/state/resource presence and timestamps are forbidden inference inputs.
 
 ---
 
@@ -93,6 +93,8 @@ apps/web/
 - **Tracing:** propagates/records `traceId` so a UI action can be correlated to the backend audit entry.
 
 **Types come from `@careeros/contracts`.** Responses are parsed with the shared zod schemas at the boundary in dev/test (fail loudly on drift) and typed in prod. If the backend changes a contract, the frontend fails at typecheck — not at runtime in front of a user.
+
+The bootstrap guard runs in server components and reads the bearer from the existing httpOnly cookie path; no new token exposure to browser JavaScript is introduced. Dev auth maps the canonical seed email to its fixed UUID and other normalized emails to stable isolated provider principals so real first-run behavior can be exercised without pre-seeding or a production test-only endpoint. Step 0 renders only the pre-existing onboarding placeholder plus route dependency recovery; import, review, reflect-back, autonomy setup, previews, and completion writes remain deferred.
 
 **Query conventions:** query keys namespaced by domain + user; cursor pagination via `useInfiniteQuery`; optimistic updates only where the backend is authoritative and rollback is safe (pipeline moves, learning-item progress); **never optimistic for a Yellow action** — those wait for the server.
 
