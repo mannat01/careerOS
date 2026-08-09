@@ -66,6 +66,38 @@ const DEV_AUTONOMY_DEFAULTS: Prisma.InputJsonValue = {
   'application.submit_assist': 'yellow',
 };
 
+const DEV_BRIEFING_STARTED_AT = new Date('2026-01-06T06:00:00Z');
+const DEV_BRIEFING_FINISHED_AT = new Date('2026-01-06T06:00:42Z');
+const DEV_BRIEFING_STEPS: Prisma.InputJsonValue = [
+  {
+    name: 'ingest',
+    status: 'ok',
+    costUsd: 0,
+    traceId: 'seed-briefing-ingest-v1',
+    startedAt: '2026-01-06T06:00:00.000Z',
+    finishedAt: '2026-01-06T06:00:10.000Z',
+    itemsProduced: 3,
+  },
+  {
+    name: 'score',
+    status: 'ok',
+    costUsd: 0.012,
+    traceId: 'seed-briefing-score-v1',
+    startedAt: '2026-01-06T06:00:10.000Z',
+    finishedAt: '2026-01-06T06:00:30.000Z',
+    itemsProduced: 3,
+  },
+  {
+    name: 'compose',
+    status: 'ok',
+    costUsd: 0.004,
+    traceId: 'seed-briefing-compose-v1',
+    startedAt: '2026-01-06T06:00:30.000Z',
+    finishedAt: '2026-01-06T06:00:42.000Z',
+    itemsProduced: 3,
+  },
+];
+
 async function seedSourceRegistry(): Promise<void> {
   for (const row of SOURCE_REGISTRY_SEED) {
     await prisma.sourceRegistry.upsert({
@@ -261,16 +293,18 @@ async function seedDevDataset(): Promise<void> {
       trigger: 'scheduled',
       status: 'complete',
       inputs: { horizon: '24h', sources: [sourceKey] },
-      steps: [
-        { name: 'ingest', status: 'ok', costUsd: 0 },
-        { name: 'score', status: 'ok', costUsd: 0.012 },
-        { name: 'compose', status: 'ok', costUsd: 0.004 },
-      ],
+      steps: DEV_BRIEFING_STEPS,
       costTotal: 0.016,
-      startedAt: new Date('2026-01-06T06:00:00Z'),
-      finishedAt: new Date('2026-01-06T06:00:42Z'),
+      startedAt: DEV_BRIEFING_STARTED_AT,
+      finishedAt: DEV_BRIEFING_FINISHED_AT,
     },
-    update: { status: 'complete' },
+    update: {
+      status: 'complete',
+      steps: DEV_BRIEFING_STEPS,
+      costTotal: 0.016,
+      startedAt: DEV_BRIEFING_STARTED_AT,
+      finishedAt: DEV_BRIEFING_FINISHED_AT,
+    },
   });
 
   const briefingItems = [
