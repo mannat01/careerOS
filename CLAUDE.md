@@ -103,6 +103,7 @@ Stop and surface a question if: a spec contradicts another spec; an acceptance c
 ### Build log
 | Date | Milestone | Status | Notes |
 | --- | --- | --- | --- |
+| 2026-08-09 | FM1 closure | **BASELINED** | Annotated tag `fm1-baseline` points to green commit `731fde7`; five obsolete Task-8 stashes were audited as superseded before removal. Deferred risks are registered in `docs/build-operating-model.md §0c`: production Clerk auth, cross-browser Playwright, existing DB/API integration skips, real-model validation Track B, hardened plugin isolation, and real PKM persistence. |
 | 2026-08-09 | FM1 — Foundation + Trust Kit | **COMPLETE** | Task 9 release gates complete: named six-guarantee suite 6/6 (compile-fail sentinels retained), contract-backed MSW fixtures 3/3, route axe + keyboard matrix 19/19, and unmocked Playwright local-stack Twin smoke 1/1 (`context → tool_call → tool_result → token* → done`; Yellow stops at `approval_required`, no token/tool/execution). Workspace 970 passed; frontend 192; eval CI 216; production build and `make verify`/full parity green; `git diff --check` clean. |
 | 2026-07-08 | M01 — Foundations | COMPLETE | Pure logic + interfaces; `pnpm -w test` green (80 tests). |
 | 2026-07-10 | M01 — Foundations | COMPLETE (real-infra) | NestJS booted against docker (pg+redis+minio); unit 96 / db 8 / e2e 9 green. |

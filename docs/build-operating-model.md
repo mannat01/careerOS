@@ -69,6 +69,23 @@ The empty `packages/db/prisma/migrations/20260727000000_m10_pkm/` directory is b
 
 ---
 
+## 0c. FM1 closure — deferred-risk register
+
+These risks are explicitly deferred beyond the `fm1-baseline` tag at commit
+`731fde7`. They do not reopen FM1, but they must remain visible and must not be
+silently treated as complete by later frontend milestones.
+
+| Risk | Current boundary | Exit condition |
+|---|---|---|
+| **Production Clerk authentication** | FM1 is fully verified with dev JWT auth; the production build validates Clerk-shaped configuration, but no live Clerk sign-in/refresh session has been exercised. | Staging Clerk sign-in, guarded shell, refresh/re-auth, sign-out, and backend token verification pass end-to-end without a dev-auth fallback. |
+| **Cross-browser Playwright coverage** | The blocking real-stack smoke runs Chromium only. | The same auth + `/rt/twin` Green completion and Yellow halt pass in Firefox and WebKit as blocking CI projects. |
+| **Existing DB/API integration skips** | The FM1 baseline retains the repository's established environment-gated skips (local closure run: DB 18 skipped; API 34 skipped). No FM1 test weakened or added a skip. | Canonical integration configuration supplies required infra consistently and every intended DB/API integration test executes in local full parity and CI with zero unexpected skips. |
+| **Real-model validation — Track B** | Fake providers prove deterministic contracts, guardrails, SSE behavior, and eval plumbing; they do not establish real-provider output quality. | Run the existing golden/eval gates against the production candidate model/provider, review calibration/cost/latency, and record an explicit launch decision. |
+| **Hardened plugin isolation — launch blocker** | First-party trusted plugins only; `node:vm` is not a security boundary. | Satisfy the isolation and escape-test criteria in §0 before enabling untrusted third-party plugins. |
+| **Real PKM persistence — launch blocker** | PKM remains non-durable and must not be exposed as a shipping UI. | Satisfy the Prisma migration/store/integration criteria in §0b before PKM ships. |
+
+---
+
 ## 1. Roles
 - **Opus (orchestrator/architect/reviewer):** scopes each work unit, makes trade-off + security + product calls, writes/updates specs, and **independently verifies** every implementation (re-runs tests, reads diffs). Does not hand cheaper models any decision that changes architecture, security, or product scope.
 - **Fable (implementer):** writes real, tested code for one scoped slice at a time, following `/docs` + `CLAUDE.md`. Reports what it ran and what it stubbed. Never marks infra-dependent work "verified."
