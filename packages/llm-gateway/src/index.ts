@@ -13,4 +13,11 @@ export {
   type ModelTier,
 } from './types.js';
 export { computeCostUsd, createLlmGateway, type LlmGateway, type LlmGatewayOptions } from './gateway.js';
-export { AnthropicProvider, FakeLlmProvider } from './providers.js';
+export {
+  AnthropicProvider,
+  createLlmProviderFromEnv,
+  FakeLlmProvider,
+  type AnthropicProviderOptions,
+  type LlmProviderEnv,
+  type LlmProviderName,
+} from './providers.js';

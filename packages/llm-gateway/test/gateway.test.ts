@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AnthropicProvider,
   computeCostUsd,
+  createLlmProviderFromEnv,
   createLlmGateway,
   FakeLlmProvider,
   type CostMeter,
@@ -68,8 +69,59 @@ describe('llm-gateway (ADR-001: single vendor, tiered routing)', () => {
     expect(computeCostUsd(undefined, { inputTokens: 10, outputTokens: 10 })).toBe(0);
   });
 
-  it('AnthropicProvider is an offline stub that fails loud, not silent', async () => {
-    const p = new AnthropicProvider('sk-test');
-    await expect(p.complete()).rejects.toThrow(/STUB\(M01\)/);
+  it('maps gateway messages to Anthropic Messages and returns text + usage', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchMock: typeof fetch = (url, init) => {
+      const requestUrl = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      calls.push({ url: requestUrl, init });
+      return Promise.resolve(new Response(JSON.stringify({
+        content: [{ type: 'text', text: '{"entities":[]}' }],
+        usage: { input_tokens: 42, output_tokens: 7 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    };
+    const provider = new AnthropicProvider('sk-test', { fetch: fetchMock });
+
+    const result = await provider.complete({
+      model: 'claude-haiku-4-5',
+      messages: [{ role: 'system', content: 'system rules' }, { role: 'user', content: 'extract' }],
+      maxTokens: 100,
+      temperature: 0,
+      traceId: 'trace-1',
+    });
+
+    expect(result).toEqual({ text: '{"entities":[]}', usage: { inputTokens: 42, outputTokens: 7 } });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe('https://api.anthropic.com/v1/messages');
+    const rawBody = calls[0]?.init?.body;
+    expect(typeof rawBody).toBe('string');
+    const body = JSON.parse(typeof rawBody === 'string' ? rawBody : '{}') as Record<string, unknown>;
+    expect(body).toMatchObject({
+      model: 'claude-haiku-4-5', system: 'system rules', max_tokens: 100, temperature: 0,
+      messages: [{ role: 'user', content: 'extract' }],
+    });
+    const headers = calls[0]?.init?.headers as Record<string, string>;
+    expect(headers['x-api-key']).toBe('sk-test');
+    expect(headers['anthropic-version']).toBe('2023-06-01');
+  });
+
+  it('fails loud with status and request id while preserving the API key', async () => {
+    const fetchMock: typeof fetch = () => Promise.resolve(new Response(
+      JSON.stringify({ error: { type: 'authentication_error', message: 'bad key' } }),
+      { status: 401, headers: { 'request-id': 'req-123' } },
+    ));
+    const provider = new AnthropicProvider('sk-secret', { fetch: fetchMock });
+    const request = provider.complete({
+      model: 'claude-haiku-4-5', messages: [{ role: 'user', content: 'x' }],
+      maxTokens: 10, temperature: 0, traceId: 'trace-1',
+    });
+    await expect(request).rejects.toThrow(/401, request req-123.*bad key/);
+    await expect(request).rejects.not.toThrow(/sk-secret/);
+  });
+
+  it('selects providers by env and defaults to the fake', () => {
+    expect(createLlmProviderFromEnv({}).vendor).toBe('fake');
+    expect(createLlmProviderFromEnv({ LLM_PROVIDER: 'fake' }).vendor).toBe('fake');
+    expect(createLlmProviderFromEnv({ LLM_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'sk-test' }).vendor).toBe('anthropic');
+    expect(() => createLlmProviderFromEnv({ LLM_PROVIDER: 'other' })).toThrow(/Unsupported LLM_PROVIDER/);
   });
 });
