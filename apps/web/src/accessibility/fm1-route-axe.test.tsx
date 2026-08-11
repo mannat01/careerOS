@@ -8,6 +8,8 @@ import SignInPage from '../../app/(auth)/sign-in/page';
 import AuthLayout from '../../app/(auth)/layout';
 import { ExtractionReview, OnboardingImportClient } from '../../app/onboarding/OnboardingImportClient';
 import { POPULATED_IMPORT, THIN_IMPORT } from '../../app/onboarding/onboarding-fixtures';
+import { CareerStateReview } from '../../app/onboarding/CareerStateReflectBack';
+import { NO_SIGNAL_STATE, POPULATED_STATE, STATE_EXPLANATIONS } from '../../app/onboarding/state-fixtures';
 import TodayPage from '../../app/(app)/today/page';
 import OpportunitiesPage from '../../app/(app)/opportunities/page';
 import PlanPage from '../../app/(app)/plan/page';
@@ -32,6 +34,9 @@ const routes: ReadonlyArray<{ name: string; path: string; renderRoute: () => Rea
   { name: 'Onboarding import', path: '/onboarding', renderRoute: () => <OnboardingImportClient importResume={() => Promise.resolve(POPULATED_IMPORT)} /> },
   { name: 'Onboarding extraction review', path: '/onboarding', renderRoute: () => <ExtractionReview result={POPULATED_IMPORT} onBack={() => undefined} /> },
   { name: 'Onboarding thin extraction', path: '/onboarding', renderRoute: () => <ExtractionReview result={THIN_IMPORT} onBack={() => undefined} /> },
+  { name: 'Onboarding reflect-back', path: '/onboarding', renderRoute: () => <CareerStateReview model={POPULATED_STATE} explanations={STATE_EXPLANATIONS} onCorrect={() => Promise.resolve(true)} /> },
+  { name: 'Onboarding reflect-back no-signal', path: '/onboarding', renderRoute: () => <CareerStateReview model={NO_SIGNAL_STATE} explanations={STATE_EXPLANATIONS} /> },
+  { name: 'Onboarding reflect-back correction', path: '/onboarding', renderRoute: () => <CareerStateReview model={NO_SIGNAL_STATE} explanations={STATE_EXPLANATIONS} importedFacts={POPULATED_IMPORT.entities} corrections={[{ id: '00000000-0000-4000-8000-000000000102', kind: 'skill', label: 'PostgreSQL', detail: 'intermediate', provenance: 'user' }]} onCorrect={() => Promise.resolve(true)} /> },
   { name: 'Routing dependency recovery', path: '/today', renderRoute: () => <RoutingRecovery error={new ApiError({ code: 'internal', message: 'Dependency unavailable.', traceId: 'axe-trace' })} retryHref="/today" /> },
   { name: 'Today', path: '/today', renderRoute: () => <AppShell><TodayPage /></AppShell> },
   { name: 'Opportunities', path: '/opportunities', renderRoute: () => <AppShell><OpportunitiesPage /></AppShell> },

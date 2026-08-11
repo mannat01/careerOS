@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  profileFactEditResponseSchema,
   profileImportResponseSchema,
   profileResponseSchema,
 } from '@careeros/contracts';
@@ -28,6 +29,15 @@ const IMPORT_RESPONSE = profileImportResponseSchema.parse({
   profileId: '00000000-0000-4000-8000-000000000100',
   counts: { experiences: 0, projects: 0, education: 0, skillClaims: 0 },
   entities: [],
+});
+const EDIT_RESPONSE = profileFactEditResponseSchema.parse({
+  fact: {
+    id: '00000000-0000-4000-8000-000000000102',
+    kind: 'skill',
+    label: 'PostgreSQL',
+    detail: null,
+    provenance: 'user',
+  },
 });
 
 interface RecordedCall {
@@ -61,8 +71,10 @@ function clientDouble(): { readonly client: ApiClient; readonly calls: RecordedC
       _body: unknown,
       _schema: z.ZodType<T>,
     ): Promise<T> => Promise.reject(new Error('not used')),
-    patch: <T>(_path: string, _body: unknown, _schema: z.ZodType<T>): Promise<T> =>
-      Promise.reject(new Error('not used')),
+    patch: <T>(path: string, body: unknown, schema: z.ZodType<T>, opts?: RequestOptions): Promise<T> => {
+      calls.push({ path, body, schema, opts });
+      return Promise.resolve(schema.parse(EDIT_RESPONSE));
+    },
     del: <T>(_path: string, _schema: z.ZodType<T>): Promise<T> =>
       Promise.reject(new Error('not used')),
   };
@@ -101,5 +113,21 @@ describe('typed profile domain', () => {
 
     expect(() => createProfileApi(client).import({ resumeText: '' })).toThrow();
     expect(calls).toHaveLength(0);
+  });
+
+  it('validates authoritative edits and shape-verifies provenance=user', async () => {
+    const { client, calls } = clientDouble();
+
+    await createProfileApi(client).editFact(
+      '00000000-0000-4000-8000-000000000102',
+      { kind: 'skill', label: '  PostgreSQL  ' },
+    );
+
+    expect(calls).toEqual([{
+      path: '/v1/profile/facts/00000000-0000-4000-8000-000000000102',
+      body: { kind: 'skill', label: 'PostgreSQL' },
+      schema: profileFactEditResponseSchema,
+      opts: undefined,
+    }]);
   });
 });

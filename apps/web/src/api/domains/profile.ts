@@ -12,7 +12,11 @@
  * escalation vector.
  */
 import {
+  profileFactEditRequestSchema,
+  profileFactEditResponseSchema,
   profileImportRequestSchema,
+  type ProfileFactEditRequest,
+  type ProfileFactEditResponse,
   profileImportResponseSchema,
   profileResponseSchema,
   type ProfileImportRequest,
@@ -30,6 +34,12 @@ export interface ProfileApi {
    * step in the onboarding flow).
    */
   import(body: ProfileImportRequest, opts?: RequestOptions): Promise<ProfileImportResponse>;
+  /** PATCH /v1/profile/facts/:id — authoritative caller-owned correction (Green). */
+  editFact(
+    factId: string,
+    body: ProfileFactEditRequest,
+    opts?: RequestOptions,
+  ): Promise<ProfileFactEditResponse>;
 }
 
 export function createProfileApi(client: ApiClient): ProfileApi {
@@ -42,6 +52,15 @@ export function createProfileApi(client: ApiClient): ProfileApi {
         '/v1/profile/import',
         parsed,
         profileImportResponseSchema,
+        opts,
+      );
+    },
+    editFact: (factId, body, opts) => {
+      const parsed = profileFactEditRequestSchema.parse(body);
+      return client.patch(
+        `/v1/profile/facts/${encodeURIComponent(factId)}`,
+        parsed,
+        profileFactEditResponseSchema,
         opts,
       );
     },

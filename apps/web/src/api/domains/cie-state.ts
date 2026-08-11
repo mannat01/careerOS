@@ -4,8 +4,8 @@
  * The wire response is parsed by the shared schema exported from
  * `@careeros/contracts`; this module only composes the typed client.
  *
- * Read-only. `POST /v1/cie/state/recompute` is a Green mutation and lives on
- * the API but is deferred out of FM1's client (no UI need it today).
+ * FM2.2 adds the Green recompute mutation used after an authoritative profile
+ * correction. All state and explanation responses remain contract-parsed.
  *
  * `userId` is server-derived from the bearer.
  */
@@ -23,6 +23,11 @@ export interface CieStateApi {
   get(opts?: RequestOptions): Promise<CieStateResponse>;
   /** GET /v1/cie/state/:dimension/explain — evidence + reasoning for one dimension. */
   explain(dimension: string, opts?: RequestOptions): Promise<CieStateExplainResponse>;
+  /** POST /v1/cie/state/recompute — re-derive from authoritative profile facts. */
+  recompute(
+    change?: { readonly factId: string; readonly reason: string },
+    opts?: RequestOptions,
+  ): Promise<CieStateResponse>;
 }
 
 export function createCieStateApi(client: ApiClient): CieStateApi {
@@ -32,6 +37,14 @@ export function createCieStateApi(client: ApiClient): CieStateApi {
       client.get(
         `/v1/cie/state/${encodeURIComponent(dimension)}/explain`,
         cieStateExplainResponseSchema,
+        opts,
+      ),
+    recompute: (change, opts) =>
+      client.postGreen(
+        'memory.write',
+        '/v1/cie/state/recompute',
+        change ?? {},
+        cieStateResponseSchema,
         opts,
       ),
   };

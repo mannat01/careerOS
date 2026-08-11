@@ -17,8 +17,8 @@
  */
 export type Tier = 'green' | 'yellow' | 'red';
 
-/** Discrete confidence bands. UI never invents a value from a raw number —
- *  the backend supplies a band alongside the value so calibration stays honest. */
+/** Discrete display bands. Raw confidence always comes from the backend; for
+ * contracts without a separate band, `bandFor` applies the shared thresholds. */
 export type ConfidenceBand = 'low' | 'med' | 'high';
 
 /**
@@ -49,7 +49,15 @@ export interface Confidence {
 }
 
 /** Provenance of a user profile fact — never omitted, never guessed. */
-export type Provenance = 'imported' | 'user' | 'inferred_confirmed' | 'from_notes' | 'no_signal';
+export type Provenance =
+  | 'imported'
+  | 'user'
+  | 'inferred_confirmed'
+  | 'from_notes'
+  | 'no_signal'
+  | 'demonstrated'
+  | 'inferred'
+  | 'summarized';
 
 /**
  * Subject of a "why" — the thing being explained. Kept small so it's
@@ -60,8 +68,8 @@ export interface Subject {
   readonly label: string; // human-facing subject label
 }
 
-/** Runtime helper: derive a confidence band from a numeric value. Used only
- *  when constructing test fixtures — production values come from the API. */
+/** Shared display thresholds for contracts that expose calibrated numeric
+ * confidence but not a separate band. The numeric value always remains API-owned. */
 export function bandFor(value: number): ConfidenceBand {
   if (value < 0.5) return 'low';
   if (value < 0.8) return 'med';

@@ -134,6 +134,9 @@ describe('<ProvenanceTag>', () => {
     ['inferred_confirmed', 'AI — confirmed'],
     ['from_notes', 'From your notes'],
     ['no_signal', 'No signal yet'],
+    ['demonstrated', 'Demonstrated'],
+    ['inferred', 'Inferred by AI'],
+    ['summarized', 'AI summary'],
   ];
   it.each(cases)('renders provenance=%s with label "%s"', (prov, label) => {
     render(<ProvenanceTag provenance={prov} />);

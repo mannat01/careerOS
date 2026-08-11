@@ -6,6 +6,7 @@ import type { ImportedEntity, ProfileImportResponse } from '@careeros/contracts'
 import { apiClient, ApiError, createApi } from '@/api';
 import { ErrorRecoveryRenderer, RouteSkeleton } from '@/shell/state';
 import { InsufficientData, ProvenanceTag } from '@/trust';
+import { CareerStateReflectBack } from './CareerStateReflectBack';
 
 export interface OnboardingImportClientProps {
   /** Test seam; production always uses the typed profile domain client. */
@@ -16,6 +17,7 @@ type ImportState =
   | { readonly kind: 'input' }
   | { readonly kind: 'loading' }
   | { readonly kind: 'review'; readonly result: ProfileImportResponse }
+  | { readonly kind: 'reflect'; readonly result: ProfileImportResponse }
   | { readonly kind: 'error'; readonly error: ApiError };
 
 const GROUPS: ReadonlyArray<{
@@ -65,11 +67,16 @@ export function OnboardingImportClient({
     void submitImport();
   }
 
+  if (state.kind === 'reflect') {
+    return <CareerStateReflectBack importedFacts={state.result.entities} />;
+  }
+
   if (state.kind === 'review') {
     return (
       <ExtractionReview
         result={state.result}
         onBack={() => setState({ kind: 'input' })}
+        onReflectBack={() => setState({ kind: 'reflect', result: state.result })}
       />
     );
   }
@@ -127,10 +134,15 @@ export function OnboardingImportClient({
 export interface ExtractionReviewProps {
   readonly result: ProfileImportResponse;
   readonly onBack?: () => void;
+  readonly onReflectBack?: () => void;
 }
 
 /** Review-only FM2.1 view. It intentionally performs no completion write. */
-export function ExtractionReview({ result, onBack }: ExtractionReviewProps): JSX.Element {
+export function ExtractionReview({
+  result,
+  onBack,
+  onReflectBack,
+}: ExtractionReviewProps): JSX.Element {
   const thin = result.entities.length === 0;
 
   return (
@@ -201,15 +213,26 @@ export function ExtractionReview({ result, onBack }: ExtractionReviewProps): JSX
         invent or display a confidence score.
       </aside>
 
-      {onBack === undefined ? null : (
-        <button
-          type="button"
-          onClick={onBack}
-          className="self-start rounded-md border border-border-strong bg-bg-elevated px-4 py-2 text-sm font-medium text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-brand-base"
-        >
-          Back to résumé text
-        </button>
-      )}
+      <div className="flex flex-wrap gap-3">
+        {onReflectBack === undefined ? null : (
+          <button
+            type="button"
+            onClick={onReflectBack}
+            className="rounded-md bg-brand-base px-4 py-2 text-sm font-medium text-text-inverse outline-none focus-visible:ring-2 focus-visible:ring-brand-base"
+          >
+            Review what CareerOS understands
+          </button>
+        )}
+        {onBack === undefined ? null : (
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-md border border-border-strong bg-bg-elevated px-4 py-2 text-sm font-medium text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-brand-base"
+          >
+            Back to résumé text
+          </button>
+        )}
+      </div>
     </main>
   );
 }
