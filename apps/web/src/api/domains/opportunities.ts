@@ -1,5 +1,5 @@
 /**
- * `opportunities` domain — read-only listing + detail for FM1.
+ * `opportunities` domain — read-only browse, detail, and grounded match views.
  *
  * The canonical `Opportunity` shape is imported from `@careeros/contracts`
  * (`opportunitySchema`) — this module composes the client with that schema,
@@ -29,8 +29,14 @@ export interface OpportunitiesListQuery {
   cursor?: string;
   /** Client-side page size hint; server may clamp. */
   limit?: number;
-  /** Free-text search across role/company. */
-  q?: string;
+  /** SourceRegistry key, e.g. greenhouse, lever, or usajobs. */
+  source?: string;
+  /** Restrict to remote (`true`) or non-remote (`false`) roles. */
+  remote?: boolean;
+  /** Restrict to postings that carry compensation data. */
+  comp?: boolean;
+  /** Restrict to postings ingested within the last N days. */
+  freshness?: number;
 }
 
 export interface OpportunitiesApi {
@@ -50,7 +56,10 @@ export function createOpportunitiesApi(client: ApiClient): OpportunitiesApi {
         query: {
           ...(query?.cursor !== undefined ? { cursor: query.cursor } : {}),
           ...(query?.limit !== undefined ? { limit: query.limit } : {}),
-          ...(query?.q !== undefined ? { q: query.q } : {}),
+          ...(query?.source !== undefined ? { source: query.source } : {}),
+          ...(query?.remote !== undefined ? { remote: query.remote } : {}),
+          ...(query?.comp !== undefined ? { comp: query.comp } : {}),
+          ...(query?.freshness !== undefined ? { freshness: query.freshness } : {}),
         },
       }),
     get: (id, opts) => client.get(`/v1/opportunities/${encodeURIComponent(id)}`, opportunityDetailSchema, opts),

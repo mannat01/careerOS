@@ -13,7 +13,15 @@ import { POPULATED_IMPORT, THIN_IMPORT } from '../../app/onboarding/onboarding-f
 import { CareerStateReview } from '../../app/onboarding/CareerStateReflectBack';
 import { NO_SIGNAL_STATE, POPULATED_STATE, STATE_EXPLANATIONS } from '../../app/onboarding/state-fixtures';
 import TodayPage from '../../app/(app)/today/page';
-import OpportunitiesPage from '../../app/(app)/opportunities/page';
+import { OpportunitiesClient } from '../../app/(app)/opportunities/OpportunitiesClient';
+import { OpportunityDetailClient } from '../../app/(app)/opportunities/OpportunityDetailClient';
+import {
+  EMPTY_OPPORTUNITIES,
+  MATCH_BY_OPPORTUNITY,
+  POPULATED_MATCH,
+  POPULATED_OPPORTUNITIES,
+  POPULATED_OPPORTUNITY_DETAIL,
+} from '../../app/(app)/opportunities/opportunity-fixtures';
 import PlanPage from '../../app/(app)/plan/page';
 import YouPage from '../../app/(app)/you/page';
 import ApprovalsPage from '../../app/(app)/approvals/page';
@@ -46,7 +54,7 @@ const routes: ReadonlyArray<{ name: string; path: string; renderRoute: () => Rea
   { name: 'Onboarding autonomy review', path: '/onboarding', renderRoute: () => <AutonomyReview initialSettings={ONBOARDING_SETTINGS} dependencies={{ updateSettings: () => Promise.resolve(ONBOARDING_SETTINGS), completeOnboarding: () => Promise.reject(new Error('not exercised by static axe')), goToToday: () => undefined }} /> },
   { name: 'Routing dependency recovery', path: '/today', renderRoute: () => <RoutingRecovery error={new ApiError({ code: 'internal', message: 'Dependency unavailable.', traceId: 'axe-trace' })} retryHref="/today" /> },
   { name: 'Today', path: '/today', renderRoute: () => <AppShell><TodayPage /></AppShell> },
-  { name: 'Opportunities', path: '/opportunities', renderRoute: () => <AppShell><OpportunitiesPage /></AppShell> },
+  { name: 'Opportunities', path: '/opportunities', renderRoute: () => <AppShell><OpportunitiesClient dependencies={{ list: () => Promise.resolve(POPULATED_OPPORTUNITIES), match: (id) => Promise.resolve(MATCH_BY_OPPORTUNITY[id] ?? POPULATED_MATCH) }} /></AppShell> },
   { name: 'Plan', path: '/plan', renderRoute: () => <AppShell><PlanPage /></AppShell> },
   { name: 'You', path: '/you', renderRoute: () => <AppShell><YouPage /></AppShell> },
   { name: 'Approvals', path: '/approvals', renderRoute: () => <AppShell><ApprovalsPage /></AppShell> },
@@ -68,6 +76,51 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
     const hasKeyboardTarget = container.querySelector('a[href], button, input, textarea, select, [tabindex]:not([tabindex="-1"])') !== null;
     if (hasKeyboardTarget) expect(document.activeElement).not.toBe(document.body);
     else expect(document.activeElement).toBe(document.body);
+  });
+
+  it('FM3.1 populated opportunity list is axe-clean after matches load', async () => {
+    pathname = '/opportunities';
+    const { container } = render(
+      <AppShell>
+        <OpportunitiesClient dependencies={{
+          list: () => Promise.resolve(POPULATED_OPPORTUNITIES),
+          match: (id) => Promise.resolve(MATCH_BY_OPPORTUNITY[id] ?? POPULATED_MATCH),
+        }} />
+      </AppShell>,
+    );
+    await screen.findByRole('list', { name: 'Opportunity results' });
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM3.1 empty opportunity list is axe-clean', async () => {
+    pathname = '/opportunities';
+    const { container } = render(
+      <AppShell>
+        <OpportunitiesClient dependencies={{
+          list: () => Promise.resolve(EMPTY_OPPORTUNITIES),
+          match: () => Promise.reject(new Error('Empty list never requests a match.')),
+        }} />
+      </AppShell>,
+    );
+    await screen.findByRole('heading', { name: 'No opportunities found' });
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM3.1 populated opportunity detail and match is axe-clean', async () => {
+    pathname = '/opportunities/opportunity-1';
+    const { container } = render(
+      <AppShell>
+        <OpportunityDetailClient
+          opportunityId="opportunity-1"
+          dependencies={{
+            get: () => Promise.resolve(POPULATED_OPPORTUNITY_DETAIL),
+            match: () => Promise.resolve(POPULATED_MATCH),
+          }}
+        />
+      </AppShell>,
+    );
+    await screen.findByRole('heading', { name: 'Why this fit' });
+    expect(await axe(container)).toHaveNoViolations();
   });
 
   it('completes the ApprovalDialog request/edit/re-request/approve flow keyboard-only', async () => {
