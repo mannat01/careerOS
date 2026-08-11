@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { decisionSupportResponseSchema, opportunityMatchResponseSchema } from '@careeros/contracts';
 import { OpportunityDetailClient, type OpportunityDetailDependencies } from './OpportunityDetailClient';
 import { POPULATED_MATCH, POPULATED_OPPORTUNITY_DETAIL } from './opportunity-fixtures';
+import { SAVED_APPLICATION_DETAIL } from '../pipeline/pipeline-fixtures';
 
 afterEach(cleanup);
 
@@ -21,6 +22,7 @@ function dependencies(): OpportunityDetailDependencies {
       optionalityNote: 'Build broader leadership scope, then revisit.',
       modelVersion: 'strategic-reasoner@1.0.0',
     })),
+    save: () => Promise.resolve(SAVED_APPLICATION_DETAIL),
   };
 }
 
@@ -99,5 +101,18 @@ describe('FM3.2 should-I-apply decision support', () => {
     expect(within(card).getByTestId('confidence-chip')).toHaveTextContent('Low');
     expect(within(card).queryByTestId('decision-recommendation')).not.toBeInTheDocument();
     expect(card).toHaveTextContent('will not fill it in or infer a verdict');
+  });
+});
+
+describe('FM3.3 save to pipeline', () => {
+  it('creates a saved application and explicitly says nothing was submitted', async () => {
+    const user = userEvent.setup();
+    render(<OpportunityDetailClient opportunityId="opportunity-1" dependencies={dependencies()} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Save to pipeline' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved in the Saved stage. Nothing was submitted.');
+    expect(screen.getByRole('button', { name: 'Saved to pipeline' })).toBeDisabled();
+    expect(screen.getByRole('link', { name: 'View pipeline' })).toHaveAttribute('href', '/opportunities/pipeline');
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import type { DecisionSupportResponse, OpportunityDetail, OpportunityMatchResponse } from '@careeros/contracts';
+import type { ApplicationDetail, DecisionSupportResponse, OpportunityDetail, OpportunityMatchResponse } from '@careeros/contracts';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { apiClient, ApiError, createApi } from '@/api';
@@ -13,6 +13,7 @@ export interface OpportunityDetailDependencies {
   readonly get: (id: string) => Promise<OpportunityDetail>;
   readonly match: (id: string) => Promise<OpportunityMatchResponse>;
   readonly decide: (id: string) => Promise<DecisionSupportResponse>;
+  readonly save: (id: string) => Promise<ApplicationDetail>;
 }
 
 type DetailState =
@@ -26,6 +27,7 @@ function productionDependencies(): OpportunityDetailDependencies {
     get: (id) => api.opportunities.get(id),
     match: (id) => api.opportunities.match(id),
     decide: (id) => api.decisions.decide(id),
+    save: (id) => api.applications.create({ opportunityId: id }),
   };
 }
 
@@ -66,6 +68,12 @@ export function OpportunityDetailClient({
     | { readonly kind: 'ready'; readonly value: DecisionSupportResponse }
     | { readonly kind: 'error'; readonly error: ApiError }
   >({ kind: 'idle' });
+  const [saveState, setSaveState] = useState<
+    | { readonly kind: 'idle' }
+    | { readonly kind: 'saving' }
+    | { readonly kind: 'saved'; readonly application: ApplicationDetail }
+    | { readonly kind: 'error'; readonly error: ApiError }
+  >({ kind: 'idle' });
 
   async function load(): Promise<void> {
     setState({ kind: 'loading' });
@@ -90,6 +98,15 @@ export function OpportunityDetailClient({
     }
   }
 
+  async function saveToPipeline(): Promise<void> {
+    setSaveState({ kind: 'saving' });
+    try {
+      setSaveState({ kind: 'saved', application: await deps.save(opportunityId) });
+    } catch (cause) {
+      setSaveState({ kind: 'error', error: asApiError(cause) });
+    }
+  }
+
   if (state.kind === 'loading') return <RouteSkeleton label="Loading opportunity and why-this-fit evidence…" />;
   if (state.kind === 'error') return <ErrorRecoveryRenderer error={state.error} onRetry={() => void load()} />;
 
@@ -103,6 +120,27 @@ export function OpportunityDetailClient({
         <h1 id="opportunity-detail-heading" className="mt-2 text-2xl font-semibold text-text-primary">{detail.role}</h1>
         <p className="mt-1 text-text-secondary">{detail.company}{detail.location ? ` · ${detail.location}` : ''}</p>
         {comp ? <p className="mt-2 text-sm text-text-primary">Listed compensation: {comp}</p> : null}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={saveState.kind === 'saving' || saveState.kind === 'saved'}
+            onClick={() => void saveToPipeline()}
+            className="rounded-md bg-brand-base px-4 py-2 text-sm font-semibold text-bg-base focus-visible:ring-2 focus-visible:ring-brand-base disabled:opacity-60"
+          >
+            {saveState.kind === 'saving' ? 'Saving…' : saveState.kind === 'saved' ? 'Saved to pipeline' : 'Save to pipeline'}
+          </button>
+          <Link href="/opportunities/pipeline" className="text-sm font-semibold text-brand-base underline focus-visible:ring-2 focus-visible:ring-brand-base">
+            View pipeline
+          </Link>
+        </div>
+        {saveState.kind === 'saved' ? (
+          <p role="status" className="mt-3 text-sm text-text-secondary">
+            Saved in the Saved stage. Nothing was submitted.
+          </p>
+        ) : null}
+        {saveState.kind === 'error' ? (
+          <div className="mt-3"><ErrorRecoveryRenderer error={saveState.error} onRetry={() => void saveToPipeline()} /></div>
+        ) : null}
       </header>
 
       <section aria-labelledby="why-fit-heading" className="space-y-3">

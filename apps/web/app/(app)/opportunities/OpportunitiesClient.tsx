@@ -138,8 +138,15 @@ export function OpportunitiesClient({
   return (
     <section aria-labelledby="opportunities-heading" className="flex flex-col gap-6">
       <header>
-        <h1 id="opportunities-heading" className="text-2xl font-semibold text-text-primary">Opportunities</h1>
-        <p className="mt-1 text-text-secondary">Browse roles from sanctioned sources and inspect the evidence behind every match.</p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 id="opportunities-heading" className="text-2xl font-semibold text-text-primary">Opportunities</h1>
+            <p className="mt-1 text-text-secondary">Browse roles from sanctioned sources, with grounded match explanations.</p>
+          </div>
+          <Link href="/opportunities/pipeline" className="text-sm font-semibold text-brand-base underline focus-visible:ring-2 focus-visible:ring-brand-base">
+            View application pipeline
+          </Link>
+        </div>
       </header>
 
       <form

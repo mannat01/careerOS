@@ -25,6 +25,10 @@ import {
   auditListResponseSchema,
   briefingItemSchema,
   briefingLatestResponseSchema,
+  applicationCreateRequestSchema,
+  applicationListResponseSchema,
+  applicationPatchRequestSchema,
+  applicationSchema,
   type OpportunityMatchResponse,
 } from '../src/index.js';
 
@@ -341,6 +345,51 @@ describe('authoritative CIE, audit, and briefing wire fixtures', () => {
     };
     expect(briefingItemSchema.parse(item)).toEqual(item);
     expect(briefingLatestResponseSchema.parse(run)).toEqual(run);
+  });
+});
+
+describe('FM3.3 application pipeline contracts', () => {
+  const OPP_ID = '00000000-0000-4000-8000-0000000000aa';
+  const APP_ID = '00000000-0000-4000-8000-0000000000bb';
+  const application = {
+    id: APP_ID,
+    opportunityId: OPP_ID,
+    resumeVariantId: null,
+    status: 'saved' as const,
+    notes: null,
+    followUpAt: null,
+    appliedAt: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+  };
+
+  it('validates the GET /v1/applications list envelope', () => {
+    expect(applicationListResponseSchema.parse({ data: [application] })).toEqual({ data: [application] });
+    expect(applicationListResponseSchema.parse({ data: [] })).toEqual({ data: [] });
+    // Strict envelope — no undocumented fields sneak past a UI that trusts it.
+    expect(applicationListResponseSchema.safeParse({ data: [], nextCursor: null }).success).toBe(false);
+  });
+
+  it('validates POST /v1/applications create requests and rejects non-uuid opportunity ids', () => {
+    expect(applicationCreateRequestSchema.parse({ opportunityId: OPP_ID })).toEqual({ opportunityId: OPP_ID });
+    expect(applicationCreateRequestSchema.safeParse({ opportunityId: 'not-a-uuid' }).success).toBe(false);
+  });
+
+  it('validates PATCH /v1/applications/:id including the explicit iSubmitted flag', () => {
+    expect(applicationPatchRequestSchema.parse({ status: 'drafting' })).toEqual({ status: 'drafting' });
+    expect(applicationPatchRequestSchema.parse({ status: 'applied', iSubmitted: true }))
+      .toEqual({ status: 'applied', iSubmitted: true });
+    // A PATCH with no meaningful change is rejected at the contract layer.
+    expect(applicationPatchRequestSchema.safeParse({}).success).toBe(false);
+    // Unknown status values do not typecheck at the wire.
+    expect(applicationPatchRequestSchema.safeParse({ status: 'made_up' }).success).toBe(false);
+  });
+
+  it('accepts the eight-state pipeline in canonical order', () => {
+    const order = ['saved', 'drafting', 'ready', 'applied', 'screening', 'interviewing', 'offer', 'closed'] as const;
+    for (const status of order) {
+      expect(applicationSchema.safeParse({ ...application, status }).success).toBe(true);
+    }
   });
 });
 

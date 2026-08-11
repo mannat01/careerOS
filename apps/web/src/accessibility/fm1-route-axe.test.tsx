@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
@@ -22,6 +22,8 @@ import {
   POPULATED_OPPORTUNITIES,
   POPULATED_OPPORTUNITY_DETAIL,
 } from '../../app/(app)/opportunities/opportunity-fixtures';
+import { EMPTY_PIPELINE, POPULATED_PIPELINE, SAVED_APPLICATION_DETAIL } from '../../app/(app)/pipeline/pipeline-fixtures';
+import { PipelineBoardClient } from '../../app/(app)/pipeline/PipelineBoardClient';
 import PlanPage from '../../app/(app)/plan/page';
 import YouPage from '../../app/(app)/you/page';
 import ApprovalsPage from '../../app/(app)/approvals/page';
@@ -55,6 +57,7 @@ const routes: ReadonlyArray<{ name: string; path: string; renderRoute: () => Rea
   { name: 'Routing dependency recovery', path: '/today', renderRoute: () => <RoutingRecovery error={new ApiError({ code: 'internal', message: 'Dependency unavailable.', traceId: 'axe-trace' })} retryHref="/today" /> },
   { name: 'Today', path: '/today', renderRoute: () => <AppShell><TodayPage /></AppShell> },
   { name: 'Opportunities', path: '/opportunities', renderRoute: () => <AppShell><OpportunitiesClient dependencies={{ list: () => Promise.resolve(POPULATED_OPPORTUNITIES), match: (id) => Promise.resolve(MATCH_BY_OPPORTUNITY[id] ?? POPULATED_MATCH) }} /></AppShell> },
+  { name: 'Pipeline', path: '/opportunities/pipeline', renderRoute: () => <AppShell><PipelineBoardClient dependencies={{ list: () => Promise.resolve(EMPTY_PIPELINE), patch: () => Promise.reject(new Error('Empty pipeline never patches.')) }} /></AppShell> },
   { name: 'Plan', path: '/plan', renderRoute: () => <AppShell><PlanPage /></AppShell> },
   { name: 'You', path: '/you', renderRoute: () => <AppShell><YouPage /></AppShell> },
   { name: 'Approvals', path: '/approvals', renderRoute: () => <AppShell><ApprovalsPage /></AppShell> },
@@ -121,6 +124,7 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
               assumptions: ['The listed requirements are accurate.'], recommendation: 'wait',
               optionalityNote: 'Build the missing scope first.', modelVersion: 'strategic-reasoner@1.0.0',
             })),
+            save: () => Promise.resolve(SAVED_APPLICATION_DETAIL),
           }}
         />
       </AppShell>,
@@ -143,6 +147,7 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
             assumptions: ['The listed requirements are accurate.'], recommendation: 'wait',
             optionalityNote: 'Build the missing scope first.', modelVersion: 'strategic-reasoner@1.0.0',
           })),
+          save: () => Promise.resolve(SAVED_APPLICATION_DETAIL),
         }} />
       </AppShell>,
     );
@@ -151,6 +156,54 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
     await user.keyboard('{Enter}');
     const card = await screen.findByRole('region', { name: 'Should I apply decision support' });
     expect(card).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM3.3 populated pipeline board is axe-clean', async () => {
+    pathname = '/opportunities/pipeline';
+    const { container } = render(
+      <AppShell>
+        <PipelineBoardClient dependencies={{
+          list: () => Promise.resolve(POPULATED_PIPELINE),
+          patch: () => Promise.reject(new Error('Static axe board does not patch.')),
+        }} />
+      </AppShell>,
+    );
+    await screen.findByTestId('pipeline-board');
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM3.3 empty pipeline is axe-clean', async () => {
+    pathname = '/opportunities/pipeline';
+    const { container } = render(
+      <AppShell>
+        <PipelineBoardClient dependencies={{
+          list: () => Promise.resolve(EMPTY_PIPELINE),
+          patch: () => Promise.reject(new Error('Empty pipeline never patches.')),
+        }} />
+      </AppShell>,
+    );
+    await screen.findByRole('heading', { name: 'Your pipeline is empty' });
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM3.3 applied confirmation is axe-clean and keyboard gated', async () => {
+    pathname = '/opportunities/pipeline';
+    const user = userEvent.setup();
+    const { container } = render(
+      <AppShell>
+        <PipelineBoardClient dependencies={{
+          list: () => Promise.resolve(POPULATED_PIPELINE),
+          patch: () => Promise.reject(new Error('Confirmation axe does not submit.')),
+        }} />
+      </AppShell>,
+    );
+    const card = await screen.findByTestId('pipeline-card-app-2');
+    const open = within(card).getByRole('button', { name: 'I applied to this myself' });
+    open.focus();
+    await user.keyboard('{Enter}');
+    const dialog = screen.getByRole('dialog', { name: 'Confirm your application' });
+    expect(within(dialog).getByRole('button', { name: 'Confirm I applied' })).toBeDisabled();
     expect(await axe(container)).toHaveNoViolations();
   });
 

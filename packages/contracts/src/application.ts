@@ -108,6 +108,18 @@ export const applicationDetailSchema = applicationSchema.extend({
 });
 export type ApplicationDetail = z.infer<typeof applicationDetailSchema>;
 
+/**
+ * Envelope for GET /v1/applications — mirrors the handler's `{ data: Application[] }`
+ * shape. Cross-user isolation is enforced server-side; the wire body carries no
+ * pagination cursor for this per-user list (all applications belong to the caller).
+ */
+export const applicationListResponseSchema = z
+  .object({
+    data: z.array(applicationSchema),
+  })
+  .strict();
+export type ApplicationListResponse = z.infer<typeof applicationListResponseSchema>;
+
 export const applicationFollowUpSchema = z.object({
   id: z.string(),
   applicationId: z.string(),
