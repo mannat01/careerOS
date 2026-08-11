@@ -6,7 +6,8 @@ import type { ReactNode } from 'react';
 import RootPage from '../../app/page';
 import SignInPage from '../../app/(auth)/sign-in/page';
 import AuthLayout from '../../app/(auth)/layout';
-import { OnboardingPlaceholder } from '../../app/onboarding/page';
+import { ExtractionReview, OnboardingImportClient } from '../../app/onboarding/OnboardingImportClient';
+import { POPULATED_IMPORT, THIN_IMPORT } from '../../app/onboarding/onboarding-fixtures';
 import TodayPage from '../../app/(app)/today/page';
 import OpportunitiesPage from '../../app/(app)/opportunities/page';
 import PlanPage from '../../app/(app)/plan/page';
@@ -28,7 +29,9 @@ afterEach(cleanup);
 const routes: ReadonlyArray<{ name: string; path: string; renderRoute: () => ReactNode }> = [
   { name: 'Marketing/root', path: '/', renderRoute: () => <RootPage /> },
   { name: 'Sign-in', path: '/sign-in', renderRoute: () => <AuthLayout><SignInPage /></AuthLayout> },
-  { name: 'Onboarding', path: '/onboarding', renderRoute: () => <OnboardingPlaceholder /> },
+  { name: 'Onboarding import', path: '/onboarding', renderRoute: () => <OnboardingImportClient importResume={() => Promise.resolve(POPULATED_IMPORT)} /> },
+  { name: 'Onboarding extraction review', path: '/onboarding', renderRoute: () => <ExtractionReview result={POPULATED_IMPORT} onBack={() => undefined} /> },
+  { name: 'Onboarding thin extraction', path: '/onboarding', renderRoute: () => <ExtractionReview result={THIN_IMPORT} onBack={() => undefined} /> },
   { name: 'Routing dependency recovery', path: '/today', renderRoute: () => <RoutingRecovery error={new ApiError({ code: 'internal', message: 'Dependency unavailable.', traceId: 'axe-trace' })} retryHref="/today" /> },
   { name: 'Today', path: '/today', renderRoute: () => <AppShell><TodayPage /></AppShell> },
   { name: 'Opportunities', path: '/opportunities', renderRoute: () => <AppShell><OpportunitiesPage /></AppShell> },

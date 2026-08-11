@@ -29,6 +29,8 @@ export interface InsufficientDataProps {
   readonly next: readonly InsufficientDataStep[];
   /** Optional heading (defaults to "Not enough signal yet"). */
   readonly heading?: string;
+  /** Semantic heading level for the host surface (defaults to 3). */
+  readonly headingLevel?: 2 | 3;
   readonly className?: string;
 }
 
@@ -36,6 +38,7 @@ export function InsufficientData({
   reason,
   next,
   heading = 'Not enough signal yet',
+  headingLevel = 3,
   className,
 }: InsufficientDataProps): JSX.Element {
   const classes = [
@@ -45,6 +48,8 @@ export function InsufficientData({
     .filter(Boolean)
     .join(' ');
 
+  const Heading = headingLevel === 2 ? 'h2' : 'h3';
+
   return (
     <section
       role="status"
@@ -52,7 +57,7 @@ export function InsufficientData({
       data-testid="insufficient-data"
       className={classes}
     >
-      <h3 className="mb-1 text-sm font-semibold text-text-primary">{heading}</h3>
+      <Heading className="mb-1 text-sm font-semibold text-text-primary">{heading}</Heading>
       <p className="mb-3 text-text-secondary" data-testid="insufficient-reason">
         {reason}
       </p>

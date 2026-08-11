@@ -14,12 +14,16 @@
 import {
   profileImportRequestSchema,
   profileImportResponseSchema,
+  profileResponseSchema,
   type ProfileImportRequest,
   type ProfileImportResponse,
+  type ProfileResponse,
 } from '@careeros/contracts';
 import type { ApiClient, RequestOptions } from '../client';
 
 export interface ProfileApi {
+  /** GET /v1/profile — the caller's persisted profile projection. */
+  get(opts?: RequestOptions): Promise<ProfileResponse>;
   /**
    * POST /v1/profile/import — parse a resume/LinkedIn URL/JSON blob into
    * `ImportedEntity[]`. Green (advisory; user still confirms via the review
@@ -30,6 +34,7 @@ export interface ProfileApi {
 
 export function createProfileApi(client: ApiClient): ProfileApi {
   return {
+    get: (opts) => client.get('/v1/profile', profileResponseSchema, opts),
     import: (body, opts) => {
       const parsed = profileImportRequestSchema.parse(body);
       return client.postGreen(

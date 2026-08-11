@@ -26,7 +26,7 @@ async function concurrentGuardedNavigation(context: BrowserContext): Promise<voi
     await Promise.all(pages.map((page) => page.goto('/today')));
     await Promise.all(pages.map(async (page) => {
       await expect(page).toHaveURL(/\/onboarding$/);
-      await expect(page.getByRole('heading', { name: 'Finish setting up' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Bring in your résumé' })).toBeVisible();
     }));
   } finally {
     await Promise.all(pages.map((page) => page.close()));
@@ -39,7 +39,7 @@ test('real first-run identity: bootstrap → onboarding; seeded user → Today',
   page.on('pageerror', (error) => pageErrors.push(error));
 
   await signIn(page, firstRunEmail, '/onboarding');
-  await expect(page.getByRole('heading', { name: 'Finish setting up' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Bring in your résumé' })).toBeVisible();
   await page.reload();
   await expect(page).toHaveURL(/\/onboarding$/);
   await concurrentGuardedNavigation(context);

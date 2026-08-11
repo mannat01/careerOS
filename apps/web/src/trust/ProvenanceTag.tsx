@@ -14,6 +14,8 @@ import type { Provenance } from './types.js';
  */
 export interface ProvenanceTagProps {
   readonly provenance: Provenance;
+  /** Verbatim source text for imported facts. Never summarized or rewritten. */
+  readonly quote?: string;
   readonly className?: string;
 }
 
@@ -37,11 +39,13 @@ const PROV_COLOR: Record<Provenance, string> = {
 
 export function ProvenanceTag({
   provenance,
+  quote,
   className,
 }: ProvenanceTagProps): JSX.Element {
   const label = PROV_LABEL[provenance];
   const classes = [
-    'inline-flex items-center rounded-md border bg-bg-subtle px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide',
+    'inline-flex rounded-md border bg-bg-subtle px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide',
+    quote === undefined ? 'items-center' : 'flex-col items-start gap-1',
     PROV_COLOR[provenance],
     className ?? '',
   ]
@@ -51,12 +55,24 @@ export function ProvenanceTag({
   return (
     <span
       role="note"
-      aria-label={`Provenance: ${label}`}
+      aria-label={
+        quote === undefined
+          ? `Provenance: ${label}`
+          : `Provenance: ${label}. Verbatim résumé quote: ${quote}`
+      }
       data-provenance={provenance}
       data-testid="provenance-tag"
       className={classes}
     >
-      {label}
+      <span>{label}</span>
+      {quote === undefined ? null : (
+        <q
+          className="font-normal normal-case tracking-normal text-text-primary"
+          data-testid="provenance-quote"
+        >
+          {quote}
+        </q>
+      )}
     </span>
   );
 }
