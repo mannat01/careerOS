@@ -13,6 +13,7 @@ import { createOpportunitiesApi, type OpportunitiesApi } from './opportunities';
 import { createCieStateApi, type CieStateApi } from './cie-state';
 import { createBriefingsApi, type BriefingsApi } from './briefings';
 import { createAuditApi, type AuditApi } from './audit';
+import { createDecisionsApi, type DecisionsApi } from './decisions';
 
 export * from './me';
 export * from './profile';
@@ -20,6 +21,7 @@ export * from './opportunities';
 export * from './cie-state';
 export * from './briefings';
 export * from './audit';
+export * from './decisions';
 
 export interface Api {
   me: MeApi;
@@ -28,6 +30,7 @@ export interface Api {
   cieState: CieStateApi;
   briefings: BriefingsApi;
   audit: AuditApi;
+  decisions: DecisionsApi;
 }
 
 export function createApi(client: ApiClient): Api {
@@ -38,5 +41,6 @@ export function createApi(client: ApiClient): Api {
     cieState: createCieStateApi(client),
     briefings: createBriefingsApi(client),
     audit: createAuditApi(client),
+    decisions: createDecisionsApi(client),
   };
 }

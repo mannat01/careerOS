@@ -1,16 +1,18 @@
 'use client';
 
-import type { OpportunityDetail, OpportunityMatchResponse } from '@careeros/contracts';
+import type { DecisionSupportResponse, OpportunityDetail, OpportunityMatchResponse } from '@careeros/contracts';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { apiClient, ApiError, createApi } from '@/api';
 import { ErrorRecoveryRenderer, RouteSkeleton } from '@/shell/state';
 import { OpportunityMatchSurface } from './OpportunityMatchSurface';
+import { DecisionSupportCard } from './DecisionSupportCard';
 import { SourceBadge } from './OpportunitiesClient';
 
 export interface OpportunityDetailDependencies {
   readonly get: (id: string) => Promise<OpportunityDetail>;
   readonly match: (id: string) => Promise<OpportunityMatchResponse>;
+  readonly decide: (id: string) => Promise<DecisionSupportResponse>;
 }
 
 type DetailState =
@@ -19,10 +21,11 @@ type DetailState =
   | { readonly kind: 'error'; readonly error: ApiError };
 
 function productionDependencies(): OpportunityDetailDependencies {
-  const opportunities = createApi(apiClient()).opportunities;
+  const api = createApi(apiClient());
   return {
-    get: (id) => opportunities.get(id),
-    match: (id) => opportunities.match(id),
+    get: (id) => api.opportunities.get(id),
+    match: (id) => api.opportunities.match(id),
+    decide: (id) => api.decisions.decide(id),
   };
 }
 
@@ -57,6 +60,12 @@ export function OpportunityDetailClient({
 }): JSX.Element {
   const [deps] = useState(() => dependencies ?? productionDependencies());
   const [state, setState] = useState<DetailState>({ kind: 'loading' });
+  const [decision, setDecision] = useState<
+    | { readonly kind: 'idle' }
+    | { readonly kind: 'loading' }
+    | { readonly kind: 'ready'; readonly value: DecisionSupportResponse }
+    | { readonly kind: 'error'; readonly error: ApiError }
+  >({ kind: 'idle' });
 
   async function load(): Promise<void> {
     setState({ kind: 'loading' });
@@ -71,6 +80,15 @@ export function OpportunityDetailClient({
   useEffect(() => {
     void load();
   }, [deps, opportunityId]);
+
+  async function askForDecision(): Promise<void> {
+    setDecision({ kind: 'loading' });
+    try {
+      setDecision({ kind: 'ready', value: await deps.decide(opportunityId) });
+    } catch (cause) {
+      setDecision({ kind: 'error', error: asApiError(cause) });
+    }
+  }
 
   if (state.kind === 'loading') return <RouteSkeleton label="Loading opportunity and why-this-fit evidence…" />;
   if (state.kind === 'error') return <ErrorRecoveryRenderer error={state.error} onRetry={() => void load()} />;
@@ -93,6 +111,23 @@ export function OpportunityDetailClient({
           <p className="text-sm text-text-secondary">Grounded against your profile. Missing demanded skills remain visible as gaps.</p>
         </div>
         <OpportunityMatchSurface match={match} />
+      </section>
+
+      <section aria-labelledby="should-apply-heading" className="space-y-3">
+        <div>
+          <h2 id="should-apply-heading" className="text-xl font-semibold text-text-primary">Should I apply?</h2>
+          <p className="text-sm text-text-secondary">Get grounded advice only. This does not apply or submit anything.</p>
+        </div>
+        <button
+          type="button"
+          disabled={decision.kind === 'loading'}
+          onClick={() => void askForDecision()}
+          className="rounded-md bg-brand-base px-4 py-2 text-sm font-semibold text-bg-canvas outline-none focus-visible:ring-2 focus-visible:ring-brand-base disabled:cursor-wait disabled:opacity-60"
+        >
+          {decision.kind === 'loading' ? 'Considering evidence…' : 'Should I apply?'}
+        </button>
+        {decision.kind === 'error' ? <ErrorRecoveryRenderer error={decision.error} onRetry={() => void askForDecision()} /> : null}
+        {decision.kind === 'ready' ? <DecisionSupportCard decision={decision.value} /> : null}
       </section>
 
       <section aria-labelledby="posting-heading" className="space-y-3">

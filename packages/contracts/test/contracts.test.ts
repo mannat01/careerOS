@@ -17,6 +17,8 @@ import {
   opportunityDetailSchema,
   opportunityMatchResponseSchema,
   cieStateResponseSchema,
+  decisionSupportRequestSchema,
+  decisionSupportResponseSchema,
   profileFactEditRequestSchema,
   profileFactEditResponseSchema,
   auditEntrySchema,
@@ -242,6 +244,34 @@ describe('canonical Opportunity', () => {
 });
 
 describe('authoritative CIE, audit, and briefing wire fixtures', () => {
+  it('shape-verifies the complete advisory decision contract, including honest hold language', () => {
+    const request = { question: 'Should I apply?', context: 'opportunity-1' };
+    const response = {
+      alternatives: ['apply now', 'hold'],
+      evidenceRefs: ['experience:1'],
+      reasoning: 'The demonstrated scope is below the role requirement.',
+      confidence: 0.3,
+      assumptions: ['The listed seniority is accurate.'],
+      recommendation: 'hold / not yet',
+      optionalityNote: 'Build broader scope before revisiting.',
+      modelVersion: 'strategic-reasoner@1.0.0',
+    };
+    expect(decisionSupportRequestSchema.parse(request)).toEqual(request);
+    expect(decisionSupportResponseSchema.parse(response)).toEqual(response);
+    expect(decisionSupportResponseSchema.safeParse({ recommendation: 'apply' }).success).toBe(false);
+    expect(decisionSupportResponseSchema.safeParse({ ...response, confidence: 1.1 }).success).toBe(false);
+  });
+
+  it('accepts a structurally complete thin decision without inventing signal', () => {
+    expect(decisionSupportResponseSchema.parse({
+      alternatives: [], evidenceRefs: [], reasoning: '', confidence: 0,
+      assumptions: [], recommendation: '',
+    })).toEqual({
+      alternatives: [], evidenceRefs: [], reasoning: '', confidence: 0,
+      assumptions: [], recommendation: '',
+    });
+  });
+
   it('parses a no-signal CIE dimension with confidence 0 and no evidence', () => {
     const response = {
       profileId: UID,

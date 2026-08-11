@@ -59,6 +59,12 @@ export {
   type CieStateExplainResponse,
 } from './cie-state.js';
 export {
+  decisionSupportRequestSchema,
+  decisionSupportResponseSchema,
+  type DecisionSupportRequest,
+  type DecisionSupportResponse,
+} from './decision-support.js';
+export {
   auditActorSchema,
   auditEntrySchema,
   auditListResponseSchema,

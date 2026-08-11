@@ -8,7 +8,7 @@ import SignInPage from '../../app/(auth)/sign-in/page';
 import AuthLayout from '../../app/(auth)/layout';
 import { ExtractionReview, OnboardingImportClient } from '../../app/onboarding/OnboardingImportClient';
 import { AutonomyReview } from '../../app/onboarding/AutonomyReview';
-import { defaultUserSettings } from '@careeros/contracts';
+import { decisionSupportResponseSchema, defaultUserSettings } from '@careeros/contracts';
 import { POPULATED_IMPORT, THIN_IMPORT } from '../../app/onboarding/onboarding-fixtures';
 import { CareerStateReview } from '../../app/onboarding/CareerStateReflectBack';
 import { NO_SIGNAL_STATE, POPULATED_STATE, STATE_EXPLANATIONS } from '../../app/onboarding/state-fixtures';
@@ -115,11 +115,42 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
           dependencies={{
             get: () => Promise.resolve(POPULATED_OPPORTUNITY_DETAIL),
             match: () => Promise.resolve(POPULATED_MATCH),
+            decide: () => Promise.resolve(decisionSupportResponseSchema.parse({
+              alternatives: ['apply', 'wait'], evidenceRefs: ['experience:experience-1'],
+              reasoning: 'Grounded evidence supports waiting.', confidence: 0.3,
+              assumptions: ['The listed requirements are accurate.'], recommendation: 'wait',
+              optionalityNote: 'Build the missing scope first.', modelVersion: 'strategic-reasoner@1.0.0',
+            })),
           }}
         />
       </AppShell>,
     );
     await screen.findByRole('heading', { name: 'Why this fit' });
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM3.2 decision card is axe-clean and keyboard reachable', async () => {
+    pathname = '/opportunities/opportunity-1';
+    const user = userEvent.setup();
+    const { container } = render(
+      <AppShell>
+        <OpportunityDetailClient opportunityId="opportunity-1" dependencies={{
+          get: () => Promise.resolve(POPULATED_OPPORTUNITY_DETAIL),
+          match: () => Promise.resolve(POPULATED_MATCH),
+          decide: () => Promise.resolve(decisionSupportResponseSchema.parse({
+            alternatives: ['apply', 'wait'], evidenceRefs: ['experience:experience-1'],
+            reasoning: 'Grounded evidence supports waiting.', confidence: 0.3,
+            assumptions: ['The listed requirements are accurate.'], recommendation: 'wait',
+            optionalityNote: 'Build the missing scope first.', modelVersion: 'strategic-reasoner@1.0.0',
+          })),
+        }} />
+      </AppShell>,
+    );
+    const action = await screen.findByRole('button', { name: 'Should I apply?' });
+    action.focus();
+    await user.keyboard('{Enter}');
+    const card = await screen.findByRole('region', { name: 'Should I apply decision support' });
+    expect(card).toBeVisible();
     expect(await axe(container)).toHaveNoViolations();
   });
 
