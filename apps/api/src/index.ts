@@ -10,14 +10,24 @@ export {
   type UserAutonomyResolver,
 } from './common/capability-gate/gate-interceptor.js';
 export { makeUserAutonomyResolver } from './common/capability-gate/user-autonomy-resolver.js';
-export { bootstrapMe, deleteMe, getMe, patchMeSettings, type IdentityDeps } from './modules/identity/me.handlers.js';
+export {
+  bootstrapMe,
+  completeOnboarding,
+  deleteMe,
+  getMe,
+  patchMeSettings,
+  type IdentityDeps,
+} from './modules/identity/me.handlers.js';
 export {
   InMemoryUserLifecycleRepo,
   InMemoryIdentityBootstrapRepo,
+  InMemoryOnboardingCompletionRepo,
   InMemoryUserRepo,
   InMemoryUserSettingsRepo,
   type UserLifecycleRepo,
   type IdentityBootstrapRepo,
+  type OnboardingCompletionRepo,
+  type OnboardingCompletionResult,
   type UserRepo,
   type UserSettingsRepo,
 } from './modules/identity/repos.js';

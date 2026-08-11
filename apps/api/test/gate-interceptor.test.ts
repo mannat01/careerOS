@@ -12,6 +12,7 @@ import {
   deleteMe,
   InMemoryUserLifecycleRepo,
   InMemoryIdentityBootstrapRepo,
+  InMemoryOnboardingCompletionRepo,
   InMemoryUserRepo,
   InMemoryUserSettingsRepo,
   withCapabilityGate,
@@ -56,6 +57,7 @@ describe('capability-gate interceptor on DELETE /v1/me (Yellow)', () => {
       settings,
       lifecycle,
       bootstrap: new InMemoryIdentityBootstrapRepo(users, settings),
+      completion: new InMemoryOnboardingCompletionRepo(users, settings),
       clock: () => NOW,
     };
   });

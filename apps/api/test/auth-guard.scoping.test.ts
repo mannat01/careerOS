@@ -5,6 +5,7 @@ import {
   getMe,
   InMemoryUserLifecycleRepo,
   InMemoryIdentityBootstrapRepo,
+  InMemoryOnboardingCompletionRepo,
   InMemoryUserRepo,
   InMemoryUserSettingsRepo,
   resolveBearerToken,
@@ -41,6 +42,7 @@ describe('auth guard + per-user scoping (handler level)', () => {
       settings,
       lifecycle: new InMemoryUserLifecycleRepo(),
       bootstrap: new InMemoryIdentityBootstrapRepo(users, settings),
+      completion: new InMemoryOnboardingCompletionRepo(users, settings),
       clock: () => NOW,
     };
     provider = new DevAuthProvider(SECRET);

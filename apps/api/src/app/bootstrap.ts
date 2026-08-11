@@ -18,6 +18,7 @@ import {
   PrismaSemanticStore,
   PrismaUserLifecycleRepo,
   PrismaIdentityBootstrapRepo,
+  PrismaOnboardingCompletionRepo,
   PrismaUserRepo,
   PrismaUserSettingsRepo,
   PrismaApplicationStore,
@@ -314,6 +315,7 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     settings: new PrismaUserSettingsRepo(prisma),
     lifecycle: new PrismaUserLifecycleRepo(prisma),
     bootstrap: new PrismaIdentityBootstrapRepo(prisma),
+    completion: new PrismaOnboardingCompletionRepo(prisma),
   };
 
   // M10 Step 2 — cross-user Market Intelligence pipeline. PRIVACY-CRITICAL.
@@ -699,6 +701,12 @@ function buildDashboardDeps(input: {
 /** Create (but do not listen) a Nest application bound to the given deps. */
 export async function createApp(deps: AppDeps): Promise<INestApplication> {
   const app = await NestFactory.create(AppModule.forRoot(deps), { logger: ['warn', 'error'] });
+  // The supported local stack runs web :3000 → API :3001. Permit only those
+  // documented dev origins; production same-origin traffic needs no CORS grant.
+  app.enableCors({
+    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    credentials: true,
+  });
   app.useGlobalFilters(new ApiExceptionFilter());
   return app;
 }

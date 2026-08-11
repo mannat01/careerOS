@@ -1,19 +1,21 @@
 /**
  * `me` domain — the caller's identity + settings.
  *
- * ONLY read paths land in FM1; PATCH `/v1/me/settings` and DELETE `/v1/me`
- * (Yellow) arrive with their features. `userId` is NEVER a parameter — the
- * server derives it from the verified bearer token.
+ * Identity bootstrap/read, settings update, and onboarding completion all use
+ * shared contracts. `userId` is NEVER a parameter — the server derives it from
+ * the verified bearer token. The Yellow account-delete path remains separate.
  *
- * Types are imported from `@careeros/contracts` (`meResponseSchema` and
- * `updateUserSettingsRequestSchema`) so this module does not re-declare any
- * API shape.
+ * Types and request/response schemas are imported from `@careeros/contracts`
+ * so this module does not re-declare any API shape.
  */
 import {
   meResponseSchema,
+  onboardingCompletionRequestSchema,
+  onboardingCompletionResponseSchema,
   updateUserSettingsRequestSchema,
   userSettingsSchema,
   type MeResponse,
+  type OnboardingCompletionResponse,
   type UpdateUserSettingsRequest,
   type UserSettings,
 } from '@careeros/contracts';
@@ -29,7 +31,10 @@ export interface MeApi {
    * Green (no external side effect on account state).
    */
   updateSettings(body: UpdateUserSettingsRequest, opts?: RequestOptions): Promise<UserSettings>;
+  /** POST /v1/me/onboarding/complete — idempotent Green completion. */
+  completeOnboarding(opts?: RequestOptions): Promise<OnboardingCompletionResponse>;
 }
+
 
 export function createMeApi(client: ApiClient): MeApi {
   return {
@@ -42,5 +47,12 @@ export function createMeApi(client: ApiClient): MeApi {
       const parsed = updateUserSettingsRequestSchema.parse(body);
       return client.patch('/v1/me/settings', parsed, userSettingsSchema, opts);
     },
+    completeOnboarding: (opts) => client.postGreen(
+      null,
+      '/v1/me/onboarding/complete',
+      onboardingCompletionRequestSchema.parse({}),
+      onboardingCompletionResponseSchema,
+      opts,
+    ),
   };
 }

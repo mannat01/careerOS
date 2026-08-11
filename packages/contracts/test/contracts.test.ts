@@ -7,6 +7,8 @@ import {
   HTTP_STATUS_BY_ERROR_CODE,
   makeApiError,
   meResponseSchema,
+  onboardingCompletionRequestSchema,
+  onboardingCompletionResponseSchema,
   opportunitySchema,
   updateUserSettingsRequestSchema,
   userSettingsSchema,
@@ -122,6 +124,30 @@ describe('UserSettings defaults (conservative autonomy)', () => {
       autonomyDefaults: { 'draft.send': 'purple' },
     });
     expect(r.success).toBe(false);
+  });
+
+  it('onboarding completion has a strict empty request and a complete Me response', () => {
+    expect(onboardingCompletionRequestSchema.parse({})).toEqual({});
+    expect(onboardingCompletionRequestSchema.safeParse({ userId: UID }).success).toBe(false);
+    const complete = {
+      user: {
+        id: UID, email: 'a@example.com', authProviderId: 'clerk_123',
+        subscriptionTier: 'free', status: 'active', onboardingCompletedAt: NOW,
+        createdAt: NOW, updatedAt: NOW,
+      },
+      settings: defaultUserSettings(UID, NOW),
+      onboarding: { status: 'complete', completedAt: NOW },
+    };
+    expect(onboardingCompletionResponseSchema.parse(complete)).toEqual(complete);
+    expect(onboardingCompletionResponseSchema.safeParse({
+      ...complete,
+      user: { ...complete.user, onboardingCompletedAt: null },
+    }).success).toBe(false);
+    expect(onboardingCompletionResponseSchema.safeParse({
+      ...complete,
+      user: { ...complete.user, onboardingCompletedAt: null },
+      onboarding: { status: 'required', completedAt: null },
+    }).success).toBe(false);
   });
 });
 

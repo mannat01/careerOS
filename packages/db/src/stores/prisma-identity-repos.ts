@@ -2,12 +2,15 @@ import {
   onboardingStateFromCompletedAt,
   type AutonomyTier,
   type MeResponse,
+  type OnboardingCompletionResponse,
   type User,
   type UserSettings,
 } from '@careeros/contracts';
 import { PrismaClient, Prisma } from '@prisma/client';
 import type {
   IdentityBootstrapRepo,
+  OnboardingCompletionRepo,
+  OnboardingCompletionResult,
   UserRepo,
   UserSettingsRepo,
   UserLifecycleRepo,
@@ -100,6 +103,74 @@ export class PrismaIdentityBootstrapRepo implements IdentityBootstrapRepo {
   }
 }
 
+/**
+ * Atomic first-run completion. The verified caller id is the only ownership
+ * input; eligibility, timestamp mutation, and the single event all share one
+ * transaction. A concurrent/idempotent loser observes `updateMany.count = 0`
+ * and returns the winning state without appending a duplicate event.
+ */
+export class PrismaOnboardingCompletionRepo implements OnboardingCompletionRepo {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async complete(userId: string, completedAt: string): Promise<OnboardingCompletionResult> {
+    return this.prisma.$transaction(async (tx) => {
+      let changed = false;
+      const current = await tx.user.findUnique({
+        where: { id: userId },
+        include: { settings: true },
+      });
+      if (!current || !current.settings) throw new Error('Identity unavailable.');
+
+      if (current.onboardingCompletedAt === null) {
+        const profile = await tx.profile.findUnique({
+          where: { userId },
+          select: {
+            id: true,
+            _count: { select: { experiences: true, projects: true, education: true, skillClaims: true } },
+          },
+        });
+        const factCount = profile === null
+          ? 0
+          : profile._count.experiences + profile._count.projects +
+            profile._count.education + profile._count.skillClaims;
+        if (factCount === 0) return { kind: 'profile_required' };
+
+        const transition = await tx.user.updateMany({
+          where: { id: userId, onboardingCompletedAt: null },
+          data: { onboardingCompletedAt: new Date(completedAt) },
+        });
+        changed = transition.count === 1;
+        if (transition.count === 1) {
+          await tx.memoryEvent.create({
+            data: {
+              userId,
+              type: 'user_decision',
+              payload: {
+                kind: 'onboarding_completed',
+                profileId: profile!.id,
+              },
+              rationale: 'Onboarding completed.',
+            },
+          });
+        }
+      }
+
+      const completed = await tx.user.findUniqueOrThrow({
+        where: { id: userId },
+        include: { settings: true },
+      });
+      if (!completed.settings || completed.onboardingCompletedAt === null) {
+        throw new Error('Completion state unavailable.');
+      }
+      return {
+        kind: 'completed',
+        changed,
+        me: toCompletedMe(completed),
+      };
+    });
+  }
+}
+
 function isConcurrencyConflict(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError &&
     (error.code === 'P2002' || error.code === 'P2034');
@@ -156,6 +227,37 @@ function toSettings(row: {
     dataUseOptIns: row.dataUseOptins as { training: boolean; crossUserIntel: boolean },
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function toCompletedMe(row: {
+  id: string;
+  email: string;
+  authProviderId: string;
+  subscriptionTier: 'free' | 'pro';
+  status: 'active' | 'suspended' | 'deleted';
+  onboardingCompletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  settings: Parameters<typeof toSettings>[0] | null;
+}): OnboardingCompletionResponse {
+  if (!row.settings || row.onboardingCompletedAt === null) {
+    throw new Error('Expected completed identity and settings.');
+  }
+  const completedAt = row.onboardingCompletedAt.toISOString();
+  return {
+    user: {
+      id: row.id,
+      email: row.email,
+      authProviderId: row.authProviderId,
+      subscriptionTier: row.subscriptionTier,
+      status: row.status,
+      onboardingCompletedAt: completedAt,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    },
+    settings: toSettings(row.settings),
+    onboarding: { status: 'complete', completedAt },
   };
 }
 

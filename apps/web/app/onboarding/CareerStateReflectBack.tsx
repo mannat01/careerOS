@@ -83,9 +83,11 @@ async function explanationsFor(
 export function CareerStateReflectBack({
   dependencies,
   importedFacts = [],
+  onContinue,
 }: {
   readonly dependencies?: CareerStateDependencies;
   readonly importedFacts?: readonly ImportedEntity[];
+  readonly onContinue?: () => void;
 }): JSX.Element {
   const [deps] = useState<CareerStateDependencies>(() => dependencies ?? productionDependencies());
   const [loadState, setLoadState] = useState<LoadState>({ kind: 'loading' });
@@ -162,6 +164,7 @@ export function CareerStateReflectBack({
       importedFacts={importedFacts}
       mutationError={mutationError}
       onCorrect={correctFact}
+      onContinue={onContinue}
     />
   );
 }
@@ -177,6 +180,7 @@ export interface CareerStateReviewProps {
     source: EditableEvidence,
     label: string,
   ) => Promise<boolean>;
+  readonly onContinue?: () => void;
 }
 
 export function CareerStateReview({
@@ -186,6 +190,7 @@ export function CareerStateReview({
   importedFacts = [],
   mutationError = null,
   onCorrect,
+  onContinue,
 }: CareerStateReviewProps): JSX.Element {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-8 px-6 py-12">
@@ -244,9 +249,23 @@ export function CareerStateReview({
         />
       ) : null}
 
+      {onContinue ? (
+        <div className="rounded-lg border border-brand-base bg-bg-subtle p-4">
+          <p className="text-sm text-text-secondary">
+            When this reflects your evidence accurately, review how CareerOS may act for you.
+          </p>
+          <button
+            type="button"
+            onClick={onContinue}
+            className="mt-3 rounded-md bg-brand-base px-4 py-2 text-sm font-medium text-text-inverse outline-none focus-visible:ring-2 focus-visible:ring-brand-base"
+          >
+            Review autonomy defaults
+          </button>
+        </div>
+      ) : null}
+
       <p className="text-xs text-text-muted">
-        State model version {model.version}. This step does not complete onboarding or change
-        autonomy settings.
+        State model version {model.version}. This step does not complete onboarding.
       </p>
     </main>
   );

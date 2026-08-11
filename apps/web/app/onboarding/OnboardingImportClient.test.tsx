@@ -1,17 +1,21 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ProfileImportResponse } from '@careeros/contracts';
+import { defaultUserSettings, type ProfileImportResponse } from '@careeros/contracts';
 import { ExtractionReview, OnboardingImportClient } from './OnboardingImportClient';
 import { POPULATED_IMPORT, THIN_IMPORT } from './onboarding-fixtures';
 
 afterEach(cleanup);
+const SETTINGS = defaultUserSettings(
+  '00000000-0000-4000-8000-000000000001',
+  '2026-08-11T12:00:00.000Z',
+);
 
 describe('FM2.1 résumé import flow', () => {
   it('submits pasted text through the typed-client seam and transitions to review', async () => {
     const importResume = vi.fn(() => Promise.resolve(POPULATED_IMPORT));
     const user = userEvent.setup();
-    render(<OnboardingImportClient importResume={importResume} />);
+    render(<OnboardingImportClient initialSettings={SETTINGS} importResume={importResume} />);
 
     const submit = screen.getByRole('button', { name: 'Extract résumé' });
     expect(submit).toBeDisabled();
@@ -35,7 +39,7 @@ describe('FM2.1 résumé import flow', () => {
       .mockRejectedValueOnce(new Error('network unavailable'))
       .mockResolvedValueOnce(POPULATED_IMPORT);
     const user = userEvent.setup();
-    render(<OnboardingImportClient importResume={importResume} />);
+    render(<OnboardingImportClient initialSettings={SETTINGS} importResume={importResume} />);
 
     await user.type(screen.getByRole('textbox', { name: 'Résumé text' }), 'Acme résumé');
     await user.click(screen.getByRole('button', { name: 'Extract résumé' }));
@@ -81,7 +85,7 @@ describe('FM2.1 extraction review', () => {
   it('returns to the pasted résumé without issuing a completion write', async () => {
     const importResume = vi.fn(() => Promise.resolve(POPULATED_IMPORT));
     const user = userEvent.setup();
-    render(<OnboardingImportClient importResume={importResume} />);
+    render(<OnboardingImportClient initialSettings={SETTINGS} importResume={importResume} />);
 
     await user.type(screen.getByRole('textbox', { name: 'Résumé text' }), 'Exact résumé text');
     await user.click(screen.getByRole('button', { name: 'Extract résumé' }));

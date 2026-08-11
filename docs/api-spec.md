@@ -31,6 +31,7 @@ Any side-effecting route tagged Yellow requires a valid `ApprovalToken` (header 
 - `POST /v1/me/bootstrap` → idempotently and atomically ensure exactly one `User` + `UserSettings` for the verified principal; Green, no `ApprovalToken`, accepts no identity/account/onboarding/autonomy body fields. Repeated and concurrent calls return the same canonical `MeResponse` without overwriting settings or reactivating suspended/deleted accounts. Creates no profile/state/onboarding content.
 - `GET /v1/me` → existing user + settings + authoritative `onboarding`; read-only and never bootstraps. A valid principal with no user row receives typed `404 not_found`.
 - `PATCH /v1/me/settings` → update autonomy defaults, quiet hours, schedule, source prefs, data-use opt-ins.
+- `POST /v1/me/onboarding/complete` `{}` → Green, caller-scoped, idempotent completion. The first transition requires the caller's profile to contain at least one imported fact; otherwise returns typed `409 conflict` with `prerequisite=profile_with_imported_fact` and the guidance “Import a résumé first.” Success atomically stamps `onboarding_completed_at`, appends one `user_decision` `MemoryEvent` (`kind=onboarding_completed`), and returns the updated `MeResponse` narrowed to `onboarding.status='complete'`. Repeats are no-ops that return the original completion timestamp and append no duplicate event.
 - `POST /v1/me/export` → enqueue full data export (Green) → returns job id.
 - `DELETE /v1/me` → hard delete (Yellow; requires confirmation token).
 
@@ -41,7 +42,7 @@ Any side-effecting route tagged Yellow requires a valid `ApprovalToken` (header 
 - `POST /v1/profile/insights/regenerate` → rebuild `DerivedInsight` (Green).
 - `GET /v1/profile/insights` → derived beliefs + source refs + freshness.
 
-**Authoritative onboarding response:** `MeResponse.onboarding` is the exported `@careeros/contracts` discriminated union `{ status: 'required', completedAt: null } | { status: 'complete', completedAt: ISO datetime }`. The frontend must not infer it from profile/fact/state/match existence, seed identity, or timestamps. The completion-write endpoint and its validated criteria are intentionally deferred to a later FM2 step.
+**Authoritative onboarding response:** `MeResponse.onboarding` is the exported `@careeros/contracts` discriminated union `{ status: 'required', completedAt: null } | { status: 'complete', completedAt: ISO datetime }`. The frontend must not infer it from profile/fact/state/match existence, seed identity, or timestamps. Only the completion endpoint may perform the validated first transition; all guards continue to consume this backend-owned union.
 
 **Authenticated empty-state reads:** missing singular resources are typed `404 not_found` (`/v1/me`, `/v1/profile`, `/v1/cie/state`, `/v1/briefings/latest`); semantically empty collections return their schema-valid empty envelope (`applications`, `audit`, and analogous list reads). Database/dependency failures remain typed `500 internal` with a trace ID and are never reported as onboarding-required.
 

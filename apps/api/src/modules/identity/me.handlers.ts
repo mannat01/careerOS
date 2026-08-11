@@ -1,22 +1,32 @@
 import {
   defaultUserSettings,
   meResponseSchema,
+  onboardingCompletionRequestSchema,
+  onboardingCompletionResponseSchema,
   onboardingStateFromCompletedAt,
   updateUserSettingsRequestSchema,
   userSettingsSchema,
   type MeResponse,
+  type OnboardingCompletionResponse,
   type UserSettings,
 } from '@careeros/contracts';
 import { errorResponse, ok, type HandlerResponse } from '../../common/errors/http-error.js';
 import type { RequestContext } from '../../common/auth/request-context.js';
 import { assertUserScope } from '../../common/auth/scope.js';
-import type { IdentityBootstrapRepo, UserLifecycleRepo, UserRepo, UserSettingsRepo } from './repos.js';
+import type {
+  IdentityBootstrapRepo,
+  OnboardingCompletionRepo,
+  UserLifecycleRepo,
+  UserRepo,
+  UserSettingsRepo,
+} from './repos.js';
 
 export interface IdentityDeps {
   users: UserRepo;
   settings: UserSettingsRepo;
   lifecycle: UserLifecycleRepo;
   bootstrap: IdentityBootstrapRepo;
+  completion: OnboardingCompletionRepo;
   clock?: () => Date;
 }
 
@@ -65,6 +75,35 @@ export async function bootstrapMe(
     return ok(meResponseSchema.parse(created));
   } catch {
     return errorResponse('internal', 'Identity bootstrap dependency failed.', {
+      traceId: ctx.traceId,
+    });
+  }
+}
+
+/** POST /v1/me/onboarding/complete — idempotent Green completion write. */
+export async function completeOnboarding(
+  ctx: RequestContext,
+  body: unknown,
+  deps: IdentityDeps,
+): Promise<HandlerResponse<OnboardingCompletionResponse>> {
+  const parsed = onboardingCompletionRequestSchema.safeParse(body === undefined ? {} : body);
+  if (!parsed.success) {
+    return errorResponse('validation_failed', 'Invalid onboarding completion payload.', {
+      details: { issues: parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`) },
+      traceId: ctx.traceId,
+    });
+  }
+  try {
+    const result = await deps.completion.complete(ctx.userId, nowIso(deps));
+    if (result.kind === 'profile_required') {
+      return errorResponse('conflict', 'Import a résumé first.', {
+        details: { prerequisite: 'profile_with_imported_fact' },
+        traceId: ctx.traceId,
+      });
+    }
+    return ok(onboardingCompletionResponseSchema.parse(result.me));
+  } catch {
+    return errorResponse('internal', 'Onboarding completion dependency failed.', {
       traceId: ctx.traceId,
     });
   }

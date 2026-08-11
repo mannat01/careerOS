@@ -2,15 +2,17 @@
 
 import type { FormEvent } from 'react';
 import { useState } from 'react';
-import type { ImportedEntity, ProfileImportResponse } from '@careeros/contracts';
+import type { ImportedEntity, ProfileImportResponse, UserSettings } from '@careeros/contracts';
 import { apiClient, ApiError, createApi } from '@/api';
 import { ErrorRecoveryRenderer, RouteSkeleton } from '@/shell/state';
 import { InsufficientData, ProvenanceTag } from '@/trust';
 import { CareerStateReflectBack } from './CareerStateReflectBack';
+import { AutonomyReview } from './AutonomyReview';
 
 export interface OnboardingImportClientProps {
   /** Test seam; production always uses the typed profile domain client. */
   readonly importResume?: (resumeText: string) => Promise<ProfileImportResponse>;
+  readonly initialSettings: UserSettings;
 }
 
 type ImportState =
@@ -18,6 +20,7 @@ type ImportState =
   | { readonly kind: 'loading' }
   | { readonly kind: 'review'; readonly result: ProfileImportResponse }
   | { readonly kind: 'reflect'; readonly result: ProfileImportResponse }
+  | { readonly kind: 'autonomy' }
   | { readonly kind: 'error'; readonly error: ApiError };
 
 const GROUPS: ReadonlyArray<{
@@ -44,6 +47,7 @@ function asApiError(cause: unknown): ApiError {
 }
 
 export function OnboardingImportClient({
+  initialSettings,
   importResume = productionImport,
 }: OnboardingImportClientProps): JSX.Element {
   const [resumeText, setResumeText] = useState('');
@@ -68,7 +72,16 @@ export function OnboardingImportClient({
   }
 
   if (state.kind === 'reflect') {
-    return <CareerStateReflectBack importedFacts={state.result.entities} />;
+    return (
+      <CareerStateReflectBack
+        importedFacts={state.result.entities}
+        onContinue={() => setState({ kind: 'autonomy' })}
+      />
+    );
+  }
+
+  if (state.kind === 'autonomy') {
+    return <AutonomyReview initialSettings={initialSettings} />;
   }
 
   if (state.kind === 'review') {

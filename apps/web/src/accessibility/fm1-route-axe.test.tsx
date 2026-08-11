@@ -7,6 +7,8 @@ import RootPage from '../../app/page';
 import SignInPage from '../../app/(auth)/sign-in/page';
 import AuthLayout from '../../app/(auth)/layout';
 import { ExtractionReview, OnboardingImportClient } from '../../app/onboarding/OnboardingImportClient';
+import { AutonomyReview } from '../../app/onboarding/AutonomyReview';
+import { defaultUserSettings } from '@careeros/contracts';
 import { POPULATED_IMPORT, THIN_IMPORT } from '../../app/onboarding/onboarding-fixtures';
 import { CareerStateReview } from '../../app/onboarding/CareerStateReflectBack';
 import { NO_SIGNAL_STATE, POPULATED_STATE, STATE_EXPLANATIONS } from '../../app/onboarding/state-fixtures';
@@ -27,16 +29,21 @@ vi.mock('next/navigation', () => ({ usePathname: () => pathname, useRouter: () =
 vi.mock('next/link', () => ({ default: ({ href, children, ...props }: { href: string; children: ReactNode }) => <a href={href} {...props}>{children}</a> }));
 
 afterEach(cleanup);
+const ONBOARDING_SETTINGS = defaultUserSettings(
+  '00000000-0000-4000-8000-000000000001',
+  '2026-08-11T12:00:00.000Z',
+);
 
 const routes: ReadonlyArray<{ name: string; path: string; renderRoute: () => ReactNode }> = [
   { name: 'Marketing/root', path: '/', renderRoute: () => <RootPage /> },
   { name: 'Sign-in', path: '/sign-in', renderRoute: () => <AuthLayout><SignInPage /></AuthLayout> },
-  { name: 'Onboarding import', path: '/onboarding', renderRoute: () => <OnboardingImportClient importResume={() => Promise.resolve(POPULATED_IMPORT)} /> },
+  { name: 'Onboarding import', path: '/onboarding', renderRoute: () => <OnboardingImportClient initialSettings={ONBOARDING_SETTINGS} importResume={() => Promise.resolve(POPULATED_IMPORT)} /> },
   { name: 'Onboarding extraction review', path: '/onboarding', renderRoute: () => <ExtractionReview result={POPULATED_IMPORT} onBack={() => undefined} /> },
   { name: 'Onboarding thin extraction', path: '/onboarding', renderRoute: () => <ExtractionReview result={THIN_IMPORT} onBack={() => undefined} /> },
   { name: 'Onboarding reflect-back', path: '/onboarding', renderRoute: () => <CareerStateReview model={POPULATED_STATE} explanations={STATE_EXPLANATIONS} onCorrect={() => Promise.resolve(true)} /> },
   { name: 'Onboarding reflect-back no-signal', path: '/onboarding', renderRoute: () => <CareerStateReview model={NO_SIGNAL_STATE} explanations={STATE_EXPLANATIONS} /> },
   { name: 'Onboarding reflect-back correction', path: '/onboarding', renderRoute: () => <CareerStateReview model={NO_SIGNAL_STATE} explanations={STATE_EXPLANATIONS} importedFacts={POPULATED_IMPORT.entities} corrections={[{ id: '00000000-0000-4000-8000-000000000102', kind: 'skill', label: 'PostgreSQL', detail: 'intermediate', provenance: 'user' }]} onCorrect={() => Promise.resolve(true)} /> },
+  { name: 'Onboarding autonomy review', path: '/onboarding', renderRoute: () => <AutonomyReview initialSettings={ONBOARDING_SETTINGS} dependencies={{ updateSettings: () => Promise.resolve(ONBOARDING_SETTINGS), completeOnboarding: () => Promise.reject(new Error('not exercised by static axe')), goToToday: () => undefined }} /> },
   { name: 'Routing dependency recovery', path: '/today', renderRoute: () => <RoutingRecovery error={new ApiError({ code: 'internal', message: 'Dependency unavailable.', traceId: 'axe-trace' })} retryHref="/today" /> },
   { name: 'Today', path: '/today', renderRoute: () => <AppShell><TodayPage /></AppShell> },
   { name: 'Opportunities', path: '/opportunities', renderRoute: () => <AppShell><OpportunitiesPage /></AppShell> },

@@ -22,7 +22,7 @@ User ─1:N─ ConnectedSource (OAuth)  |  SourceRegistry (global allow-list)
 ## 2. Tables
 
 ### identity
-- **User** — `email`, unique `auth_provider_id`, `subscription_tier` (enum: free|pro), `status`, `onboarding_completed_at timestamptz null`. `NULL` means onboarding is required; a timestamp means complete. This column is the sole onboarding source of truth.
+- **User** — `email`, unique `auth_provider_id`, `subscription_tier` (enum: free|pro), `status`, `onboarding_completed_at timestamptz null`. `NULL` means onboarding is required; a timestamp means complete. This column is the sole onboarding source of truth. The completion transaction stamps it only when the same user's profile has at least one imported fact and appends one `MemoryEvent(type=user_decision, payload.kind=onboarding_completed)`; retries leave both timestamp and event count unchanged.
 - **UserSettings** — `user_id`, `autonomy_defaults` (jsonb: per action-type Green/Yellow/Red), `quiet_hours` (jsonb), `briefing_schedule` (cron/tz), `source_prefs` (jsonb), `data_use_optins` (jsonb: training, cross_user_intel).
 - **Profile** — `user_id (unique)`, `headline`, `summary`, `target_roles` (jsonb), `target_comp` (jsonb), `locations`/`remote_pref`, `goals` (jsonb). Canonical identity root.
 - **Experience** — `profile_id`, `company`, `title`, `start`/`end`, `bullets` (jsonb[]), `skills` (text[]), `provenance` (enum: imported|user|inferred_confirmed), `version`, `embedding vector`.

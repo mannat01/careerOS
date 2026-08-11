@@ -8,10 +8,12 @@ import {
 import {
   assertUserScope,
   bootstrapMe,
+  completeOnboarding,
   contextFromVerifiedClaims,
   getMe,
   InMemoryUserLifecycleRepo,
   InMemoryIdentityBootstrapRepo,
+  InMemoryOnboardingCompletionRepo,
   InMemoryUserRepo,
   InMemoryUserSettingsRepo,
   patchMeSettings,
@@ -36,6 +38,7 @@ describe('GET /v1/me + PATCH /v1/me/settings handlers', () => {
   let deps: IdentityDeps;
   let users: InMemoryUserRepo;
   let settings: InMemoryUserSettingsRepo;
+  let completion: InMemoryOnboardingCompletionRepo;
 
   beforeEach(() => {
     users = new InMemoryUserRepo();
@@ -44,11 +47,13 @@ describe('GET /v1/me + PATCH /v1/me/settings handlers', () => {
     settings = new InMemoryUserSettingsRepo();
     void settings.save(defaultUserSettings(USER_A, NOW.toISOString()));
     void settings.save(defaultUserSettings(USER_B, NOW.toISOString()));
+    completion = new InMemoryOnboardingCompletionRepo(users, settings);
     deps = {
       users,
       settings,
       lifecycle: new InMemoryUserLifecycleRepo(),
       bootstrap: new InMemoryIdentityBootstrapRepo(users, settings),
+      completion,
       clock: () => NOW,
     };
   });
@@ -177,5 +182,34 @@ describe('GET /v1/me + PATCH /v1/me/settings handlers', () => {
     const bad2 = await patchMeSettings(ctxA, { autonomyDefaults: { 'draft.send': 'purple' } }, deps);
     expect(bad2.status).toBe(422);
     expect((bad2.body as { error: { code: string } }).error.code).toBe('validation_failed');
+  });
+
+  it('completes only after a profile fact and emits one event across retries', async () => {
+    users.seed({ ...makeUser(USER_A, 'a@example.com'), onboardingCompletedAt: null });
+    const blocked = await completeOnboarding(ctxA, {}, deps);
+    expect(blocked.status).toBe(409);
+    expect((blocked.body as { error: { code: string; message: string } }).error)
+      .toMatchObject({ code: 'conflict', message: 'Import a résumé first.' });
+
+    completion.setHasImportedFact(USER_A);
+    const first = await completeOnboarding(ctxA, {}, deps);
+    const second = await completeOnboarding(ctxA, {}, deps);
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect((first.body as MeResponse).onboarding).toEqual({
+      status: 'complete', completedAt: NOW.toISOString(),
+    });
+    expect((second.body as MeResponse).onboarding).toEqual((first.body as MeResponse).onboarding);
+    expect(completion.events).toEqual([
+      { userId: USER_A, type: 'user_decision', kind: 'onboarding_completed' },
+    ]);
+  });
+
+  it('ignores body-supplied identity and rejects non-empty completion bodies', async () => {
+    completion.setHasImportedFact(USER_A);
+    const result = await completeOnboarding(ctxA, { userId: USER_B }, deps);
+    expect(result.status).toBe(422);
+    expect((await completeOnboarding(ctxA, null, deps)).status).toBe(422);
+    expect(completion.events).toEqual([]);
   });
 });

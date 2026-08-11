@@ -23,6 +23,7 @@ export {
 export { PrismaSourceRegistry } from './stores/prisma-source-registry.js';
 export {
   PrismaIdentityBootstrapRepo,
+  PrismaOnboardingCompletionRepo,
   PrismaUserRepo,
   PrismaUserSettingsRepo,
   PrismaUserLifecycleRepo,

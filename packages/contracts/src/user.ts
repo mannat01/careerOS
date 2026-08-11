@@ -123,6 +123,22 @@ export const meResponseSchema = z.object({
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;
 
+/** POST /v1/me/onboarding/complete — no client-owned identity or timestamp. */
+export const onboardingCompletionRequestSchema = z.object({}).strict();
+export type OnboardingCompletionRequest = z.infer<typeof onboardingCompletionRequestSchema>;
+
+/** Successful completion always returns the updated Me shape narrowed to complete. */
+export const onboardingCompletionResponseSchema = meResponseSchema.extend({
+  user: userSchema.extend({
+    onboardingCompletedAt: z.string().datetime(),
+  }),
+  onboarding: z.object({
+    status: z.literal('complete'),
+    completedAt: z.string().datetime(),
+  }),
+});
+export type OnboardingCompletionResponse = z.infer<typeof onboardingCompletionResponseSchema>;
+
 /** PATCH /v1/me/settings body — strict: unknown keys are rejected at the boundary. */
 export const updateUserSettingsRequestSchema = z
   .object({

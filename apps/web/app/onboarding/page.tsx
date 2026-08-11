@@ -12,7 +12,7 @@ export default async function OnboardingPage(): Promise<JSX.Element> {
       const publicSession: PublicSession = { userId: action.me.user.id };
       return (
         <SessionProvider session={publicSession}>
-          <OnboardingImportClient />
+          <OnboardingImportClient initialSettings={action.me.settings} />
         </SessionProvider>
       );
     }

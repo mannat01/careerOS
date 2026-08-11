@@ -59,6 +59,83 @@ test('real first-run identity: bootstrap → onboarding; seeded user → Today',
   await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible();
 });
 
+test('full first run: import → review → correct → autonomy → complete → Today', async ({ page }) => {
+  const email = `fm23-${Date.now()}@playwright.careeros.local`;
+  const exactQuote = 'Skills: TypeScript';
+
+  // The configured fake LLM deliberately yields thin extraction. Keep the whole
+  // browser journey fake-backed while sending a deterministic, contract-valid
+  // parsed extraction through the REAL import endpoint and real Postgres path.
+  await page.route('**/v1/profile/import', async (route) => {
+    const request = route.request();
+    const response = await route.fetch({
+      postData: JSON.stringify({
+        entities: [{
+          kind: 'skill',
+          name: 'TypeScript',
+          evidence: 'claimed',
+          provenance: { source: 'resume', quote: exactQuote },
+        }],
+      }),
+      headers: { ...request.headers(), 'content-type': 'application/json' },
+    });
+    await route.fulfill({ response });
+  });
+
+  await signIn(page, email, '/onboarding');
+  await page.getByLabel('Résumé text').fill(exactQuote);
+  const importResponse = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/v1/profile/import' && response.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Extract résumé' }).click();
+  expect((await importResponse).status()).toBe(200);
+
+  await expect(page.getByRole('heading', { name: 'Review your extracted résumé' })).toBeVisible();
+  await expect(page.getByText(exactQuote)).toBeVisible();
+  await page.getByRole('button', { name: 'Review what CareerOS understands' }).click();
+
+  await expect(page.getByRole('heading', { name: 'What CareerOS understands about you' })).toBeVisible();
+  await expect(page.getByText('Not enough signal yet').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Correct source fact: TypeScript' }).click();
+  const correction = page.getByRole('textbox', { name: 'Corrected skill fact' });
+  await correction.fill('PostgreSQL');
+  const editResponse = page.waitForResponse((response) =>
+    response.url().includes('/v1/profile/facts/') && response.request().method() === 'PATCH',
+  );
+  await page.getByRole('button', { name: 'Save correction' }).click();
+  expect((await editResponse).status()).toBe(200);
+  await expect(page.getByTestId('authoritative-corrections').getByText('PostgreSQL')).toBeVisible();
+  await expect(page.getByTestId('authoritative-corrections').getByText('You added')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Review autonomy defaults' }).click();
+  await expect(page.getByRole('heading', { name: "How CareerOS will and won't act for you" })).toBeVisible();
+  await expect(page.getByLabel('Tier: Auto')).toBeVisible();
+  await expect(page.getByLabel('Tier: Needs your OK').first()).toBeVisible();
+  await expect(page.getByLabel('Tier: Never automatic')).toBeVisible();
+
+  const settingsResponse = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/v1/me/settings' && response.request().method() === 'PATCH',
+  );
+  await page.getByLabel('Make this more restrictive').first().selectOption('yellow');
+  expect((await settingsResponse).status()).toBe(200);
+  await expect(page.getByTestId('autonomy-actions').getByLabel('Tier: Needs your OK'))
+    .toHaveCount(3);
+
+  const completionResponse = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/v1/me/onboarding/complete' && response.request().method() === 'POST',
+  );
+  await Promise.all([
+    page.waitForURL('**/today'),
+    page.getByRole('button', { name: 'This looks right — start using CareerOS' }).click(),
+  ]);
+  expect((await completionResponse).status()).toBe(200);
+  await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible();
+
+  await page.goto('/onboarding');
+  await expect(page).toHaveURL(/\/today$/);
+  await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible();
+});
+
 function postgresContainerId(): string {
   const id = execFileSync(
     'docker',
