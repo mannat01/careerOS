@@ -30,7 +30,7 @@ User ─1:N─ ConnectedSource (OAuth)  |  SourceRegistry (global allow-list)
 - **Education** — `profile_id`, `institution`, `credential`, `field`, `start`/`end`, `provenance`.
 - **SkillClaim** — `profile_id`, `skill`, `level` (enum), `evidence_refs` (jsonb → experience/project ids), `provenance`, `embedding vector`.
 
-> **Provenance is mandatory** on all inferred facts (PRD §14) so the UI can show *why the Twin believes something* and the user can correct it. `inferred_confirmed` means the Twin proposed and the user accepted.
+> **Provenance is mandatory** on every profile fact (PRD §14) so the UI can show *why the Twin believes something* and the user can correct it. `inferred_confirmed` means the Twin proposed and the user accepted; an authoritative human correction updates the existing row to `provenance='user'` and appends an immutable `user_decision` MemoryEvent containing the fact id plus before/after labels.
 
 ### resume
 - **ResumeModel** — `profile_id`, `name`, `selected_items` (jsonb: ordered experience/project/skill ids + phrasing overrides), `base` (bool). A *structured resume*, not a file.

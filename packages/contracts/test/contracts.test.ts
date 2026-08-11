@@ -15,6 +15,8 @@ import {
   opportunityDetailSchema,
   opportunityMatchResponseSchema,
   cieStateResponseSchema,
+  profileFactEditRequestSchema,
+  profileFactEditResponseSchema,
   auditEntrySchema,
   auditListResponseSchema,
   briefingItemSchema,
@@ -283,5 +285,31 @@ describe('authoritative CIE, audit, and briefing wire fixtures', () => {
     };
     expect(briefingItemSchema.parse(item)).toEqual(item);
     expect(briefingLatestResponseSchema.parse(run)).toEqual(run);
+  });
+});
+
+describe('authoritative profile fact edit contract', () => {
+  it('accepts a strict kind + trimmed non-empty label request', () => {
+    expect(profileFactEditRequestSchema.parse({ kind: 'skill', label: '  PostgreSQL  ' }))
+      .toEqual({ kind: 'skill', label: 'PostgreSQL' });
+    expect(profileFactEditRequestSchema.safeParse({ kind: 'skill', label: '' }).success).toBe(false);
+    expect(profileFactEditRequestSchema.safeParse({ kind: 'unknown', label: 'x' }).success).toBe(false);
+    expect(profileFactEditRequestSchema.safeParse({ kind: 'skill', label: 'x', userId: UID }).success).toBe(false);
+  });
+
+  it("requires edited facts to carry provenance='user'", () => {
+    const response = {
+      fact: {
+        id: UID,
+        kind: 'skill',
+        label: 'PostgreSQL',
+        detail: 'intermediate',
+        provenance: 'user',
+      },
+    };
+    expect(profileFactEditResponseSchema.parse(response)).toEqual(response);
+    expect(profileFactEditResponseSchema.safeParse({
+      fact: { ...response.fact, provenance: 'imported' },
+    }).success).toBe(false);
   });
 });

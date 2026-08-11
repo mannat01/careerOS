@@ -28,6 +28,11 @@ export {
   type ProfileImportDeps,
 } from './modules/profile/import.handlers.js';
 export { getProfile } from './modules/profile/read.handlers.js';
+export {
+  editProfileFact,
+  type ProfileFactEditDeps,
+  type ProfileFactEditMemoryPort,
+} from './modules/profile/edit.handlers.js';
 export { MemoryServiceEventAdapter } from './modules/profile/memory-adapter.js';
 export {
   queryGraph,
@@ -160,6 +165,7 @@ export {
   InMemoryProfileRepo,
   type ProfileRepo,
   type ProfileImportResult,
+  type ProfileFactUpdateResult,
 } from './modules/profile/repos.js';
 
 export { AgentExtractionAdapter } from './modules/profile/extractor-adapter.js';

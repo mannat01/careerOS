@@ -37,7 +37,7 @@ Any side-effecting route tagged Yellow requires a valid `ApprovalToken` (header 
 ### Identity / Profile / Memory
 - `POST /v1/profile/import` → upload resume (PDF/DOCX) or LinkedIn export → enqueue extraction job → `{ jobId }`.
 - `GET /v1/profile` → profile + experiences/projects/education/skills with **provenance**.
-- `POST|PATCH|DELETE /v1/profile/experiences/:id` (and `/projects`, `/education`, `/skills`) → user edits; edits persist as authoritative + emit `MemoryEvent`.
+- `PATCH /v1/profile/facts/:id` `{ kind: experience|project|education|skill, label }` → Green correction of an existing caller-owned fact's canonical label (experience title / project name / education credential / skill name). The verified context supplies `userId`; missing and cross-user ids are both `404`. A successful edit persists `provenance='user'` and appends a `user_decision` `MemoryEvent` with before/after labels. Richer create/delete and non-label field CRUD remains outside this small correction slice.
 - `POST /v1/profile/insights/regenerate` → rebuild `DerivedInsight` (Green).
 - `GET /v1/profile/insights` → derived beliefs + source refs + freshness.
 

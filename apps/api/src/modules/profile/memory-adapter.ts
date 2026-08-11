@@ -1,5 +1,6 @@
 import type { MemoryService } from '@careeros/memory';
 import type { MemoryEventPort } from './import.handlers.js';
+import type { ProfileFactEditMemoryPort } from './edit.handlers.js';
 
 /**
  * Binds the import handler's narrow MemoryEventPort to the four-tier
@@ -12,7 +13,7 @@ import type { MemoryEventPort } from './import.handlers.js';
  * later distills from). It never writes authoritative facts — those live in the
  * profile tier.
  */
-export class MemoryServiceEventAdapter implements MemoryEventPort {
+export class MemoryServiceEventAdapter implements MemoryEventPort, ProfileFactEditMemoryPort {
   constructor(private readonly memory: MemoryService) {}
 
   async recordProfileImport(input: {
@@ -37,6 +38,30 @@ export class MemoryServiceEventAdapter implements MemoryEventPort {
         counts: input.counts,
       },
       rationale: `Imported ${total} profile fact(s) via ${input.source}.`,
+    });
+  }
+
+  async recordProfileFactEdit(input: {
+    userId: string;
+    profileId: string;
+    factId: string;
+    kind: 'experience' | 'project' | 'education' | 'skill';
+    beforeLabel: string;
+    afterLabel: string;
+  }): Promise<void> {
+    await this.memory.recordEvent({
+      userId: input.userId,
+      type: 'user_decision',
+      payload: {
+        kind: 'profile_fact_edit',
+        profileId: input.profileId,
+        factId: input.factId,
+        factKind: input.kind,
+        beforeLabel: input.beforeLabel,
+        afterLabel: input.afterLabel,
+        provenance: 'user',
+      },
+      rationale: `Corrected ${input.kind} fact ${input.factId}: "${input.beforeLabel}" → "${input.afterLabel}".`,
     });
   }
 }

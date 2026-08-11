@@ -71,6 +71,39 @@ export const profileImportResponseSchema = z.object({
 });
 export type ProfileImportResponse = z.infer<typeof profileImportResponseSchema>;
 
+/**
+ * Authoritative correction of one existing profile fact. The kind is explicit
+ * so one route can safely address the four kind-specific profile tables without
+ * guessing from an id. This small correction slice edits the fact's canonical
+ * display label; richer field-level CRUD can extend the discriminated request.
+ */
+export const profileFactKindSchema = z.enum(['experience', 'project', 'education', 'skill']);
+export type ProfileFactKind = z.infer<typeof profileFactKindSchema>;
+
+export const profileFactEditRequestSchema = z
+  .object({
+    kind: profileFactKindSchema,
+    label: z.string().trim().min(1).max(500),
+  })
+  .strict();
+export type ProfileFactEditRequest = z.infer<typeof profileFactEditRequestSchema>;
+
+export const editedProfileFactSchema = z
+  .object({
+    id: z.string().uuid(),
+    kind: profileFactKindSchema,
+    label: z.string().min(1),
+    detail: z.string().nullable(),
+    provenance: z.literal('user'),
+  })
+  .strict();
+export type EditedProfileFact = z.infer<typeof editedProfileFactSchema>;
+
+export const profileFactEditResponseSchema = z
+  .object({ fact: editedProfileFactSchema })
+  .strict();
+export type ProfileFactEditResponse = z.infer<typeof profileFactEditResponseSchema>;
+
 /** Existing profile projection returned by GET /v1/profile. */
 const storedProvenanceSchema = z.enum(['imported', 'user', 'inferred_confirmed']);
 const storedFactSchema = z.object({

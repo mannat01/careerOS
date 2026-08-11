@@ -15,14 +15,26 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import type { INestApplication } from '@nestjs/common';
 import type { App } from 'supertest/types.js';
-import { PrismaClient } from '@careeros/db';
+import { PrismaClient, PrismaProfileReader } from '@careeros/db';
 import { envSchema } from '@careeros/config';
 import type { ParsedEntity } from '@careeros/contracts';
+import {
+  CareerStateService,
+  InMemoryStateStore,
+  type DerivedDimension,
+  type StateModelAgent,
+  type StateProfileFact,
+} from '@careeros/cie-state';
 import { buildDepsFromEnv, createApp } from '../src/app/bootstrap.js';
 import { DevAuthProvider } from '../src/common/auth/dev-auth-provider.js';
 import { InMemoryObjectStorage } from '../src/common/storage/object-storage.js';
 import { BullMqExportQueue } from '../src/common/queue/export-queue.js';
 import { type ExtractionPort } from '../src/index.js';
+import {
+  MemoryStateEvidenceAdapter,
+  MemoryStateFactAdapter,
+  type StateHandlerDeps,
+} from '../src/index.js';
 
 import type { AppDeps } from '../src/app/deps.js';
 
@@ -87,6 +99,21 @@ class FixtureExtractor implements ExtractionPort {
   }
 }
 
+/** Deterministic model used only to prove recompute reads the corrected DB fact. */
+class ProfileEchoStateAgent implements StateModelAgent {
+  derive(profile: StateProfileFact[]): Promise<DerivedDimension[]> {
+    const skills = profile.filter((fact) => fact.kind === 'skill');
+    return Promise.resolve([
+      {
+        dimension: 'demonstrated_skills',
+        values: skills.map((skill) => skill.summary),
+        confidence: skills.length > 0 ? 0.8 : 0,
+        evidenceRefs: skills.map((skill) => skill.id),
+      },
+    ]);
+  }
+}
+
 d('M02 POST /v1/profile/import over HTTP (booted NestJS app)', () => {
   let app: INestApplication;
   let http: App;
@@ -110,15 +137,27 @@ d('M02 POST /v1/profile/import over HTTP (booted NestJS app)', () => {
       S3_BUCKET: RAW_ENV['S3_BUCKET'] ?? 'careeros-artifacts',
     });
 
-    // Build the real deps (real Prisma ProfileRepo) once, then override ONLY the
-    // extraction port with the deterministic fixture — persistence stays live.
+    prisma = new PrismaClient({ datasourceUrl: env.DATABASE_URL });
+    const profileReader = new PrismaProfileReader(prisma);
+    const state: StateHandlerDeps = {
+      service: new CareerStateService({
+        facts: new MemoryStateFactAdapter(profileReader),
+        evidence: new MemoryStateEvidenceAdapter(profileReader),
+        store: new InMemoryStateStore(),
+        events: { recordStateEvent: () => Promise.resolve() },
+        agent: new ProfileEchoStateAgent(),
+      }),
+    };
+
+    // Keep real Prisma profile + memory ports; replace only network-model seams.
     const real = buildDepsFromEnv(env, {
       storage: new InMemoryObjectStorage(),
       exportQueue: new BullMqExportQueue(env.REDIS_URL),
     });
     deps = {
       ...real,
-      profile: { extractor: new FixtureExtractor(), profiles: real.profile.profiles },
+      profile: { ...real.profile, extractor: new FixtureExtractor() },
+      state,
     };
 
     app = await createApp(deps);
@@ -126,7 +165,6 @@ d('M02 POST /v1/profile/import over HTTP (booted NestJS app)', () => {
     await app.init();
     http = app.getHttpServer() as App;
 
-    prisma = new PrismaClient({ datasourceUrl: env.DATABASE_URL });
     for (const u of [userA, userB]) {
       await prisma.user.create({
         data: { id: u.id, email: u.email, authProviderId: `dev_${u.id.slice(0, 8)}` },
@@ -190,6 +228,103 @@ d('M02 POST /v1/profile/import over HTTP (booted NestJS app)', () => {
     // A still has exactly its own single experience — B's write didn't leak in.
     expect(await prisma.experience.count({ where: { profileId: pA!.id } })).toBe(1);
     expect(await prisma.experience.count({ where: { profileId: pB!.id } })).toBe(1);
+  });
+
+  it('edits an owned fact with provenance=user and appends a user_decision MemoryEvent', async () => {
+    const profile = await prisma.profile.findUniqueOrThrow({ where: { userId: userA.id } });
+    const skill = await prisma.skillClaim.findFirstOrThrow({ where: { profileId: profile.id } });
+
+    const res = await request(http)
+      .patch(`/v1/profile/facts/${skill.id}`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ kind: 'skill', label: 'PostgreSQL corrected' });
+
+    expect(res.status).toBe(200);
+    expect(body<{ fact: { label: string; provenance: string } }>(res).fact)
+      .toMatchObject({ label: 'PostgreSQL corrected', provenance: 'user' });
+    const persisted = await prisma.skillClaim.findUniqueOrThrow({ where: { id: skill.id } });
+    expect(persisted.skill).toBe('PostgreSQL corrected');
+    expect(persisted.provenance).toBe('user');
+
+    const events = await prisma.memoryEvent.findMany({
+      where: { userId: userA.id, type: 'user_decision' },
+      orderBy: { occurredAt: 'desc' },
+    });
+    const editEvent = events.find((event) => {
+      const payload = event.payload as Record<string, unknown>;
+      return payload.kind === 'profile_fact_edit' && payload.factId === skill.id;
+    });
+    expect(editEvent).toBeDefined();
+    expect((editEvent!.payload as Record<string, unknown>).provenance).toBe('user');
+  });
+
+  it('supports authoritative label corrections for experience, project, and education', async () => {
+    const profile = await prisma.profile.findUniqueOrThrow({ where: { userId: userA.id } });
+    const experience = await prisma.experience.findFirstOrThrow({ where: { profileId: profile.id } });
+    const education = await prisma.education.findFirstOrThrow({ where: { profileId: profile.id } });
+    const project = await prisma.project.create({
+      data: {
+        profileId: profile.id,
+        name: 'Old project name',
+        skills: [],
+        provenance: 'imported',
+      },
+    });
+    const cases = [
+      { id: experience.id, kind: 'experience', label: 'Principal Backend Engineer' },
+      { id: project.id, kind: 'project', label: 'Corrected project name' },
+      { id: education.id, kind: 'education', label: 'B.Sc. in Computer Science' },
+    ] as const;
+
+    for (const edit of cases) {
+      const res = await request(http)
+        .patch(`/v1/profile/facts/${edit.id}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ kind: edit.kind, label: edit.label });
+      expect(res.status).toBe(200);
+      expect(body<{ fact: { label: string; provenance: string } }>(res).fact)
+        .toMatchObject({ label: edit.label, provenance: 'user' });
+    }
+
+    expect(await prisma.experience.findUniqueOrThrow({ where: { id: experience.id } }))
+      .toMatchObject({ title: 'Principal Backend Engineer', provenance: 'user' });
+    expect(await prisma.project.findUniqueOrThrow({ where: { id: project.id } }))
+      .toMatchObject({ name: 'Corrected project name', provenance: 'user' });
+    expect(await prisma.education.findUniqueOrThrow({ where: { id: education.id } }))
+      .toMatchObject({ credential: 'B.Sc. in Computer Science', provenance: 'user' });
+  });
+
+  it("hides another user's fact and leaves it unchanged", async () => {
+    const profileB = await prisma.profile.findUniqueOrThrow({ where: { userId: userB.id } });
+    const skillB = await prisma.skillClaim.findFirstOrThrow({ where: { profileId: profileB.id } });
+    const before = { skill: skillB.skill, provenance: skillB.provenance };
+
+    await request(http)
+      .patch(`/v1/profile/facts/${skillB.id}`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ kind: 'skill', label: 'Cross-user overwrite' })
+      .expect(404);
+
+    const after = await prisma.skillClaim.findUniqueOrThrow({ where: { id: skillB.id } });
+    expect({ skill: after.skill, provenance: after.provenance }).toEqual(before);
+  });
+
+  it('state recompute re-reads and reflects the corrected authoritative fact', async () => {
+    const profile = await prisma.profile.findUniqueOrThrow({ where: { userId: userA.id } });
+    const skill = await prisma.skillClaim.findFirstOrThrow({
+      where: { profileId: profile.id, skill: 'PostgreSQL corrected' },
+    });
+
+    const recomputed = await request(http)
+      .post('/v1/cie/state/recompute')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ factId: `skill:${skill.id}`, reason: 'user corrected skill' });
+
+    expect(recomputed.status).toBe(200);
+    const state = body<{ dimensions: Array<{ dimension: string; value: { values: string[] }; evidenceRefs: string[] }> }>(recomputed);
+    const skills = state.dimensions.find((dimension) => dimension.dimension === 'demonstrated_skills');
+    expect(skills?.value.values).toContain('PostgreSQL corrected (intermediate)');
+    expect(skills?.evidenceRefs).toContain(`skill:${skill.id}`);
   });
 
   it('accepts an already-parsed entities payload (PDF/DOCX parse is STUB(M02))', async () => {

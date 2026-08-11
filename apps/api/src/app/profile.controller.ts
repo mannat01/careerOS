@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Inject, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Patch, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { importProfile } from '../modules/profile/import.handlers.js';
 import { getProfile } from '../modules/profile/read.handlers.js';
+import { editProfileFact } from '../modules/profile/edit.handlers.js';
 import type { HandlerResponse } from '../common/errors/http-error.js';
 import { BearerAuthGuard, type AuthedRequest } from './bearer-auth.guard.js';
 import { APP_DEPS, type AppDeps } from './deps.js';
@@ -36,5 +37,16 @@ export class ProfileController {
     @Res() res: Response,
   ): Promise<void> {
     send(res, await importProfile(req.ctx, body, this.deps.profile));
+  }
+
+  /** PATCH /v1/profile/facts/:id — caller-owned authoritative correction (Green). */
+  @Patch('facts/:id')
+  async editFact(
+    @Req() req: AuthedRequest,
+    @Param('id') factId: string,
+    @Body() body: unknown,
+    @Res() res: Response,
+  ): Promise<void> {
+    send(res, await editProfileFact(req.ctx, factId, body, this.deps.profile));
   }
 }

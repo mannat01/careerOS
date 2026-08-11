@@ -4,6 +4,7 @@ import type { AuthProvider } from '../common/auth/auth-provider.js';
 import type { UserAutonomyResolver } from '../common/capability-gate/gate-interceptor.js';
 import type { IdentityDeps } from '../modules/identity/me.handlers.js';
 import type { ProfileImportDeps } from '../modules/profile/import.handlers.js';
+import type { ProfileFactEditDeps } from '../modules/profile/edit.handlers.js';
 import type { GraphQueryDeps } from '../modules/cie/graph.handlers.js';
 import type { DecideHandlerDeps } from '../modules/cie/decide.handlers.js';
 import type { DecideOffersHandlerDeps } from '../modules/cie/decide-offers.handlers.js';
@@ -40,7 +41,7 @@ export const APP_DEPS = Symbol('APP_DEPS');
 export interface AppDeps {
   authProvider: AuthProvider;
   identity: IdentityDeps;
-  profile: ProfileImportDeps;
+  profile: ProfileImportDeps & ProfileFactEditDeps;
   cie: GraphQueryDeps;
   state: StateHandlerDeps;
   resume: ResumeHandlerDeps;

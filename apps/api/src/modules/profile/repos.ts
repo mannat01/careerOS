@@ -1,4 +1,10 @@
-import type { ParsedEntity, ImportedEntity, ProfileResponse } from '@careeros/contracts';
+import type {
+  EditedProfileFact,
+  ParsedEntity,
+  ImportedEntity,
+  ProfileFactEditRequest,
+  ProfileResponse,
+} from '@careeros/contracts';
 
 /**
  * Profile persistence boundary — apps/api owns the interface; the Prisma-backed
@@ -14,6 +20,16 @@ export interface ProfileImportResult {
   entities: ImportedEntity[];
 }
 
+export interface ProfileFactUpdateResult {
+  profileId: string;
+  beforeLabel: string;
+  fact: EditedProfileFact;
+}
+
+type InMemoryProfileFact = Omit<ImportedEntity, 'provenance'> & {
+  provenance: ImportedEntity['provenance'] | 'user';
+};
+
 export interface ProfileRepo {
   findByUserId(userId: string): Promise<ProfileResponse | null>;
   /**
@@ -22,6 +38,12 @@ export interface ProfileRepo {
    * (with their generated ids) for the response echo.
    */
   importEntities(userId: string, entities: ParsedEntity[]): Promise<ProfileImportResult>;
+  /** Update only a fact owned by the verified user's profile; null hides cross-user ids. */
+  updateFact(
+    userId: string,
+    factId: string,
+    input: ProfileFactEditRequest,
+  ): Promise<ProfileFactUpdateResult | null>;
 }
 
 // STUB(M01/M02): in-memory fake used by DB-free unit tests. Mirrors the Prisma
@@ -29,7 +51,7 @@ export interface ProfileRepo {
 export class InMemoryProfileRepo implements ProfileRepo {
   private readonly profileByUser = new Map<string, string>();
   /** profileId → persisted entities (with their assigned ids). */
-  private readonly entitiesByProfile = new Map<string, ImportedEntity[]>();
+  private readonly entitiesByProfile = new Map<string, InMemoryProfileFact[]>();
   private seq = 0;
 
   constructor(private readonly idFactory: () => string = () => `00000000-0000-4000-8000-${String(++this.seq).padStart(12, '0')}`) {}
@@ -52,12 +74,42 @@ export class InMemoryProfileRepo implements ProfileRepo {
     return Promise.resolve({ profileId, entities: persisted });
   }
 
+  updateFact(
+    userId: string,
+    factId: string,
+    input: ProfileFactEditRequest,
+  ): Promise<ProfileFactUpdateResult | null> {
+    const profileId = this.profileByUser.get(userId);
+    if (!profileId) return Promise.resolve(null);
+    const entities = this.entitiesByProfile.get(profileId) ?? [];
+    const index = entities.findIndex((entity) => entity.id === factId && entity.kind === input.kind);
+    if (index < 0) return Promise.resolve(null);
+    const existing = entities[index]!;
+    const updated: InMemoryProfileFact = {
+      ...existing,
+      name: input.label,
+      provenance: 'user',
+    };
+    entities[index] = updated;
+    return Promise.resolve({
+      profileId,
+      beforeLabel: existing.name,
+      fact: {
+        id: updated.id,
+        kind: updated.kind,
+        label: updated.name,
+        detail: updated.detail ?? null,
+        provenance: 'user',
+      },
+    });
+  }
+
   findByUserId(_userId: string): Promise<ProfileResponse | null> {
     return Promise.resolve(null);
   }
 
   /** Test helper: everything persisted for a user (asserts scoping). */
-  dump(userId: string): ImportedEntity[] {
+  dump(userId: string): InMemoryProfileFact[] {
     const pid = this.profileByUser.get(userId);
     return pid ? (this.entitiesByProfile.get(pid) ?? []) : [];
   }

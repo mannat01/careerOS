@@ -1,6 +1,17 @@
 import { PrismaClient, Prisma, type SkillLevel } from '@prisma/client';
-import { profileResponseSchema, type ImportedEntity, type ParsedEntity, type ProfileResponse } from '@careeros/contracts';
-import type { ProfileRepo, ProfileImportResult } from '../../../../apps/api/src/modules/profile/repos.js';
+import {
+  profileResponseSchema,
+  type EditedProfileFact,
+  type ImportedEntity,
+  type ParsedEntity,
+  type ProfileFactEditRequest,
+  type ProfileResponse,
+} from '@careeros/contracts';
+import type {
+  ProfileRepo,
+  ProfileFactUpdateResult,
+  ProfileImportResult,
+} from '../../../../apps/api/src/modules/profile/repos.js';
 
 /**
  * Prisma-backed ProfileRepo — implements the interface apps/api owns (boundary
@@ -86,9 +97,104 @@ export class PrismaProfileRepo implements ProfileRepo {
       return { profileId: profile.id, entities: out };
     });
   }
+
+  async updateFact(
+    userId: string,
+    factId: string,
+    input: ProfileFactEditRequest,
+  ): Promise<ProfileFactUpdateResult | null> {
+    return this.prisma.$transaction(async (tx) => updateOwnedFact(tx, userId, factId, input));
+  }
 }
 
 type Tx = Prisma.TransactionClient;
+
+async function updateOwnedFact(
+  tx: Tx,
+  userId: string,
+  factId: string,
+  input: ProfileFactEditRequest,
+): Promise<ProfileFactUpdateResult | null> {
+  switch (input.kind) {
+    case 'experience': {
+      const existing = await tx.experience.findFirst({
+        where: { id: factId, profile: { userId } },
+      });
+      if (!existing) return null;
+      const row = await tx.experience.update({
+        where: { id: existing.id },
+        data: { title: input.label, provenance: 'user', version: { increment: 1 } },
+      });
+      return updateResult(row.profileId, existing.title, {
+        id: row.id,
+        kind: 'experience',
+        label: row.title,
+        detail: row.company,
+        provenance: 'user',
+      });
+    }
+    case 'project': {
+      const existing = await tx.project.findFirst({
+        where: { id: factId, profile: { userId } },
+      });
+      if (!existing) return null;
+      const row = await tx.project.update({
+        where: { id: existing.id },
+        data: { name: input.label, provenance: 'user' },
+      });
+      return updateResult(row.profileId, existing.name, {
+        id: row.id,
+        kind: 'project',
+        label: row.name,
+        detail: row.description,
+        provenance: 'user',
+      });
+    }
+    case 'education': {
+      const existing = await tx.education.findFirst({
+        where: { id: factId, profile: { userId } },
+      });
+      if (!existing) return null;
+      const beforeLabel = existing.credential ?? existing.institution;
+      const row = await tx.education.update({
+        where: { id: existing.id },
+        data: { credential: input.label, provenance: 'user' },
+      });
+      return updateResult(row.profileId, beforeLabel, {
+        id: row.id,
+        kind: 'education',
+        label: row.credential ?? row.institution,
+        detail: row.field,
+        provenance: 'user',
+      });
+    }
+    case 'skill': {
+      const existing = await tx.skillClaim.findFirst({
+        where: { id: factId, profile: { userId } },
+      });
+      if (!existing) return null;
+      const row = await tx.skillClaim.update({
+        where: { id: existing.id },
+        data: { skill: input.label, provenance: 'user' },
+      });
+      return updateResult(row.profileId, existing.skill, {
+        id: row.id,
+        kind: 'skill',
+        label: row.skill,
+        detail: row.level,
+        provenance: 'user',
+      });
+    }
+  }
+}
+
+function updateResult(
+  profileId: string,
+  beforeLabel: string,
+  fact: EditedProfileFact,
+): ProfileFactUpdateResult {
+  return { profileId, beforeLabel, fact };
+}
 
 /** Create one row for a parsed entity in its kind-specific table; return its id. */
 async function persistEntity(tx: Tx, profileId: string, e: ParsedEntity): Promise<string> {
