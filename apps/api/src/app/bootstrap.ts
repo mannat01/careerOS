@@ -69,7 +69,10 @@ import {
   MemoryStateEvidenceAdapter,
   MemoryStateFactAdapter,
 } from '../modules/cie/state.handlers.js';
-import { MemoryResumeFactAdapter } from '../modules/cie/resume.handlers.js';
+import {
+  MemoryResumeFactAdapter,
+  StoredOpportunityResumeAdapter,
+} from '../modules/cie/resume.handlers.js';
 import {
   GraphMemoryPlannerAdapter,
   MemoryPlannerFactAdapter,
@@ -235,6 +238,8 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     ids: new SequentialIdGen(),
     agent: new LlmTailorAgent(gateway),
   });
+  const resumeOpportunityRead = new PrismaOpportunityReadStore(prisma);
+  const resumeApplicationRead = new PrismaApplicationStore(prisma);
 
   // Match Scorer / Explainer (M03). Shares the profile-facts port with Tailor,
   // runs on the frontier tier, and the deterministic `groundMatchScore`
@@ -364,7 +369,10 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     },
     cie: overrides?.cie ?? { graph: new GraphMemoryServiceAdapter(graph) },
     state: overrides?.state ?? { service: stateService },
-    resume: overrides?.resume ?? { service: resumeService },
+    resume: overrides?.resume ?? {
+      service: resumeService,
+      opportunities: new StoredOpportunityResumeAdapter(resumeOpportunityRead, resumeApplicationRead),
+    },
     match: overrides?.match ?? { service: matchScorerService },
     decide: overrides?.decide ?? { service: strategicReasonerService },
     decideOffers: overrides?.decideOffers ?? { service: offerComparisonService },

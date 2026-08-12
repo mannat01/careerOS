@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@careeros/contracts": "workspace:*",
     "@careeros/llm-gateway": "workspace:*",
     "@careeros/memory": "workspace:*",
     "zod": "^3.23.8"

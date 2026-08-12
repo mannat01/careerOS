@@ -12,12 +12,19 @@ import type {
   MatchScore,
   MatchScorerService,
   ResumeFactPort,
+  ResumeModel,
   ResumeService,
   ResumeVariant,
   TailorProfileFact,
 } from '@careeros/cie-resume';
+import {
+  InsufficientResumeDataError,
+  ResumeModelNotFoundError,
+} from '@careeros/cie-resume';
+import { resumeTailorRequestSchema } from '@careeros/contracts';
 import type { RequestContext } from '../../common/auth/request-context.js';
 import { errorResponse, ok, type HandlerResponse } from '../../common/errors/http-error.js';
+import { opportunityToJob, type OpportunityReadPort } from '../opportunity/opportunity.handlers.js';
 
 // ---------- app-side port adapter (Memory/ProfileReader seam) ----------
 
@@ -43,11 +50,61 @@ function toTailorKind(kind: MemoryProfileFact['kind']): TailorProfileFact['kind'
 
 export interface ResumeHandlerDeps {
   service: ResumeService;
+  opportunities: ResumeOpportunityPort;
+}
+
+/**
+ * Resolves persisted sanctioned opportunities and proves the caller stored the
+ * opportunity in their own application pipeline.
+ */
+export interface ResumeOpportunityPort {
+  getJob(opportunityId: string): Promise<JobDescription | null>;
+  isStoredByUser(userId: string, opportunityId: string): Promise<boolean>;
+}
+
+export interface ResumeApplicationReadPort {
+  list(userId: string): Promise<Array<{ opportunityId: string }>>;
+}
+
+/** API-layer composition of sanctioned opportunity data + per-user storage. */
+export class StoredOpportunityResumeAdapter implements ResumeOpportunityPort {
+  constructor(
+    private readonly opportunities: OpportunityReadPort,
+    private readonly applications: ResumeApplicationReadPort,
+  ) {}
+
+  async getJob(opportunityId: string): Promise<JobDescription | null> {
+    const detail = await this.opportunities.getById(opportunityId);
+    return detail ? opportunityToJob(detail) : null;
+  }
+
+  async isStoredByUser(userId: string, opportunityId: string): Promise<boolean> {
+    return (await this.applications.list(userId)).some((row) => row.opportunityId === opportunityId);
+  }
 }
 
 /** Deps for the /v1/cie/match endpoint — a MatchScorerService is all it needs. */
 export interface MatchHandlerDeps {
   service: MatchScorerService;
+}
+
+// ---------- GET /v1/cie/resumes/base ----------
+
+export async function getBaseResume(
+  ctx: RequestContext,
+  deps: ResumeHandlerDeps,
+): Promise<HandlerResponse<ResumeModel>> {
+  try {
+    return ok(await deps.service.getBaseModel(ctx.userId));
+  } catch (error) {
+    if (error instanceof InsufficientResumeDataError) {
+      return errorResponse('validation_failed', error.message, {
+        details: { status: 'insufficient_data' },
+        traceId: ctx.traceId,
+      });
+    }
+    throw error;
+  }
 }
 
 // ---------- POST /v1/cie/resumes/:id/tailor ----------
@@ -58,17 +115,51 @@ export async function tailorResume(
   body: unknown,
   deps: ResumeHandlerDeps,
 ): Promise<HandlerResponse<ResumeVariant>> {
-  const parsed = parseTailorBody(body);
-  if (!parsed) {
-    return errorResponse('validation_failed', 'Expected a job description payload.', {
-      details: { resumeId, expected: '{ title, requirements, text, seniority?, opportunityId? }' },
+  const parsed = resumeTailorRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return errorResponse('validation_failed', 'Expected an opportunityId only.', {
+      details: { resumeId, expected: '{ opportunityId }' },
       traceId: ctx.traceId,
     });
   }
 
-  // Green action: derive + persist a reviewable draft variant; no external send.
-  const variant = await deps.service.tailorVariant(ctx.userId, parsed.job, parsed.opportunityId);
-  return ok(variant);
+  const job = await deps.opportunities.getJob(parsed.data.opportunityId);
+  if (!job) {
+    return errorResponse('not_found', 'Opportunity not found.', {
+      details: { opportunityId: parsed.data.opportunityId },
+      traceId: ctx.traceId,
+    });
+  }
+  if (!await deps.opportunities.isStoredByUser(ctx.userId, parsed.data.opportunityId)) {
+    return errorResponse('capability_denied', 'You can only tailor against an opportunity saved in your pipeline.', {
+      details: { opportunityId: parsed.data.opportunityId, reason: 'opportunity_not_owned' },
+      traceId: ctx.traceId,
+    });
+  }
+
+  try {
+    // Green action: derive + persist a reviewable draft variant; no external send.
+    return ok(await deps.service.tailorVariant(
+      ctx.userId,
+      resumeId,
+      job,
+      parsed.data.opportunityId,
+    ));
+  } catch (error) {
+    if (error instanceof ResumeModelNotFoundError) {
+      return errorResponse('not_found', error.message, {
+        details: { resumeId },
+        traceId: ctx.traceId,
+      });
+    }
+    if (error instanceof InsufficientResumeDataError) {
+      return errorResponse('validation_failed', error.message, {
+        details: { status: 'insufficient_data' },
+        traceId: ctx.traceId,
+      });
+    }
+    throw error;
+  }
 }
 
 // ---------- GET /v1/cie/resumes/variants/:id ----------
@@ -102,7 +193,7 @@ export async function scoreMatch(
   body: unknown,
   deps: MatchHandlerDeps,
 ): Promise<HandlerResponse<MatchScore>> {
-  const parsed = parseTailorBody(body); // reuses the same job-payload shape as tailor.
+  const parsed = parseMatchBody(body);
   if (!parsed) {
     return errorResponse('validation_failed', 'Expected a job description payload.', {
       details: { expected: '{ title, requirements, text, seniority? }' },
@@ -113,7 +204,7 @@ export async function scoreMatch(
   return ok(score);
 }
 
-function parseTailorBody(body: unknown): { job: JobDescription; opportunityId: string | null } | null {
+function parseMatchBody(body: unknown): { job: JobDescription; opportunityId: string | null } | null {
   if (typeof body !== 'object' || body === null) return null;
   const b = body as Record<string, unknown>;
   const rawJob = typeof b.job === 'object' && b.job !== null ? (b.job as Record<string, unknown>) : b;

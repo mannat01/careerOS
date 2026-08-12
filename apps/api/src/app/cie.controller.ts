@@ -2,6 +2,7 @@ import { Body, Controller, Get, Inject, Param, Patch, Post, Query, Req, Res, Use
 import type { Response } from 'express';
 import { queryGraph, type GraphQueryDeps } from '../modules/cie/graph.handlers.js';
 import {
+  getBaseResume,
   getResumeVariant,
   scoreMatch,
   tailorResume,
@@ -102,6 +103,16 @@ export class CieController {
   ): Promise<void> {
     const deps: StateHandlerDeps = this.deps.state;
     send(res, await recomputeState(req.ctx, body, deps));
+  }
+
+  /** GET /v1/cie/resumes/base — caller's profile-derived structured résumé. */
+  @Get('resumes/base')
+  async baseResume(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+  ): Promise<void> {
+    const deps: ResumeHandlerDeps = this.deps.resume;
+    send(res, await getBaseResume(req.ctx, deps));
   }
 
   /** POST /v1/cie/resumes/:id/tailor — derive a job-bound draft resume variant. */

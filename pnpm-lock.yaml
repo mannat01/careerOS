@@ -457,6 +457,9 @@ importers:
 
   packages/cie/resume:
     dependencies:
+      '@careeros/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
       '@careeros/llm-gateway':
         specifier: workspace:*
         version: link:../../llm-gateway

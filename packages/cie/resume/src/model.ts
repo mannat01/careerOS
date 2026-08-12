@@ -12,6 +12,14 @@
  * §3.5). The binary PDF/DOCX export is a separate render step (STUB(M03)); the
  * eval + ATS-check operate on the ATS-safe plain-text form.
  */
+import type {
+  ResumeAtsCheck as AtsCheck,
+  ResumeDiff,
+  ResumeModel,
+  ResumeSelectedItem as SelectedItem,
+  ResumeTailoredBullet as TailoredBullet,
+  ResumeVariant,
+} from '@careeros/contracts';
 
 export const RESUME_MODEL_VERSION = 'tailor@1.0.0';
 
@@ -40,6 +48,9 @@ export interface JobDescription {
   text: string;
 }
 
+/** Public résumé wire types are inferred from strict @careeros/contracts schemas. */
+export type { AtsCheck, ResumeDiff, ResumeModel, SelectedItem, TailoredBullet, ResumeVariant };
+
 /**
  * One rendered bullet in a tailored variant. `factId` is its STRUCTURAL
  * provenance — the real `TailorProfileFact` it traces to (the tailoring analogue
@@ -47,10 +58,6 @@ export interface JobDescription {
  * or whose `text` introduces claims not grounded in that fact, is a fabrication
  * and is dropped by the guardrail.
  */
-export interface TailoredBullet {
-  text: string;
-  factId: string;
-}
 
 /**
  * The Tailor agent's OUTPUT for a (profile, job) pair. Structurally matches
@@ -62,11 +69,6 @@ export interface TailoredResume {
   rendered: string;
 }
 
-/** ATS parse-safety verdict on a rendered variant. */
-export interface AtsCheck {
-  passed: boolean;
-  warnings: string[];
-}
 
 /**
  * One facet of a match score (0–100). The scorer always exposes the demanded
@@ -104,51 +106,4 @@ export interface MatchScore {
   evidenceRefs: string[];
   /** Version stamp — identical inputs + version → identical score. */
   modelVersion?: string;
-}
-
-/** One ordered, optionally-rephrased fact reference inside a ResumeModel. */
-export interface SelectedItem {
-  factId: string;
-  order: number;
-  /** A grounded rephrasing of the fact's summary; absent = use the summary verbatim. */
-  phrasing?: string;
-}
-
-/** The structured resume (database-schema.md §resume ResumeModel). */
-export interface ResumeModel {
-  id: string;
-  profileId: string;
-  name: string;
-  /** Ordered fact ids + phrasing overrides. */
-  selectedItems: SelectedItem[];
-  /** True for the profile-derived base model; variants derive from it. */
-  base: boolean;
-}
-
-/**
- * The stored `diff` of a variant vs its base model (database-schema.md jsonb):
- * which facts survived, which were dropped as off-target, which were rephrased.
- */
-export interface ResumeDiff {
-  /** Fact ids selected into the variant, in render order. */
-  selected: string[];
-  /** Fact ids present in the base but dropped from the variant (off-target). */
-  dropped: string[];
-  /** Facts whose rendered text differs from the source summary (a rephrasing). */
-  rephrased: Array<{ factId: string; from: string; to: string }>;
-}
-
-/** The tailored, job-bound variant (database-schema.md §resume ResumeVariant). */
-export interface ResumeVariant {
-  id: string;
-  resumeModelId: string;
-  /** Bound opportunity/job id, or null for an unbound draft. */
-  opportunityId: string | null;
-  bullets: TailoredBullet[];
-  /** ATS-safe plain-text render (the render_artifact is a STUB(M03) binary step). */
-  rendered: string;
-  diff: ResumeDiff;
-  rationale: string;
-  atsCheck: AtsCheck;
-  modelVersion: string;
 }

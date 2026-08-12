@@ -164,7 +164,7 @@ export function buildRationale(
 export function toVariant(
   id: string,
   resumeModelId: string,
-  opportunityId: string | null,
+  opportunityId: string,
   result: TailorVariantResult,
 ): ResumeVariant {
   return {

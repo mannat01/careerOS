@@ -61,6 +61,8 @@ export {
 export {
   ResumeService,
   MatchScorerService,
+  InsufficientResumeDataError,
+  ResumeModelNotFoundError,
   type ResumeServiceDeps,
   type MatchScorerServiceDeps,
   type ResumeFactPort,

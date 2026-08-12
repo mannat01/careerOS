@@ -61,11 +61,14 @@ export {
   type StateHandlerDeps,
 } from './modules/cie/state.handlers.js';
 export {
+  getBaseResume,
   tailorResume,
   getResumeVariant,
   scoreMatch,
   MemoryResumeFactAdapter,
+  StoredOpportunityResumeAdapter,
   type ResumeHandlerDeps,
+  type ResumeOpportunityPort,
   type MatchHandlerDeps,
 } from './modules/cie/resume.handlers.js';
 export {

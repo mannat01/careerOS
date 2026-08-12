@@ -25,16 +25,21 @@ import {
 } from '@careeros/cie-resume';
 import {
   contextFromVerifiedClaims,
+  getBaseResume,
   getResumeVariant,
   scoreMatch,
   tailorResume,
   type MatchHandlerDeps,
   type RequestContext,
   type ResumeHandlerDeps,
+  type ResumeOpportunityPort,
 } from '../src/index.js';
+import { resumeModelSchema, resumeVariantSchema } from '@careeros/contracts';
 
 const USER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const USER_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const OPP_1 = '00000000-0000-4000-8000-000000000020';
+const UNKNOWN_OPP = '00000000-0000-4000-8000-000000000099';
 
 const ctx = (userId: string): RequestContext =>
   contextFromVerifiedClaims({ userId, traceId: 'trace-resume' });
@@ -67,8 +72,26 @@ class FirstTwoFactsAgent implements TailoringAgent {
   }
 }
 
-function buildDeps(): { deps: ResumeHandlerDeps; facts: FakeFactPort } {
+class FakeResumeOpportunities implements ResumeOpportunityPort {
+  readonly jobs = new Map<string, JobDescription>();
+  readonly storedByUser = new Map<string, Set<string>>();
+
+  getJob(opportunityId: string): Promise<JobDescription | null> {
+    return Promise.resolve(this.jobs.get(opportunityId) ?? null);
+  }
+
+  isStoredByUser(userId: string, opportunityId: string): Promise<boolean> {
+    return Promise.resolve(this.storedByUser.get(userId)?.has(opportunityId) ?? false);
+  }
+}
+
+function buildDeps(): {
+  deps: ResumeHandlerDeps;
+  facts: FakeFactPort;
+  opportunities: FakeResumeOpportunities;
+} {
   const facts = new FakeFactPort();
+  const opportunities = new FakeResumeOpportunities();
   const service = new ResumeService({
     facts,
     models: new InMemoryResumeModelStore(),
@@ -76,7 +99,7 @@ function buildDeps(): { deps: ResumeHandlerDeps; facts: FakeFactPort } {
     ids: new SequentialIdGen(),
     agent: new FirstTwoFactsAgent(),
   });
-  return { deps: { service }, facts };
+  return { deps: { service, opportunities }, facts, opportunities };
 }
 
 const fact = (id: string, summary: string, kind: TailorProfileFact['kind'] = 'experience'): TailorProfileFact => ({
@@ -85,32 +108,68 @@ const fact = (id: string, summary: string, kind: TailorProfileFact['kind'] = 'ex
   summary,
 });
 
+const FRONTEND_JOB: JobDescription = {
+  title: 'Frontend Engineer',
+  text: 'React TypeScript dashboards',
+  requirements: ['React', 'TypeScript'],
+};
+
+describe('GET /v1/cie/resumes/base', () => {
+  it('returns a strict structured base model built only from the caller\'s real profile facts', async () => {
+    const { deps, facts } = buildDeps();
+    facts.byUser.set(USER_A, [
+      fact('f1', 'Built React dashboards'),
+      fact('f2', 'TypeScript testing', 'skill'),
+    ]);
+
+    const res = await getBaseResume(ctx(USER_A), deps);
+
+    expect(res.status).toBe(200);
+    expect(resumeModelSchema.parse(res.body)).toMatchObject({
+      profileId: USER_A,
+      base: true,
+      selectedItems: [{ factId: 'f1', order: 0 }, { factId: 'f2', order: 1 }],
+    });
+    expect(JSON.stringify(res.body)).not.toContain('summary');
+  });
+
+  it('returns honest insufficient_data and does not create a stub résumé when the profile has no facts', async () => {
+    const { deps } = buildDeps();
+
+    const res = await getBaseResume(ctx(USER_A), deps);
+
+    expect(res.status).toBe(422);
+    expect(res.body).toMatchObject({
+      error: {
+        code: 'validation_failed',
+        details: { status: 'insufficient_data' },
+      },
+    });
+  });
+});
+
 describe('POST /v1/cie/resumes/:id/tailor', () => {
   it('derives and stores a job-bound draft variant with diff/rationale/ATS check', async () => {
-    const { deps, facts } = buildDeps();
+    const { deps, facts, opportunities } = buildDeps();
     facts.byUser.set(USER_A, [
       fact('f1', 'Built React dashboards for hiring analytics'),
       fact('f2', 'Automated TypeScript test coverage reporting', 'project'),
       fact('f3', 'Customer support escalation workflow'),
     ]);
+    opportunities.jobs.set(OPP_1, FRONTEND_JOB);
+    opportunities.storedByUser.set(USER_A, new Set([OPP_1]));
+    const base = resumeModelSchema.parse((await getBaseResume(ctx(USER_A), deps)).body);
 
     const res = await tailorResume(
       ctx(USER_A),
-      'base-resume',
-      {
-        opportunityId: 'opp-1',
-        job: {
-          title: 'Frontend Engineer',
-          text: 'React TypeScript dashboards',
-          requirements: ['React', 'TypeScript'],
-        },
-      },
+      base.id,
+      { opportunityId: OPP_1 },
       deps,
     );
 
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({
-      opportunityId: 'opp-1',
+    expect(resumeVariantSchema.parse(res.body)).toMatchObject({
+      opportunityId: OPP_1,
       bullets: [
         { factId: 'f1', text: 'Built React dashboards for hiring analytics' },
         { factId: 'f2', text: 'Automated TypeScript test coverage reporting' },
@@ -122,24 +181,59 @@ describe('POST /v1/cie/resumes/:id/tailor', () => {
     expect(JSON.stringify(res.body)).toContain('TAILORED RESUME');
   });
 
-  it('returns validation_failed when no job description text is provided', async () => {
+  it('rejects the removed free-text JD path', async () => {
     const { deps } = buildDeps();
-    const res = await tailorResume(ctx(USER_A), 'base-resume', { title: 'Frontend Engineer' }, deps);
+    const res = await tailorResume(ctx(USER_A), 'base-resume', {
+      opportunityId: OPP_1,
+      text: 'Caller-supplied JD text',
+    }, deps);
 
     expect(res.status).toBe(422);
     expect(res.body).toMatchObject({ error: { code: 'validation_failed' } });
+  });
+
+  it('denies a sanctioned opportunity stored by another user', async () => {
+    const { deps, facts, opportunities } = buildDeps();
+    facts.byUser.set(USER_A, [fact('f1', 'Built React dashboards')]);
+    opportunities.jobs.set(OPP_1, FRONTEND_JOB);
+    opportunities.storedByUser.set(USER_B, new Set([OPP_1]));
+    const base = resumeModelSchema.parse((await getBaseResume(ctx(USER_A), deps)).body);
+
+    const res = await tailorResume(ctx(USER_A), base.id, { opportunityId: OPP_1 }, deps);
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({
+      error: {
+        code: 'capability_denied',
+        details: { reason: 'opportunity_not_owned' },
+      },
+    });
+  });
+
+  it('returns not_found for an unknown opportunity', async () => {
+    const { deps, facts } = buildDeps();
+    facts.byUser.set(USER_A, [fact('f1', 'Built React dashboards')]);
+    const base = resumeModelSchema.parse((await getBaseResume(ctx(USER_A), deps)).body);
+
+    const res = await tailorResume(ctx(USER_A), base.id, { opportunityId: UNKNOWN_OPP }, deps);
+
+    expect(res.status).toBe(404);
+    expect(res.body).toMatchObject({ error: { code: 'not_found' } });
   });
 });
 
 describe('GET /v1/cie/resumes/variants/:id', () => {
   it('is per-user scoped — another caller cannot read the variant', async () => {
-    const { deps, facts } = buildDeps();
+    const { deps, facts, opportunities } = buildDeps();
     facts.byUser.set(USER_A, [fact('f1', 'Built React dashboards')]);
+    opportunities.jobs.set(OPP_1, FRONTEND_JOB);
+    opportunities.storedByUser.set(USER_A, new Set([OPP_1]));
+    const base = resumeModelSchema.parse((await getBaseResume(ctx(USER_A), deps)).body);
 
     const created = await tailorResume(
       ctx(USER_A),
-      'base-resume',
-      { title: 'Frontend Engineer', text: 'React dashboards', requirements: ['React'] },
+      base.id,
+      { opportunityId: OPP_1 },
       deps,
     );
     const id = (created.body as { id: string }).id;

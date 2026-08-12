@@ -65,6 +65,22 @@ export {
   type DecisionSupportResponse,
 } from './decision-support.js';
 export {
+  resumeSelectedItemSchema,
+  resumeModelSchema,
+  resumeTailorRequestSchema,
+  resumeTailoredBulletSchema,
+  resumeDiffSchema,
+  resumeAtsCheckSchema,
+  resumeVariantSchema,
+  type ResumeSelectedItem,
+  type ResumeModel,
+  type ResumeTailorRequest,
+  type ResumeTailoredBullet,
+  type ResumeDiff,
+  type ResumeAtsCheck,
+  type ResumeVariant,
+} from './resume.js';
+export {
   auditActorSchema,
   auditEntrySchema,
   auditListResponseSchema,

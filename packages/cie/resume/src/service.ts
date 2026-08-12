@@ -60,6 +60,22 @@ export interface ResumeServiceDeps {
   ids: ResumeIdGen;
 }
 
+/** Honest no-model signal: zero real profile facts means there is no résumé to return. */
+export class InsufficientResumeDataError extends Error {
+  constructor() {
+    super('Not enough real profile evidence to build a base résumé.');
+    this.name = 'InsufficientResumeDataError';
+  }
+}
+
+/** The requested base-model id does not belong to the caller's derived model. */
+export class ResumeModelNotFoundError extends Error {
+  constructor(readonly resumeId: string) {
+    super('Resume model not found.');
+    this.name = 'ResumeModelNotFoundError';
+  }
+}
+
 // ---------- service ----------
 
 export class ResumeService {
@@ -72,6 +88,7 @@ export class ResumeService {
    */
   async getBaseModel(userId: string): Promise<ResumeModel> {
     const facts = await this.deps.facts.readResumeFacts(userId);
+    if (facts.length === 0) throw new InsufficientResumeDataError();
     const selectedItems: SelectedItem[] = facts.map((f, i) => ({ factId: f.id, order: i }));
     const existing = await this.deps.models.loadBase(userId);
     const model: ResumeModel = {
@@ -92,10 +109,12 @@ export class ResumeService {
    */
   async tailorVariant(
     userId: string,
+    resumeId: string,
     job: JobDescription,
-    opportunityId: string | null = null,
+    opportunityId: string,
   ): Promise<ResumeVariant> {
     const base = await this.getBaseModel(userId);
+    if (base.id !== resumeId) throw new ResumeModelNotFoundError(resumeId);
     const facts = await this.deps.facts.readResumeFacts(userId);
     const result = await this.deps.agent.tailorVariant(facts, job);
     const variant = toVariant(this.deps.ids.next('resume-variant'), base.id, opportunityId, result);

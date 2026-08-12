@@ -29,6 +29,9 @@ import {
   applicationListResponseSchema,
   applicationPatchRequestSchema,
   applicationSchema,
+  resumeModelSchema,
+  resumeTailorRequestSchema,
+  resumeVariantSchema,
   type OpportunityMatchResponse,
 } from '../src/index.js';
 
@@ -390,6 +393,51 @@ describe('FM3.3 application pipeline contracts', () => {
     for (const status of order) {
       expect(applicationSchema.safeParse({ ...application, status }).success).toBe(true);
     }
+  });
+});
+
+describe('FM4-pre résumé API contracts', () => {
+  const model = {
+    id: 'resume-model-1',
+    profileId: UID,
+    name: 'Base résumé',
+    selectedItems: [{ factId: 'experience:1', order: 0 }],
+    base: true as const,
+  };
+  const variant = {
+    id: 'resume-variant-1',
+    resumeModelId: model.id,
+    opportunityId: '00000000-0000-4000-8000-000000000020',
+    bullets: [{ factId: 'experience:1', text: 'Built reliable APIs.' }],
+    rendered: 'TAILORED RESUME\n\nEXPERIENCE\n- Built reliable APIs.',
+    diff: { selected: ['experience:1'], dropped: [], rephrased: [] },
+    rationale: 'Selected one grounded profile fact.',
+    atsCheck: { passed: true, warnings: [] },
+    modelVersion: 'tailor@1.0.0',
+  };
+
+  it('strictly validates the structured base ResumeModel', () => {
+    expect(resumeModelSchema.parse(model)).toEqual(model);
+    expect(resumeModelSchema.safeParse({ ...model, fabricatedSummary: 'invented' }).success).toBe(false);
+    expect(resumeModelSchema.safeParse({ ...model, base: false }).success).toBe(false);
+    expect(resumeModelSchema.safeParse({ ...model, selectedItems: [] }).success).toBe(false);
+  });
+
+  it('accepts only an opportunityId in the public tailor request', () => {
+    expect(resumeTailorRequestSchema.parse({ opportunityId: '00000000-0000-4000-8000-000000000020' }))
+      .toEqual({ opportunityId: '00000000-0000-4000-8000-000000000020' });
+    expect(resumeTailorRequestSchema.safeParse({
+      opportunityId: '00000000-0000-4000-8000-000000000020',
+      jobDescription: 'Free-text public JD is forbidden.',
+    }).success).toBe(false);
+    expect(resumeTailorRequestSchema.safeParse({ opportunityId: 'not-a-uuid' }).success).toBe(false);
+  });
+
+  it('strictly validates tailored content, diff, rationale, and ATS check', () => {
+    expect(resumeVariantSchema.parse(variant)).toEqual(variant);
+    expect(resumeVariantSchema.safeParse({ ...variant, unknown: true }).success).toBe(false);
+    expect(resumeVariantSchema.safeParse({ ...variant, opportunityId: null }).success).toBe(false);
+    expect(resumeVariantSchema.safeParse({ ...variant, atsCheck: { passed: true } }).success).toBe(false);
   });
 });
 
