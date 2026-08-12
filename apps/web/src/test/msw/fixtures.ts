@@ -8,6 +8,7 @@ import {
   meResponseSchema,
   opportunityListResponseSchema,
   opportunityMatchResponseSchema,
+  pendingApprovalListResponseSchema,
   resumeModelSchema,
   resumeVariantSchema,
   type ApiError,
@@ -18,6 +19,7 @@ import {
   type MeResponse,
   type OpportunityListResponse,
   type OpportunityMatchResponse,
+  type PendingApprovalListResponse,
   type ResumeModel,
   type ResumeVariant,
 } from '@careeros/contracts';
@@ -57,6 +59,18 @@ export const successFixtures = Object.freeze({
     id: 'variant-1', resumeModelId: 'base-resume-1', opportunityId: '00000000-0000-4000-8000-000000000022',
     bullets: [], rendered: '', diff: { selected: [], dropped: [], rephrased: [] }, rationale: '',
     atsCheck: { passed: true, warnings: [] }, modelVersion: 'resume-tailor@fake',
+  }),
+  pendingApprovals: (): PendingApprovalListResponse => pendingApprovalListResponseSchema.parse({
+    data: [{
+      id: 'approval-1',
+      action: 'briefing.item.execute',
+      why: 'Send the prepared outreach only after you review its exact contents.',
+      payload: { to: 'recruiter@example.com', subject: 'Staff role', body: 'Exact prepared draft.' },
+      tier: 'yellow',
+      resourceRefs: [{ type: 'briefingRun', id: 'briefing-1' }, { type: 'opportunity', id: 'opportunity-1' }],
+      state: 'proposed',
+      createdAt: NOW,
+    }],
   }),
 });
 

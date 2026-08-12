@@ -1,3 +1,5 @@
+import { approvalTokenSchema, type ApprovalMintResponse } from '@careeros/contracts';
+
 /**
  * Type-level approval enforcement — the headline of Task 3.
  *
@@ -92,18 +94,11 @@ export const ACTION_TIER_MAP = {
 // ---------- ApprovalToken (branded, opaque) ----------
 
 /**
- * Brand tag — a unique symbol keeps `ApprovalToken` structurally
- * incompatible with a bare `string`, so callers cannot forge one by passing
- * `'anything' as ApprovalToken` outside of the dialog.
- */
-declare const approvalTokenBrand: unique symbol;
-
-/**
  * Opaque single-use approval token minted by the `ApprovalDialog` for exactly
  * one (user, action, payloadHash) triple. The brand is a phantom type; at
  * runtime the value is the raw token string the server issued.
  */
-export type ApprovalToken = string & { readonly [approvalTokenBrand]: 'ApprovalToken' };
+export type ApprovalToken = ApprovalMintResponse['token'];
 
 /**
  * ONLY the `ApprovalDialog` flow (Trust Kit, Batch C) is allowed to call
@@ -113,10 +108,7 @@ export type ApprovalToken = string & { readonly [approvalTokenBrand]: 'ApprovalT
  * Trust Kit lands.
  */
 export function unsafe_brandApprovalToken(raw: string): ApprovalToken {
-  if (typeof raw !== 'string' || raw.length === 0) {
-    throw new TypeError('ApprovalToken must be a non-empty string');
-  }
-  return raw as ApprovalToken;
+  return approvalTokenSchema.parse(raw);
 }
 
 /**

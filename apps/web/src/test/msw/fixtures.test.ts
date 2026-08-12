@@ -1,7 +1,7 @@
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { apiErrorSchema, briefingRunDetailSchema, cieStateResponseSchema, meResponseSchema, opportunityListResponseSchema, opportunityMatchResponseSchema, resumeModelSchema, resumeVariantSchema } from '@careeros/contracts';
+import { apiErrorSchema, briefingRunDetailSchema, cieStateResponseSchema, meResponseSchema, opportunityListResponseSchema, opportunityMatchResponseSchema, pendingApprovalListResponseSchema, resumeModelSchema, resumeVariantSchema } from '@careeros/contracts';
 import { createContractHandlers } from './handlers';
 import { errorFixtures, parseFixtureForTest, stateFixtures, successFixtures } from './fixtures';
 
@@ -23,6 +23,7 @@ describe('contract-backed MSW fixtures', () => {
     expect(opportunityMatchResponseSchema.parse(successFixtures.match())).toBeDefined();
     expect(resumeModelSchema.parse(successFixtures.resumeModel())).toBeDefined();
     expect(resumeVariantSchema.parse(successFixtures.resumeVariant()).bullets).toEqual([]);
+    expect(pendingApprovalListResponseSchema.parse(successFixtures.pendingApprovals()).data[0]?.why).toContain('exact contents');
   });
 
   it('serves schema-backed bodies through MSW', async () => {

@@ -27,7 +27,7 @@ import { PipelineBoardClient } from '../../app/(app)/pipeline/PipelineBoardClien
 import PlanPage from '../../app/(app)/plan/page';
 import { ResumeStudioClient } from '../../app/(app)/you/ResumeStudioClient';
 import { BASE_RESUME, GROUNDED_VARIANT, RESUME_OPPORTUNITY, RESUME_PIPELINE, THIN_VARIANT } from '../../app/(app)/you/resume-fixtures';
-import ApprovalsPage from '../../app/(app)/approvals/page';
+import { ApprovalsRoomClient } from '../../app/(app)/approvals/ApprovalsRoomClient';
 import { TrustKitClient } from '../../app/(app)/%5Fdev/trust/TrustKitClient';
 import { AppShell } from '../shell';
 import { RoutingRecovery } from '../auth';
@@ -61,7 +61,7 @@ const routes: ReadonlyArray<{ name: string; path: string; renderRoute: () => Rea
   { name: 'Pipeline', path: '/opportunities/pipeline', renderRoute: () => <AppShell><PipelineBoardClient dependencies={{ list: () => Promise.resolve(EMPTY_PIPELINE), patch: () => Promise.reject(new Error('Empty pipeline never patches.')) }} /></AppShell> },
   { name: 'Plan', path: '/plan', renderRoute: () => <AppShell><PlanPage /></AppShell> },
   { name: 'You', path: '/you', renderRoute: () => <AppShell><section aria-labelledby="you-heading" className="flex flex-col gap-4"><h1 id="you-heading">You</h1><ResumeStudioClient dependencies={{ getBase: () => Promise.resolve(BASE_RESUME), listApplications: () => Promise.resolve(RESUME_PIPELINE), getOpportunity: () => Promise.resolve(RESUME_OPPORTUNITY), tailor: () => Promise.resolve(GROUNDED_VARIANT), getVariant: () => Promise.resolve(GROUNDED_VARIANT) }} /></section></AppShell> },
-  { name: 'Approvals', path: '/approvals', renderRoute: () => <AppShell><ApprovalsPage /></AppShell> },
+  { name: 'Approvals', path: '/approvals', renderRoute: () => <AppShell><section aria-labelledby="approvals-heading"><h1 id="approvals-heading">Approvals</h1><ApprovalsRoomClient dependencies={{ list: () => Promise.resolve(successFixtures.pendingApprovals()), mint: () => Promise.reject(new Error('not exercised by static axe')), edit: () => Promise.reject(new Error('not exercised by static axe')), execute: () => Promise.reject(new Error('not exercised by static axe')), deny: () => Promise.reject(new Error('not exercised by static axe')) }} /></section></AppShell> },
   { name: '/_dev/trust (development)', path: '/_dev/trust', renderRoute: () => <AppShell><TrustKitClient data={{ state: successFixtures.state(), opportunities: successFixtures.opportunities(), match: successFixtures.match(), audit: successFixtures.audit(), briefing: successFixtures.briefing() }} /></AppShell> },
 ];
 
@@ -245,6 +245,42 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
     );
     await user.click(await screen.findByRole('button', { name: 'Tailor résumé draft' }));
     expect(await screen.findByRole('heading', { name: 'No grounded tailored content returned' })).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM5.1 populated Approvals room and lifecycle dialog are axe-clean and keyboard reachable', async () => {
+    pathname = '/approvals';
+    const user = userEvent.setup();
+    const { container } = render(
+      <AppShell>
+        <section aria-labelledby="approvals-fm51-heading">
+          <h1 id="approvals-fm51-heading">Approvals</h1>
+          <ApprovalsRoomClient dependencies={{
+            list: () => Promise.resolve(successFixtures.pendingApprovals()),
+            mint: () => Promise.reject(new Error('not exercised by axe')),
+            edit: () => Promise.reject(new Error('not exercised by axe')),
+            execute: () => Promise.reject(new Error('not exercised by axe')),
+            deny: () => Promise.reject(new Error('not exercised by axe')),
+          }} />
+        </section>
+      </AppShell>,
+    );
+    const review = await screen.findByRole('button', { name: 'Review approval' });
+    review.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('dialog', { name: 'Review briefing.item.execute' })).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM5.1 ambient Twin dialog is axe-clean and keyboard reachable', async () => {
+    pathname = '/plan';
+    const user = userEvent.setup();
+    const { container } = render(<AppShell><PlanPage /></AppShell>);
+    const openTwin = screen.getByRole('button', { name: 'Open Twin (Command K)' });
+    openTwin.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('dialog', { name: 'Twin' })).toBeVisible();
+    expect(screen.getByLabelText('Question')).toHaveFocus();
     expect(await axe(container)).toHaveNoViolations();
   });
 

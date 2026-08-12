@@ -134,7 +134,8 @@ export class TwinStreamParseError extends Error {
  *     decides in the ApprovalDialog. This is the *only* correct behavior
  *     under the capability-gate.
  *   - `done` → yield the event, then return.
- *   - `error` → throw an `ApiError` (mapped from the event's `code`).
+ *   - `error` → yield the canonical frame for honest rendering, then throw a
+ *     typed `ApiError`; never reconnect or silently recover.
  *   - Transport error (network drop, non-2xx) → backoff + reconnect up to
  *     `maxReconnects`; after that, throw an `ApiError('internal')`.
  *   - Abort → return cleanly, no throw.
@@ -250,9 +251,11 @@ export function openTwinStream(
               return;
             }
             if (event.type === 'error') {
-              // Convert server-emitted `error` events into a typed ApiError.
-              // This is not a transport failure — the run itself failed —
-              // so we do NOT reconnect.
+              // Renderers must receive every canonical union member, including
+              // the server's real error frame. Yield it once, then raise the
+              // typed failure on the consumer's next iteration step. This is
+              // not a transport failure, so it never reconnects.
+              yield event;
               throw new ApiError({
                 code: 'internal',
                 message: event.message,

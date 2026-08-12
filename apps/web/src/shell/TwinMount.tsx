@@ -5,15 +5,15 @@ import {
   ApiError,
   openTwinStream,
   TwinStreamParseError,
-  type TwinStreamEvent,
 } from '../api';
+import type { TwinStreamEvent } from '@careeros/contracts';
 import { ErrorRecoveryRenderer } from './state';
 
 type TurnStatus = 'idle' | 'streaming' | 'complete' | 'approval_required' | 'error';
 
 /**
  * The global Twin entry point. This remains a deliberately small FM1 surface:
- * one prompt, typed event telemetry, transcript, and the Yellow halt. History,
+ * one prompt, every canonical streamed event, transcript, and the Yellow halt. History,
  * richer tools, and product workflows remain owned by later frontend FMs.
  */
 export function TwinMount(): JSX.Element {
@@ -136,20 +136,83 @@ export function TwinMount(): JSX.Element {
 
             <section aria-label="Twin turn" aria-live="polite" className="mt-4 space-y-3">
               <p data-testid="twin-status" className="text-xs font-semibold uppercase tracking-wide text-text-muted">{status.replace('_', ' ')}</p>
-              {events.length > 0 ? (
-                <ol aria-label="Twin event sequence" className="flex flex-wrap gap-2 text-xs">
-                  {events.map((item, index) => <li key={`${item.type}-${String(index)}`} data-event-type={item.type} className="rounded border border-border-subtle px-2 py-1">{item.type}</li>)}
-                </ol>
-              ) : null}
+              {events.length > 0 ? <TwinEventSequence events={events} /> : null}
               {answer ? <p data-testid="twin-answer" className="rounded-md bg-bg-subtle p-3 text-sm text-text-primary">{answer}</p> : null}
               {status === 'approval_required' ? (
-                <div role="alert" data-testid="twin-approval-required" className="rounded-md border border-tier-yellow p-3 text-sm text-text-primary">Approval required. Twin stopped before execution. Review the action in Approvals.</div>
+                <TwinHalt event={events.findLast((item) => item.type === 'approval_required')} />
               ) : null}
               {error ? <ErrorRecoveryRenderer error={error} onRetry={() => setStatus('idle')} /> : null}
             </section>
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function JsonValue({ value }: { readonly value: unknown }): JSX.Element {
+  return <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-bg-base p-2 font-mono text-xs text-text-primary">{JSON.stringify(value, null, 2)}</pre>;
+}
+
+/** Exhaustive presentation over the one TwinStreamEvent union from contracts. */
+export function TwinEventSequence({ events }: { readonly events: readonly TwinStreamEvent[] }): JSX.Element {
+  return (
+    <ol aria-label="Twin event sequence" className="space-y-2 text-xs">
+      {events.map((event, index) => (
+        <li key={`${event.type}-${String(index)}`} data-event-type={event.type} className="rounded border border-border-subtle bg-bg-elevated p-2">
+          <TwinEvent event={event} />
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function TwinEvent({ event }: { readonly event: TwinStreamEvent }): JSX.Element {
+  switch (event.type) {
+    case 'context':
+      return (
+        <div>
+          <p className="font-semibold text-text-primary">context</p>
+          {event.summary !== undefined ? <p>{event.summary}</p> : null}
+          {event.evidenceIds !== undefined ? <p>Evidence IDs: {event.evidenceIds.join(', ')}</p> : null}
+          {event.usedTokens !== undefined ? <p>Used tokens: {event.usedTokens}</p> : null}
+          {event.budgetTokens !== undefined ? <p>Budget tokens: {event.budgetTokens}</p> : null}
+          {event.truncated !== undefined ? <p>Truncated: {String(event.truncated)}</p> : null}
+          {event.runId !== undefined ? <p>Run: {event.runId}</p> : null}
+          {event.slice !== undefined ? <JsonValue value={event.slice} /> : null}
+        </div>
+      );
+    case 'token':
+      return <div><p className="font-semibold text-text-primary">token</p><p className="whitespace-pre-wrap">{event.text}</p>{event.index !== undefined ? <p>Index: {event.index}</p> : null}{event.runId !== undefined ? <p>Run: {event.runId}</p> : null}</div>;
+    case 'tool_call':
+      return <div><p className="font-semibold text-text-primary">tool_call</p><p>Tool: {event.tool}</p>{event.callId !== undefined ? <p>Call: {event.callId}</p> : null}{event.argsJson !== undefined ? <p className="whitespace-pre-wrap">Arguments JSON: {event.argsJson}</p> : null}{event.input !== undefined ? <JsonValue value={event.input} /> : null}{event.runId !== undefined ? <p>Run: {event.runId}</p> : null}</div>;
+    case 'tool_result':
+      return <div><p className="font-semibold text-text-primary">tool_result</p><p>Tool: {event.tool}</p>{event.ok !== undefined ? <p>OK: {String(event.ok)}</p> : null}{event.callId !== undefined ? <p>Call: {event.callId}</p> : null}{event.resultJson !== undefined ? <p className="whitespace-pre-wrap">Result JSON: {event.resultJson}</p> : null}{event.errorMessage !== undefined ? <p>Error message: {event.errorMessage}</p> : null}{event.result !== undefined ? <JsonValue value={event.result} /> : null}{event.runId !== undefined ? <p>Run: {event.runId}</p> : null}</div>;
+    case 'approval_required':
+      return <div><p className="font-semibold text-text-primary">approval_required</p><p>Action: {event.action}</p>{event.tier !== undefined ? <p>Tier: {event.tier}</p> : null}{event.reason !== undefined ? <p>Reason: {event.reason}</p> : null}{event.message !== undefined ? <p>Message: {event.message}</p> : null}{event.payloadHash !== undefined ? <p>Payload hash: {event.payloadHash}</p> : null}{event.payload !== undefined ? <JsonValue value={event.payload} /> : null}{event.runId !== undefined ? <p>Run: {event.runId}</p> : null}</div>;
+    case 'done':
+      return <div><p className="font-semibold text-text-primary">done</p>{event.outcome !== undefined ? <p>Outcome: {event.outcome}</p> : null}{event.finalText !== undefined ? <p className="whitespace-pre-wrap">{event.finalText}</p> : null}{event.modelVersion !== undefined ? <p>Model version: {event.modelVersion}</p> : null}{event.usage !== undefined ? <JsonValue value={event.usage} /> : null}{event.runId !== undefined ? <p>Run: {event.runId}</p> : null}</div>;
+    case 'error':
+      return <div role="alert"><p className="font-semibold text-tier-red">error</p><p>Code: {event.code}</p><p>{event.message}</p>{event.traceId !== undefined ? <p>Trace: {event.traceId}</p> : null}{event.runId !== undefined ? <p>Run: {event.runId}</p> : null}</div>;
+    default: {
+      const exhaustive: never = event;
+      return exhaustive;
+    }
+  }
+}
+
+function TwinHalt({ event }: { readonly event: TwinStreamEvent | undefined }): JSX.Element {
+  if (!event || event.type !== 'approval_required') {
+    return <div role="alert" data-testid="twin-approval-required" className="rounded-md border border-tier-yellow p-3 text-sm text-text-primary">Twin stopped before execution because approval is required.</div>;
+  }
+  return (
+    <div role="alert" data-testid="twin-approval-required" className="rounded-md border border-tier-yellow p-3 text-sm text-text-primary">
+      <p className="font-semibold">Twin stopped before execution</p>
+      <p>Pending action: {event.action}</p>
+      {event.reason !== undefined ? <p>Reason: {event.reason}</p> : null}
+      {event.message !== undefined ? <p>{event.message}</p> : null}
+      {event.payload !== undefined ? <JsonValue value={event.payload} /> : null}
+      <p className="mt-2">Nothing auto-proceeded. Review persisted actions in Approvals.</p>
     </div>
   );
 }

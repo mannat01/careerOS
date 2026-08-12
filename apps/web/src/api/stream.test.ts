@@ -243,7 +243,7 @@ describe('openTwinStream — parse errors surface, never swallowed', () => {
 });
 
 describe('openTwinStream — server error events throw ApiError, no reconnect', () => {
-  it('emits an ApiError for a server-side `error` event and does not retry', async () => {
+  it('yields the canonical error event, then throws an ApiError without retrying', async () => {
     let calls = 0;
     const fetchImpl = (async () => {
       calls += 1;
@@ -265,14 +265,20 @@ describe('openTwinStream — server error events throw ApiError, no reconnect', 
     );
 
     let thrown: unknown;
+    const yielded: TwinStreamEvent[] = [];
     try {
-      for await (const _ of iter) void _;
+      for await (const event of iter) {
+        if (!(event instanceof TwinStreamParseError)) yielded.push(event);
+      }
     } catch (e) {
       thrown = e;
     }
     expect(thrown).toBeInstanceOf(ApiError);
     expect((thrown as ApiError).message).toBe('The model timed out.');
     expect((thrown as ApiError).traceId).toBe('trace-abc');
+    expect(yielded).toEqual([{
+      type: 'error', runId: 'r1', code: 'model_timeout', message: 'The model timed out.', traceId: 'trace-abc',
+    }]);
     expect(calls).toBe(1); // no reconnect on server-side run error
   });
 });

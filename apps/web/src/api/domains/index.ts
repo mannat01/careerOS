@@ -16,6 +16,7 @@ import { createAuditApi, type AuditApi } from './audit';
 import { createDecisionsApi, type DecisionsApi } from './decisions';
 import { createApplicationsApi, type ApplicationsApi } from './applications';
 import { createResumesApi, type ResumesApi } from './resumes';
+import { createApprovalsApi, type ApprovalsApi } from './approvals';
 
 export * from './me';
 export * from './profile';
@@ -26,6 +27,7 @@ export * from './audit';
 export * from './decisions';
 export * from './applications';
 export * from './resumes';
+export * from './approvals';
 
 export interface Api {
   me: MeApi;
@@ -37,6 +39,7 @@ export interface Api {
   decisions: DecisionsApi;
   applications: ApplicationsApi;
   resumes: ResumesApi;
+  approvals: ApprovalsApi;
 }
 
 export function createApi(client: ApiClient): Api {
@@ -50,5 +53,6 @@ export function createApi(client: ApiClient): Api {
     decisions: createDecisionsApi(client),
     applications: createApplicationsApi(client),
     resumes: createResumesApi(client),
+    approvals: createApprovalsApi(client),
   };
 }
