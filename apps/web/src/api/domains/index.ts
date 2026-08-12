@@ -15,6 +15,7 @@ import { createBriefingsApi, type BriefingsApi } from './briefings';
 import { createAuditApi, type AuditApi } from './audit';
 import { createDecisionsApi, type DecisionsApi } from './decisions';
 import { createApplicationsApi, type ApplicationsApi } from './applications';
+import { createResumesApi, type ResumesApi } from './resumes';
 
 export * from './me';
 export * from './profile';
@@ -24,6 +25,7 @@ export * from './briefings';
 export * from './audit';
 export * from './decisions';
 export * from './applications';
+export * from './resumes';
 
 export interface Api {
   me: MeApi;
@@ -34,6 +36,7 @@ export interface Api {
   audit: AuditApi;
   decisions: DecisionsApi;
   applications: ApplicationsApi;
+  resumes: ResumesApi;
 }
 
 export function createApi(client: ApiClient): Api {
@@ -46,5 +49,6 @@ export function createApi(client: ApiClient): Api {
     audit: createAuditApi(client),
     decisions: createDecisionsApi(client),
     applications: createApplicationsApi(client),
+    resumes: createResumesApi(client),
   };
 }

@@ -8,6 +8,8 @@ import {
   meResponseSchema,
   opportunityListResponseSchema,
   opportunityMatchResponseSchema,
+  resumeModelSchema,
+  resumeVariantSchema,
   type ApiError,
   type AuditListResponse,
   type BriefingRunDetail,
@@ -16,6 +18,8 @@ import {
   type MeResponse,
   type OpportunityListResponse,
   type OpportunityMatchResponse,
+  type ResumeModel,
+  type ResumeVariant,
 } from '@careeros/contracts';
 
 const NOW = '2026-08-09T12:00:00.000Z';
@@ -44,6 +48,15 @@ export const successFixtures = Object.freeze({
   briefing: (): BriefingRunDetail => briefingRunDetailSchema.parse({
     id: 'briefing-1', userId: USER_ID, trigger: 'manual', status: 'complete', inputs: {}, steps: [], costTotal: 0, startedAt: NOW, finishedAt: NOW,
     items: [{ id: 'item-1', kind: 'draft', refId: 'opportunity-1', autonomyTier: 'yellow', state: 'proposed', payload: { title: 'Outreach draft' }, createdAt: NOW }],
+  }),
+  resumeModel: (): ResumeModel => resumeModelSchema.parse({
+    id: 'base-resume-1', profileId: 'profile-1', name: 'Base résumé', base: true,
+    selectedItems: [{ factId: 'experience:1', order: 0, phrasing: 'Built reliable services.' }],
+  }),
+  resumeVariant: (): ResumeVariant => resumeVariantSchema.parse({
+    id: 'variant-1', resumeModelId: 'base-resume-1', opportunityId: '00000000-0000-4000-8000-000000000022',
+    bullets: [], rendered: '', diff: { selected: [], dropped: [], rephrased: [] }, rationale: '',
+    atsCheck: { passed: true, warnings: [] }, modelVersion: 'resume-tailor@fake',
   }),
 });
 

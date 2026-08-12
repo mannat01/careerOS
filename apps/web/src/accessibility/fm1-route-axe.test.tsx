@@ -25,7 +25,8 @@ import {
 import { EMPTY_PIPELINE, POPULATED_PIPELINE, SAVED_APPLICATION_DETAIL } from '../../app/(app)/pipeline/pipeline-fixtures';
 import { PipelineBoardClient } from '../../app/(app)/pipeline/PipelineBoardClient';
 import PlanPage from '../../app/(app)/plan/page';
-import YouPage from '../../app/(app)/you/page';
+import { ResumeStudioClient } from '../../app/(app)/you/ResumeStudioClient';
+import { BASE_RESUME, GROUNDED_VARIANT, RESUME_OPPORTUNITY, RESUME_PIPELINE, THIN_VARIANT } from '../../app/(app)/you/resume-fixtures';
 import ApprovalsPage from '../../app/(app)/approvals/page';
 import { TrustKitClient } from '../../app/(app)/%5Fdev/trust/TrustKitClient';
 import { AppShell } from '../shell';
@@ -59,7 +60,7 @@ const routes: ReadonlyArray<{ name: string; path: string; renderRoute: () => Rea
   { name: 'Opportunities', path: '/opportunities', renderRoute: () => <AppShell><OpportunitiesClient dependencies={{ list: () => Promise.resolve(POPULATED_OPPORTUNITIES), match: (id) => Promise.resolve(MATCH_BY_OPPORTUNITY[id] ?? POPULATED_MATCH) }} /></AppShell> },
   { name: 'Pipeline', path: '/opportunities/pipeline', renderRoute: () => <AppShell><PipelineBoardClient dependencies={{ list: () => Promise.resolve(EMPTY_PIPELINE), patch: () => Promise.reject(new Error('Empty pipeline never patches.')) }} /></AppShell> },
   { name: 'Plan', path: '/plan', renderRoute: () => <AppShell><PlanPage /></AppShell> },
-  { name: 'You', path: '/you', renderRoute: () => <AppShell><YouPage /></AppShell> },
+  { name: 'You', path: '/you', renderRoute: () => <AppShell><section aria-labelledby="you-heading" className="flex flex-col gap-4"><h1 id="you-heading">You</h1><ResumeStudioClient dependencies={{ getBase: () => Promise.resolve(BASE_RESUME), listApplications: () => Promise.resolve(RESUME_PIPELINE), getOpportunity: () => Promise.resolve(RESUME_OPPORTUNITY), tailor: () => Promise.resolve(GROUNDED_VARIANT), getVariant: () => Promise.resolve(GROUNDED_VARIANT) }} /></section></AppShell> },
   { name: 'Approvals', path: '/approvals', renderRoute: () => <AppShell><ApprovalsPage /></AppShell> },
   { name: '/_dev/trust (development)', path: '/_dev/trust', renderRoute: () => <AppShell><TrustKitClient data={{ state: successFixtures.state(), opportunities: successFixtures.opportunities(), match: successFixtures.match(), audit: successFixtures.audit(), briefing: successFixtures.briefing() }} /></AppShell> },
 ];
@@ -204,6 +205,46 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
     await user.keyboard('{Enter}');
     const dialog = screen.getByRole('dialog', { name: 'Confirm your application' });
     expect(within(dialog).getByRole('button', { name: 'Confirm I applied' })).toBeDisabled();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM4 full résumé tailor flow and ATS-check panel are axe-clean and keyboard reachable', async () => {
+    pathname = '/you';
+    const user = userEvent.setup();
+    const { container } = render(
+      <AppShell>
+        <ResumeStudioClient dependencies={{
+          getBase: () => Promise.resolve(BASE_RESUME),
+          listApplications: () => Promise.resolve(RESUME_PIPELINE),
+          getOpportunity: () => Promise.resolve(RESUME_OPPORTUNITY),
+          tailor: () => Promise.resolve(GROUNDED_VARIANT),
+          getVariant: () => Promise.resolve(GROUNDED_VARIANT),
+        }} />
+      </AppShell>,
+    );
+    const action = await screen.findByRole('button', { name: 'Tailor résumé draft' });
+    action.focus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByTestId('ats-check-panel')).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM4 zero-grounded-bullet variant remains axe-clean', async () => {
+    pathname = '/you';
+    const user = userEvent.setup();
+    const { container } = render(
+      <AppShell>
+        <ResumeStudioClient dependencies={{
+          getBase: () => Promise.resolve(BASE_RESUME),
+          listApplications: () => Promise.resolve(RESUME_PIPELINE),
+          getOpportunity: () => Promise.resolve(RESUME_OPPORTUNITY),
+          tailor: () => Promise.resolve(THIN_VARIANT),
+          getVariant: () => Promise.resolve(THIN_VARIANT),
+        }} />
+      </AppShell>,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Tailor résumé draft' }));
+    expect(await screen.findByRole('heading', { name: 'No grounded tailored content returned' })).toBeVisible();
     expect(await axe(container)).toHaveNoViolations();
   });
 
