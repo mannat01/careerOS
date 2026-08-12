@@ -15,6 +15,7 @@ import type { ApplicationHandlerDeps } from '../modules/application/application.
 import type { TwinHandlerDeps } from '../modules/twin/twin.handlers.js';
 import type { BriefingHandlerDeps } from '../modules/briefing/briefing.handlers.js';
 import type { ApprovalHandlerDeps } from '../modules/briefing/approval.handlers.js';
+import type { ApprovalLifecycleHandlerDeps } from '../modules/briefing/approval-lifecycle.handlers.js';
 import type { AuditHandlerDeps } from '../modules/audit/audit.handlers.js';
 import type { PlanHandlerDeps } from '../modules/cie/plan.handlers.js';
 import type { DashboardHandlerDeps } from '../modules/cie/dashboard.handlers.js';
@@ -70,6 +71,8 @@ export interface AppDeps {
    * the M01 capability-gate. Reuses the same tokenStore + secret as `gate`.
    */
   approval: ApprovalHandlerDeps;
+  /** FM5.1-pre canonical list → mint/edit → execute/deny lifecycle. */
+  approvalLifecycle: ApprovalLifecycleHandlerDeps;
   /**
    * M07 — GET /v1/audit. Read-only projection over the append-only audit log,
    * PER-USER scoped by construction. The write path continues to flow through

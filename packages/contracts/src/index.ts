@@ -8,6 +8,33 @@ export {
 } from './error.js';
 export { autonomyTierSchema, type AutonomyTier } from './autonomy.js';
 export {
+  approvalTokenSchema,
+  approvalResourceRefSchema,
+  approvalLifecycleStateSchema,
+  pendingApprovalSchema,
+  pendingApprovalListResponseSchema,
+  approvalMintRequestSchema,
+  approvalMintResponseSchema,
+  approvalEditRequestSchema,
+  approvalEditResponseSchema,
+  approvalExecuteRequestSchema,
+  approvalExecuteResponseSchema,
+  approvalDenyRequestSchema,
+  approvalDenyResponseSchema,
+  type ApprovalResourceRef,
+  type ApprovalLifecycleState,
+  type PendingApproval,
+  type PendingApprovalListResponse,
+  type ApprovalMintRequest,
+  type ApprovalMintResponse,
+  type ApprovalEditRequest,
+  type ApprovalEditResponse,
+  type ApprovalExecuteRequest,
+  type ApprovalExecuteResponse,
+  type ApprovalDenyRequest,
+  type ApprovalDenyResponse,
+} from './approval.js';
+export {
   briefingScheduleSchema,
   CONSERVATIVE_AUTONOMY_DEFAULTS,
   dataUseOptInsSchema,

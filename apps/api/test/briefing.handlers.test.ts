@@ -124,6 +124,29 @@ class FakeStore implements BriefingStorePort {
     const latest = owned[0]!;
     return Promise.resolve({ ...latest, items: this.items.get(latest.id) ?? [] });
   }
+  listPendingApprovals(userId: string): Promise<BriefingItem[]> {
+    const ownedRunIds = new Set(
+      [...this.runs.values()].filter((run) => run.userId === userId).map((run) => run.id),
+    );
+    return Promise.resolve(
+      [...this.items.entries()]
+        .filter(([runId]) => ownedRunIds.has(runId))
+        .flatMap(([, items]) => items)
+        .filter(
+          (item) =>
+            item.autonomyTier === 'yellow' &&
+            (item.state === 'proposed' || item.state === 'approved'),
+        ),
+    );
+  }
+  findApprovalForUser(userId: string, approvalId: string): Promise<BriefingItem | null> {
+    for (const [runId, items] of this.items.entries()) {
+      const run = this.runs.get(runId);
+      const item = items.find((candidate) => candidate.id === approvalId);
+      if (run?.userId === userId && item) return Promise.resolve(item);
+    }
+    return Promise.resolve(null);
+  }
 }
 
 // ---------------- fake opportunity read port ----------------

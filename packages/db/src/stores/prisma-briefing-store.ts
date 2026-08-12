@@ -23,7 +23,19 @@ export type BriefingItemKindLike =
   | 'note'
   | 'focus'
   | 'suggestion';
-export type BriefingItemStateLike = 'proposed' | 'approved' | 'edited' | 'skipped' | 'failed';
+export type BriefingItemStateLike =
+  | 'proposed'
+  | 'approved'
+  | 'edited'
+  | 'executed'
+  | 'denied'
+  | 'skipped'
+  | 'failed';
+
+export interface ApprovalResourceRefLike {
+  type: string;
+  id: string;
+}
 
 export interface BriefingStepRecordLike {
   name: string;
@@ -44,6 +56,9 @@ export interface BriefingItemLike {
   autonomyTier: 'green' | 'yellow' | 'red';
   state: BriefingItemStateLike;
   payload: Record<string, unknown>;
+  action: string;
+  why: string;
+  resourceRefs: ApprovalResourceRefLike[];
   createdAt: string;
 }
 
@@ -85,6 +100,8 @@ export interface BriefingStorePortShape {
   ): Promise<BriefingItemLike[]>;
   getById(userId: string, id: string): Promise<BriefingRunDetailLike | null>;
   latestForUser(userId: string): Promise<BriefingRunDetailLike | null>;
+  listPendingApprovals(userId: string): Promise<BriefingItemLike[]>;
+  findApprovalForUser(userId: string, approvalId: string): Promise<BriefingItemLike | null>;
   /** M07 — per-user scoped item lookup for the approval queue. */
   findItemOnUserRun(
     userId: string,
@@ -118,6 +135,9 @@ interface ItemRow {
   autonomyTier: string;
   state: BriefingItemState;
   payload: Prisma.JsonValue;
+  action: string;
+  why: string;
+  resourceRefs: Prisma.JsonValue;
   createdAt: Date;
 }
 
@@ -180,6 +200,9 @@ export class PrismaBriefingStore implements BriefingStorePortShape {
             autonomyTier: i.autonomyTier,
             state: i.state,
             payload: i.payload as Prisma.InputJsonValue,
+            action: i.action,
+            why: i.why,
+            resourceRefs: i.resourceRefs as unknown as Prisma.InputJsonValue,
           },
         }),
       ),
@@ -210,6 +233,28 @@ export class PrismaBriefingStore implements BriefingStorePortShape {
       ...this.toRun(row),
       items: (row.items as unknown as ItemRow[]).map((i) => this.toItem(i)),
     };
+  }
+
+  async listPendingApprovals(userId: string): Promise<BriefingItemLike[]> {
+    const rows = await this.prisma.briefingItem.findMany({
+      where: {
+        run: { userId },
+        autonomyTier: 'yellow',
+        state: { in: ['proposed', 'approved'] },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    return (rows as unknown as ItemRow[]).map((row) => this.toItem(row));
+  }
+
+  async findApprovalForUser(
+    userId: string,
+    approvalId: string,
+  ): Promise<BriefingItemLike | null> {
+    const row = await this.prisma.briefingItem.findFirst({
+      where: { id: approvalId, run: { userId } },
+    });
+    return row ? this.toItem(row) : null;
   }
 
   /**
@@ -271,6 +316,9 @@ export class PrismaBriefingStore implements BriefingStorePortShape {
       autonomyTier: (row.autonomyTier as 'green' | 'yellow' | 'red') ?? 'green',
       state: row.state,
       payload: (row.payload ?? {}) as Record<string, unknown>,
+      action: row.action,
+      why: row.why,
+      resourceRefs: (row.resourceRefs ?? []) as unknown as ApprovalResourceRefLike[],
       createdAt: row.createdAt.toISOString(),
     };
   }

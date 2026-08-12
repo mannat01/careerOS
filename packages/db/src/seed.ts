@@ -320,6 +320,12 @@ async function seedDevDataset(): Promise<void> {
       refId: DEV_IDS.opportunities[0],
       autonomyTier: 'green',
       state: 'proposed' as const,
+      action: 'briefing.generate',
+      why: 'This opportunity matched persisted profile evidence in the scheduled briefing.',
+      resourceRefs: [
+        { type: 'briefing_run', id: DEV_IDS.briefingRun },
+        { type: 'opportunity', id: DEV_IDS.opportunities[0] },
+      ],
       payload: {
         title: 'Staff Backend Engineer at Helios Labs',
         summary: 'Highest-scoring match in the last 24h (87). Remote, comp band above target.',
@@ -332,6 +338,9 @@ async function seedDevDataset(): Promise<void> {
       refId: null,
       autonomyTier: 'green',
       state: 'proposed' as const,
+      action: 'briefing.generate',
+      why: 'This focus summarizes the deterministic scheduled briefing result.',
+      resourceRefs: [{ type: 'briefing_run', id: DEV_IDS.briefingRun }],
       payload: {
         title: "Today's focus",
         summary: 'Two new matches above 70. No applications are pending a response.',
@@ -346,6 +355,12 @@ async function seedDevDataset(): Promise<void> {
       refId: DEV_IDS.opportunities[0],
       autonomyTier: 'yellow',
       state: 'proposed' as const,
+      action: 'briefing.item.execute',
+      why: 'Executing this prepared action changes persisted approval state and requires consent.',
+      resourceRefs: [
+        { type: 'briefing_run', id: DEV_IDS.briefingRun },
+        { type: 'opportunity', id: DEV_IDS.opportunities[0] },
+      ],
       payload: {
         title: 'Outreach draft — Helios Labs hiring manager',
         summary: 'Drafted intro note referencing the billing pipeline migration.',
@@ -366,9 +381,18 @@ async function seedDevDataset(): Promise<void> {
         refId: item.refId,
         autonomyTier: item.autonomyTier,
         state: item.state,
+        action: item.action,
+        why: item.why,
+        resourceRefs: item.resourceRefs,
         payload: item.payload,
       },
-      update: { state: item.state, payload: item.payload },
+      update: {
+        state: item.state,
+        action: item.action,
+        why: item.why,
+        resourceRefs: item.resourceRefs,
+        payload: item.payload,
+      },
     });
   }
 

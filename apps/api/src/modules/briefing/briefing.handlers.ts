@@ -51,7 +51,19 @@ export type BriefingItemKind =
   | 'note'
   | 'focus'
   | 'suggestion';
-export type BriefingItemState = 'proposed' | 'approved' | 'edited' | 'skipped' | 'failed';
+export type BriefingItemState =
+  | 'proposed'
+  | 'approved'
+  | 'edited'
+  | 'executed'
+  | 'denied'
+  | 'skipped'
+  | 'failed';
+
+export interface ApprovalResourceRef {
+  type: string;
+  id: string;
+}
 
 /** One step's audit record on a BriefingRun. `error` populated on failure. */
 export interface BriefingStepRecord {
@@ -74,6 +86,9 @@ export interface BriefingItem {
   autonomyTier: 'green' | 'yellow' | 'red';
   state: BriefingItemState;
   payload: Record<string, unknown>;
+  action: string;
+  why: string;
+  resourceRefs: ApprovalResourceRef[];
   createdAt: string;
 }
 
@@ -119,6 +134,8 @@ export interface BriefingStorePort {
   addItems(runId: string, items: Omit<BriefingItem, 'id' | 'createdAt'>[]): Promise<BriefingItem[]>;
   getById(userId: string, id: string): Promise<BriefingRunDetail | null>;
   latestForUser(userId: string): Promise<BriefingRunDetail | null>;
+  listPendingApprovals(userId: string): Promise<BriefingItem[]>;
+  findApprovalForUser(userId: string, approvalId: string): Promise<BriefingItem | null>;
   /**
    * M07 approval-queue — find one item on a run scoped by the caller. Returns
    * `null` if the run does not belong to `userId` OR the item is not on it.
@@ -236,6 +253,12 @@ export async function runManualBriefing(
           evidenceRefs: s.score.evidenceRefs,
           modelVersion: MATCH_SCORER_MODEL_VERSION,
         },
+        action: 'briefing.generate',
+        why: "This opportunity matched the caller's persisted profile evidence.",
+        resourceRefs: [
+          { type: 'briefing_run', id: run.id },
+          { type: 'opportunity', id: s.detail.id },
+        ],
       });
     }
     return { produced: top.length, cost, scored: top };
@@ -267,6 +290,12 @@ export async function runManualBriefing(
             explanation: s.score.explanation,
             evidenceRefs: s.score.evidenceRefs,
           },
+          action: 'briefing.generate',
+          why: 'This gap was derived from a below-threshold persisted match subscore.',
+          resourceRefs: [
+            { type: 'briefing_run', id: run.id },
+            { type: 'opportunity', id: s.detail.id },
+          ],
         });
         produced++;
       }
@@ -290,6 +319,9 @@ export async function runManualBriefing(
             values: d.value.values,
             evidenceRefs: d.evidenceRefs,
           },
+          action: 'briefing.generate',
+          why: 'This gap was derived from a low-confidence career-state dimension.',
+          resourceRefs: [{ type: 'briefing_run', id: run.id }],
         });
         produced++;
       }
@@ -332,6 +364,9 @@ export async function runManualBriefing(
         optionalityNote: contract.optionalityNote,
         modelVersion: contract.modelVersion ?? STRATEGIC_REASONER_MODEL_VERSION,
       },
+      action: 'briefing.generate',
+      why: 'This focus was produced by the grounded strategic reasoner.',
+      resourceRefs: [{ type: 'briefing_run', id: run.id }],
     });
     // Fold the reasoner's alternatives (each is itself an actionable suggestion)
     // into `suggestion` items — advisory Green; nothing acts.
@@ -342,6 +377,9 @@ export async function runManualBriefing(
         autonomyTier: 'green',
         state: 'proposed',
         payload: { text: alt, sourcedFrom: 'strategic_reasoner' },
+        action: 'briefing.generate',
+        why: 'This alternative was returned by the grounded strategic reasoner.',
+        resourceRefs: [{ type: 'briefing_run', id: run.id }],
       });
     }
     return { produced: 1 + contract.alternatives.length, cost: estimateReasonerCost() };

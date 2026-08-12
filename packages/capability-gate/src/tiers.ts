@@ -1,4 +1,5 @@
-import type { AutonomyTier } from '@careeros/contracts';
+/** The authoritative registry owns its tier type; lower layers need no contract dependency. */
+export type AutonomyTier = 'green' | 'yellow' | 'red';
 
 /**
  * Tier registry — architecture.md §5. This map is the AUTHORITATIVE autonomy

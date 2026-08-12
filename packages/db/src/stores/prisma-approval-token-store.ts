@@ -14,6 +14,7 @@ export class PrismaApprovalTokenStore implements ApprovalTokenStore {
         id: record.id,
         userId: record.userId,
         action: record.action,
+        approvalId: record.approvalId ?? null,
         payloadHash: record.payloadHash,
         expiresAt: new Date(record.expiresAt),
         consumedAt: null,
@@ -28,6 +29,7 @@ export class PrismaApprovalTokenStore implements ApprovalTokenStore {
       id: row.id,
       userId: row.userId,
       action: row.action,
+      approvalId: row.approvalId,
       payloadHash: row.payloadHash,
       expiresAt: row.expiresAt.getTime(),
       consumedAt: row.consumedAt?.getTime() ?? null,
@@ -46,5 +48,13 @@ export class PrismaApprovalTokenStore implements ApprovalTokenStore {
       WHERE id = ${id}::uuid AND consumed_at IS NULL
     `;
     return result > 0;
+  }
+
+  async invalidateForApproval(approvalId: string, atMs: number): Promise<number> {
+    const result = await this.prisma.approvalToken.updateMany({
+      where: { approvalId, consumedAt: null },
+      data: { consumedAt: new Date(atMs) },
+    });
+    return result.count;
   }
 }

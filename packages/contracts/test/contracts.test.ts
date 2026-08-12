@@ -32,11 +32,73 @@ import {
   resumeModelSchema,
   resumeTailorRequestSchema,
   resumeVariantSchema,
+  pendingApprovalSchema,
+  pendingApprovalListResponseSchema,
+  approvalMintRequestSchema,
+  approvalMintResponseSchema,
+  approvalExecuteRequestSchema,
+  approvalExecuteResponseSchema,
+  approvalDenyRequestSchema,
+  approvalDenyResponseSchema,
+  type ApprovalMintResponse,
   type OpportunityMatchResponse,
 } from '../src/index.js';
 
 const NOW = '2026-07-08T00:00:00.000Z';
 const UID = '3f1e2d3c-4b5a-6978-8899-aabbccddeeff';
+
+describe('FM5.1-pre approval lifecycle contracts', () => {
+  const pending = {
+    id: UID,
+    action: 'briefing.item.execute',
+    why: 'The prepared action changes persisted state.',
+    payload: { body: 'Exact payload' },
+    tier: 'yellow' as const,
+    resourceRefs: [{ type: 'briefing_run', id: 'run-1' }],
+    state: 'proposed' as const,
+    createdAt: NOW,
+  };
+
+  it('strictly parses pending approval and caller list shapes', () => {
+    expect(pendingApprovalSchema.parse(pending)).toEqual(pending);
+    expect(pendingApprovalListResponseSchema.parse({ data: [pending] })).toEqual({ data: [pending] });
+    expect(pendingApprovalSchema.safeParse({ ...pending, inferredKind: 'draft' }).success).toBe(false);
+  });
+
+  it('strictly parses mint request/response and preserves the capability token brand', () => {
+    expect(approvalMintRequestSchema.parse({ approvalId: UID, payload: pending.payload })).toEqual({
+      approvalId: UID,
+      payload: pending.payload,
+    });
+    const response = approvalMintResponseSchema.parse({
+      token: 'opaque.single.use-token',
+      expiresAt: NOW,
+      action: pending.action,
+      payloadHash: 'a'.repeat(64),
+    });
+    const branded: ApprovalMintResponse['token'] = response.token;
+    expect(branded).toBe('opaque.single.use-token');
+    expect(approvalMintResponseSchema.safeParse({ ...response, userId: UID }).success).toBe(false);
+  });
+
+  it('strictly parses execute and deny request/response shapes', () => {
+    const executeRequest = approvalExecuteRequestSchema.parse({
+      token: 'opaque.single.use-token',
+      payload: pending.payload,
+    });
+    expect(executeRequest.payload).toEqual(pending.payload);
+    expect(approvalExecuteResponseSchema.parse({
+      approvalId: UID,
+      action: pending.action,
+      state: 'executed',
+      outcome: 'briefing_item_executed',
+      executedAt: NOW,
+    }).state).toBe('executed');
+    expect(approvalDenyRequestSchema.parse({ approvalId: UID, reason: 'Not now.' }).reason).toBe('Not now.');
+    expect(approvalDenyResponseSchema.parse({ approvalId: UID, state: 'denied', deniedAt: NOW }).state).toBe('denied');
+    expect(approvalExecuteRequestSchema.safeParse({ token: 'x', payload: {}, extra: true }).success).toBe(false);
+  });
+});
 
 describe('error model (api-spec.md §2)', () => {
   it('includes the autonomy/consent first-class codes', () => {

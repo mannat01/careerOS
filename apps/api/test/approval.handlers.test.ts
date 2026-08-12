@@ -79,6 +79,9 @@ class FakeStore implements BriefingStorePort {
       autonomyTier: partial.autonomyTier,
       state: partial.state ?? 'proposed',
       payload: partial.payload ?? { to: 'me@example.com', subject: 'hi', body: 'v1' },
+      action: partial.action ?? BRIEFING_ITEM_EXECUTE_ACTION,
+      why: partial.why ?? 'Test approval requires explicit consent.',
+      resourceRefs: partial.resourceRefs ?? [{ type: 'briefing_run', id: runId }],
       createdAt: partial.createdAt ?? new Date().toISOString(),
     };
     this.items.set(item.id, { runId, item });
@@ -109,6 +112,25 @@ class FakeStore implements BriefingStorePort {
     };
     this.items.set(itemId, { runId: rec.runId, item: next });
     return Promise.resolve(next);
+  }
+
+  listPendingApprovals(userId: string): Promise<BriefingItem[]> {
+    return Promise.resolve(
+      [...this.items.values()]
+        .filter((record) => this.runOwners.get(record.runId) === userId)
+        .map((record) => record.item)
+        .filter(
+          (item) =>
+            item.autonomyTier === 'yellow' &&
+            (item.state === 'proposed' || item.state === 'approved'),
+        ),
+    );
+  }
+
+  findApprovalForUser(userId: string, approvalId: string): Promise<BriefingItem | null> {
+    const record = this.items.get(approvalId);
+    if (!record || this.runOwners.get(record.runId) !== userId) return Promise.resolve(null);
+    return Promise.resolve(record.item);
   }
 
   // Composition-side methods — unused by the approval handler.

@@ -573,6 +573,20 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
       audit,
       approvalSecret: env.APPROVAL_TOKEN_SECRET,
     },
+    approvalLifecycle: overrides?.approvalLifecycle ?? {
+      store: overrides?.briefing?.store ?? new PrismaBriefingStore(prisma),
+      tokenStore: new PrismaApprovalTokenStore(prisma),
+      audit,
+      approvalSecret: env.APPROVAL_TOKEN_SECRET,
+      executor: {
+        execute: ({ action }) => {
+          if (action !== 'briefing.item.execute') {
+            return Promise.reject(new Error(`Unsupported approval action: ${action}`));
+          }
+          return Promise.resolve({ outcome: 'briefing_item_executed' });
+        },
+      },
+    },
     // M07 — read-only view over the immutable audit log.
     audit: overrides?.audit ?? {
       audit: new PrismaAuditReadStore(prisma),

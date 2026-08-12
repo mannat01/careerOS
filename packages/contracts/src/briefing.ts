@@ -19,7 +19,15 @@ export const briefingItemKindSchema = z.enum([
 ]);
 export type BriefingItemKind = z.infer<typeof briefingItemKindSchema>;
 
-export const briefingItemStateSchema = z.enum(['proposed', 'approved', 'edited', 'skipped', 'failed']);
+export const briefingItemStateSchema = z.enum([
+  'proposed',
+  'approved',
+  'edited',
+  'executed',
+  'denied',
+  'skipped',
+  'failed',
+]);
 export type BriefingItemState = z.infer<typeof briefingItemStateSchema>;
 
 export const briefingStepNameSchema = z.string().min(1);
@@ -49,6 +57,12 @@ export const briefingItemSchema = z
     autonomyTier: autonomyTierSchema,
     state: briefingItemStateSchema,
     payload: z.record(z.string(), z.unknown()),
+    /** First-class lifecycle metadata. Optional only for legacy briefing readers. */
+    action: z.string().min(1).optional(),
+    why: z.string().min(1).optional(),
+    resourceRefs: z
+      .array(z.object({ type: z.string().min(1), id: z.string().min(1) }).strict())
+      .optional(),
     createdAt: z.string().datetime(),
   })
   .strict();

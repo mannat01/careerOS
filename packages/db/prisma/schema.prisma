@@ -109,6 +109,8 @@ enum BriefingItemState {
   proposed
   approved
   edited
+  executed
+  denied
   skipped
   failed
 }
@@ -493,6 +495,8 @@ model ApprovalToken {
   userId      String    @map("user_id") @db.Uuid
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   action      String
+  approvalId  String?   @map("approval_id") @db.Uuid
+  approval    BriefingItem? @relation(fields: [approvalId], references: [id], onDelete: Cascade)
   payloadHash String    @map("payload_hash")
   expiresAt   DateTime  @map("expires_at")
   consumedAt  DateTime? @map("consumed_at")
@@ -500,6 +504,7 @@ model ApprovalToken {
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
   @@index([userId, expiresAt])
+  @@index([approvalId, consumedAt])
   @@map("approval_tokens")
 }
 
@@ -659,12 +664,19 @@ model BriefingItem {
   /// The autonomy tier this item WOULD require if acted on (green|yellow|red).
   autonomyTier  String            @default("green") @map("autonomy_tier")
   state         BriefingItemState @default(proposed)
+  /// Canonical capability action and explanation; never inferred from `kind`.
+  action        String
+  why           String
+  resourceRefs  Json              @default("[]") @map("resource_refs")
   /// The composed content the UI renders (title/summary/evidence/etc.).
   payload       Json              @default("{}")
 
   createdAt DateTime @default(now()) @map("created_at")
 
+  approvalTokens ApprovalToken[]
+
   @@index([briefingRunId])
+  @@index([state, autonomyTier])
   @@map("briefing_items")
 }
 

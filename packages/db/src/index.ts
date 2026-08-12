@@ -52,6 +52,7 @@ export {
 export { PrismaProfileResolver, type ProfileResolverPort } from './stores/prisma-profile-resolver.js';
 export {
   PrismaBriefingStore,
+  type ApprovalResourceRefLike,
   type BriefingItemLike,
   type BriefingItemKindLike,
   type BriefingItemStateLike,

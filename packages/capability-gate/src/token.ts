@@ -1,5 +1,16 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 
+declare const approvalTokenBrand: unique symbol;
+
+/** Opaque token minted only by the capability gate. */
+export type ApprovalToken = string & {
+  readonly [approvalTokenBrand]: 'ApprovalToken';
+};
+
+function brandApprovalToken(raw: string): ApprovalToken {
+  return raw as ApprovalToken;
+}
+
 /**
  * ApprovalToken mint/verify — database-schema.md (ApprovalToken), api-spec.md §3.
  * A token binds ONE user + ONE action + ONE exact payload (hash), is single-use,
@@ -10,6 +21,8 @@ export interface ApprovalTokenRecord {
   id: string;
   userId: string;
   action: string;
+  /** Approval lifecycle item this token was minted for; null for legacy/direct grants. */
+  approvalId?: string | null;
   payloadHash: string;
   /** epoch ms */
   expiresAt: number;
@@ -22,6 +35,8 @@ export interface ApprovalTokenStore {
   findById(id: string): Promise<ApprovalTokenRecord | null>;
   /** Atomically mark consumed; returns false if it was already consumed. */
   consume(id: string, atMs: number): Promise<boolean>;
+  /** Supersede all live grants previously minted for one approval item. */
+  invalidateForApproval(approvalId: string, atMs: number): Promise<number>;
 }
 
 // STUB(M01): in-memory stand-in for the Prisma-backed `approval_tokens` table.
@@ -44,6 +59,17 @@ export class InMemoryApprovalTokenStore implements ApprovalTokenStore {
     if (!rec || rec.consumedAt !== null) return Promise.resolve(false);
     rec.consumedAt = atMs;
     return Promise.resolve(true);
+  }
+
+  invalidateForApproval(approvalId: string, atMs: number): Promise<number> {
+    let invalidated = 0;
+    for (const record of this.records.values()) {
+      if (record.approvalId === approvalId && record.consumedAt === null) {
+        record.consumedAt = atMs;
+        invalidated += 1;
+      }
+    }
+    return Promise.resolve(invalidated);
   }
 }
 
@@ -74,6 +100,7 @@ function signature(
 export interface MintInput {
   userId: string;
   action: string;
+  approvalId?: string;
   payload: unknown;
   ttlMs: number;
   secret: string;
@@ -82,7 +109,7 @@ export interface MintInput {
 }
 
 /** Mint a single-use, expiring token bound to (userId, action, payloadHash). */
-export async function mintApprovalToken(input: MintInput): Promise<string> {
+export async function mintApprovalToken(input: MintInput): Promise<ApprovalToken> {
   const nowMs = (input.now ?? Date.now)();
   const id = randomUUID();
   const payloadHash = hashPayload(input.payload);
@@ -91,11 +118,14 @@ export async function mintApprovalToken(input: MintInput): Promise<string> {
     id,
     userId: input.userId,
     action: input.action,
+    approvalId: input.approvalId ?? null,
     payloadHash,
     expiresAt,
     consumedAt: null,
   });
-  return `${id}.${expiresAt}.${signature(input.secret, { id, userId: input.userId, action: input.action, payloadHash, expiresAt })}`;
+  return brandApprovalToken(
+    `${id}.${expiresAt}.${signature(input.secret, { id, userId: input.userId, action: input.action, payloadHash, expiresAt })}`,
+  );
 }
 
 export type VerifyFailureReason =

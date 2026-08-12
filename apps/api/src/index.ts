@@ -146,6 +146,16 @@ export {
   type ApprovalHandlerDeps,
 } from './modules/briefing/approval.handlers.js';
 export {
+  listPendingApprovals,
+  mintPendingApproval,
+  editPendingApproval,
+  executePendingApproval,
+  denyPendingApproval,
+  DEFAULT_APPROVAL_LIFECYCLE_TTL_MS,
+  type ApprovalActionExecutor,
+  type ApprovalLifecycleHandlerDeps,
+} from './modules/briefing/approval-lifecycle.handlers.js';
+export {
   listAudit,
   type AuditHandlerDeps,
   type AuditReadPort,

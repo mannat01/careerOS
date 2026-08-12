@@ -1,4 +1,5 @@
 export { ACTION_TIERS, getActionTier, type GateAction } from './tiers.js';
+export type { AutonomyTier as CapabilityAutonomyTier } from './tiers.js';
 export {
   canonicalJson,
   hashPayload,
@@ -6,6 +7,7 @@ export {
   mintApprovalToken,
   verifyAndConsumeApprovalToken,
   type ApprovalTokenRecord,
+  type ApprovalToken,
   type ApprovalTokenStore,
   type MintInput,
   type VerifyFailureReason,

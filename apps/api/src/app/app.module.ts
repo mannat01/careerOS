@@ -7,6 +7,7 @@ import { OpportunityController } from './opportunity.controller.js';
 import { ApplicationController } from './application.controller.js';
 import { TwinController } from './twin.controller.js';
 import { BriefingController } from './briefing.controller.js';
+import { ApprovalsController } from './approvals.controller.js';
 import { AuditController } from './audit.controller.js';
 import { SkillsController } from './skills.controller.js';
 import { DraftsController } from './drafts.controller.js';
@@ -28,7 +29,7 @@ export class AppModule {
   static forRoot(deps: AppDeps): DynamicModule {
     return {
       module: AppModule,
-      controllers: [HealthController, MeController, ProfileController, CieController, OpportunityController, ApplicationController, TwinController, BriefingController, AuditController, SkillsController, DraftsController, PublicPortfolioController, PortfolioController, PkmController],
+      controllers: [HealthController, MeController, ProfileController, CieController, OpportunityController, ApplicationController, TwinController, BriefingController, ApprovalsController, AuditController, SkillsController, DraftsController, PublicPortfolioController, PortfolioController, PkmController],
 
 
       providers: [{ provide: APP_DEPS, useValue: deps }, BearerAuthGuard],

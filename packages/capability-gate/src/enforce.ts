@@ -1,5 +1,4 @@
-import type { AutonomyTier } from '@careeros/contracts';
-import { getActionTier } from './tiers.js';
+import { getActionTier, type AutonomyTier } from './tiers.js';
 import {
   verifyAndConsumeApprovalToken,
   type ApprovalTokenStore,
