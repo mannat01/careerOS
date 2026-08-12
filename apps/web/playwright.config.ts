@@ -38,8 +38,13 @@ export default defineConfig({
       stderr: 'pipe',
     },
     {
-      command: `cd ${root} && ${loadLocalEnv} NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 NEXT_PUBLIC_AUTH_PROVIDER=dev AUTH_PROVIDER=dev pnpm --filter @careeros/web dev`,
-      url: 'http://127.0.0.1:3000',
+      // `make verify` runs a production build before Playwright. Start `next dev`
+      // from a clean cache so production and development webpack runtimes cannot
+      // be mixed during concurrent guarded-route compilation.
+      command: `cd ${root} && rm -rf apps/web/.next && ${loadLocalEnv} NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 NEXT_PUBLIC_AUTH_PROVIDER=dev AUTH_PROVIDER=dev pnpm --filter @careeros/web dev`,
+      // Probe the protected route so its client entry is compiled before the
+      // first-run test opens three concurrent guarded `/today` navigations.
+      url: 'http://127.0.0.1:3000/today',
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       stdout: 'pipe',

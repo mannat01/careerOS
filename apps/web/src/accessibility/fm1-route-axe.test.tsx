@@ -8,11 +8,11 @@ import SignInPage from '../../app/(auth)/sign-in/page';
 import AuthLayout from '../../app/(auth)/layout';
 import { ExtractionReview, OnboardingImportClient } from '../../app/onboarding/OnboardingImportClient';
 import { AutonomyReview } from '../../app/onboarding/AutonomyReview';
-import { decisionSupportResponseSchema, defaultUserSettings } from '@careeros/contracts';
+import { briefingLatestResponseSchema, decisionSupportResponseSchema, defaultUserSettings } from '@careeros/contracts';
 import { POPULATED_IMPORT, THIN_IMPORT } from '../../app/onboarding/onboarding-fixtures';
 import { CareerStateReview } from '../../app/onboarding/CareerStateReflectBack';
 import { NO_SIGNAL_STATE, POPULATED_STATE, STATE_EXPLANATIONS } from '../../app/onboarding/state-fixtures';
-import TodayPage from '../../app/(app)/today/page';
+import { TodayRoomClient } from '../../app/(app)/today/TodayRoomClient';
 import { OpportunitiesClient } from '../../app/(app)/opportunities/OpportunitiesClient';
 import { OpportunityDetailClient } from '../../app/(app)/opportunities/OpportunityDetailClient';
 import {
@@ -56,7 +56,7 @@ const routes: ReadonlyArray<{ name: string; path: string; renderRoute: () => Rea
   { name: 'Onboarding reflect-back correction', path: '/onboarding', renderRoute: () => <CareerStateReview model={NO_SIGNAL_STATE} explanations={STATE_EXPLANATIONS} importedFacts={POPULATED_IMPORT.entities} corrections={[{ id: '00000000-0000-4000-8000-000000000102', kind: 'skill', label: 'PostgreSQL', detail: 'intermediate', provenance: 'user' }]} onCorrect={() => Promise.resolve(true)} /> },
   { name: 'Onboarding autonomy review', path: '/onboarding', renderRoute: () => <AutonomyReview initialSettings={ONBOARDING_SETTINGS} dependencies={{ updateSettings: () => Promise.resolve(ONBOARDING_SETTINGS), completeOnboarding: () => Promise.reject(new Error('not exercised by static axe')), goToToday: () => undefined }} /> },
   { name: 'Routing dependency recovery', path: '/today', renderRoute: () => <RoutingRecovery error={new ApiError({ code: 'internal', message: 'Dependency unavailable.', traceId: 'axe-trace' })} retryHref="/today" /> },
-  { name: 'Today', path: '/today', renderRoute: () => <AppShell><TodayPage /></AppShell> },
+  { name: 'Today', path: '/today', renderRoute: () => <AppShell><section aria-labelledby="today-axe-heading"><h1 id="today-axe-heading">Today</h1><TodayRoomClient dependencies={{ pendingApprovals: () => Promise.resolve(successFixtures.pendingApprovals()), latestBriefing: () => Promise.resolve(briefingLatestResponseSchema.parse({ ...successFixtures.briefing(), items: [{ ...successFixtures.briefing().items[0], kind: 'focus', autonomyTier: 'green', payload: { recommendation: 'Review the grounded role.', confidence: 0.82, evidenceRefs: ['experience:1'], modelVersion: 'reasoner@fake' } }] })), applications: () => Promise.resolve(POPULATED_PIPELINE) }} /></section></AppShell> },
   { name: 'Opportunities', path: '/opportunities', renderRoute: () => <AppShell><OpportunitiesClient dependencies={{ list: () => Promise.resolve(POPULATED_OPPORTUNITIES), match: (id) => Promise.resolve(MATCH_BY_OPPORTUNITY[id] ?? POPULATED_MATCH) }} /></AppShell> },
   { name: 'Pipeline', path: '/opportunities/pipeline', renderRoute: () => <AppShell><PipelineBoardClient dependencies={{ list: () => Promise.resolve(EMPTY_PIPELINE), patch: () => Promise.reject(new Error('Empty pipeline never patches.')) }} /></AppShell> },
   { name: 'Plan', path: '/plan', renderRoute: () => <AppShell><PlanPage /></AppShell> },
