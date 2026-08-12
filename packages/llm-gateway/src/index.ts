@@ -13,6 +13,8 @@ export {
   type ModelTier,
 } from './types.js';
 export { computeCostUsd, createLlmGateway, type LlmGateway, type LlmGatewayOptions } from './gateway.js';
+export { LlmGatewayError, type LlmGatewayErrorCode } from './errors.js';
+export { OmniRouteProvider, type OmniRouteProviderOptions } from './omniroute-provider.js';
 export {
   AnthropicProvider,
   createLlmProviderFromEnv,

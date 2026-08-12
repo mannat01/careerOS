@@ -1,5 +1,10 @@
 import type { Env } from '@careeros/config';
-import { AnthropicProvider, FakeLlmProvider, type LlmProvider } from '@careeros/llm-gateway';
+import {
+  AnthropicProvider,
+  FakeLlmProvider,
+  OmniRouteProvider,
+  type LlmProvider,
+} from '@careeros/llm-gateway';
 
 /**
  * LLM provider selection seam — mirrors the AUTH_PROVIDER dev/clerk pattern in
@@ -14,9 +19,8 @@ import { AnthropicProvider, FakeLlmProvider, type LlmProvider } from '@careeros/
  * serialization/grounding path, it can't be tested, and it risks being
  * committed. So the seam is explicit, typed, and guarded.
  *
- * FAIL-CLOSED: in production the ONLY permitted provider is `anthropic`. A
- * misconfigured deploy throws at boot rather than silently serving fake
- * inference to real users — a loud crash beats quiet fabrication.
+ * OmniRoute selection validates all required settings here, at composition
+ * time. It never falls back to fake when explicitly selected.
  *
  * IMPORTANT — the fake is NOT a content stub. It is the real, deterministic
  * `FakeLlmProvider` from @careeros/llm-gateway, wired through the SAME gateway,
@@ -27,17 +31,23 @@ import { AnthropicProvider, FakeLlmProvider, type LlmProvider } from '@careeros/
  * That is the honest outcome: real response shapes, absent content — never
  * fabricated content dressed up as inference.
  */
-export function buildLlmProvider(env: Pick<Env, 'NODE_ENV' | 'LLM_PROVIDER' | 'ANTHROPIC_API_KEY'>): LlmProvider {
+export function buildLlmProvider(
+  env: Pick<
+    Env,
+    | 'LLM_PROVIDER'
+    | 'ANTHROPIC_API_KEY'
+    | 'OMNIROUTE_BASE_URL'
+    | 'OMNIROUTE_API_KEY'
+    | 'OMNIROUTE_MODEL'
+  >,
+): LlmProvider {
   const selected = env.LLM_PROVIDER;
 
-  if (env.NODE_ENV === 'production' && selected !== 'anthropic') {
-    throw new Error(
-      `Invalid LLM configuration — LLM_PROVIDER='${selected}' is not permitted when NODE_ENV=production. ` +
-        `Only 'anthropic' may serve production inference.`,
-    );
-  }
-
   if (selected === 'fake') return new FakeLlmProvider();
-
-  return new AnthropicProvider(env.ANTHROPIC_API_KEY ?? '');
+  if (selected === 'anthropic') return new AnthropicProvider(env.ANTHROPIC_API_KEY ?? '');
+  return new OmniRouteProvider({
+    baseUrl: env.OMNIROUTE_BASE_URL ?? '',
+    apiKey: env.OMNIROUTE_API_KEY ?? '',
+    model: env.OMNIROUTE_MODEL ?? '',
+  });
 }

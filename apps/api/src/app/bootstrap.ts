@@ -186,13 +186,15 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
 
   // Extraction agent on the CHEAP tier (ADR-001). The concrete provider is
   // selected from env by `buildLlmProvider` -- the ONE place that decision is
-  // made -- and it fails closed under NODE_ENV=production for anything but
-  // Anthropic. Locally, LLM_PROVIDER=fake lets the API boot and serve real
-  // response SHAPES with no key/network; tests still override per-module.
+  // made. Fake is the deterministic default; explicit OmniRoute selection
+  // validates every required setting at boot and never silently falls back.
+  const provider = buildLlmProvider(env);
+  const modelsByTier = provider.vendor === 'omniroute'
+    ? { cheap: env.OMNIROUTE_MODEL ?? '', frontier: env.OMNIROUTE_MODEL ?? '' }
+    : { cheap: env.LLM_CHEAP_MODEL, frontier: env.LLM_FRONTIER_MODEL };
   const gateway = createLlmGateway({
-    provider: buildLlmProvider(env),
-
-    modelsByTier: { cheap: env.LLM_CHEAP_MODEL, frontier: env.LLM_FRONTIER_MODEL },
+    provider,
+    modelsByTier,
     pricing: {},
   });
   const extractor = new AgentExtractionAdapter(new LlmExtractionAgent(gateway));

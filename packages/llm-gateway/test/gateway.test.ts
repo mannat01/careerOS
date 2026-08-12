@@ -5,6 +5,8 @@ import {
   createLlmProviderFromEnv,
   createLlmGateway,
   FakeLlmProvider,
+  LlmGatewayError,
+  OmniRouteProvider,
   type CostMeter,
 } from '../src/index.js';
 
@@ -122,6 +124,122 @@ describe('llm-gateway (ADR-001: single vendor, tiered routing)', () => {
     expect(createLlmProviderFromEnv({}).vendor).toBe('fake');
     expect(createLlmProviderFromEnv({ LLM_PROVIDER: 'fake' }).vendor).toBe('fake');
     expect(createLlmProviderFromEnv({ LLM_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'sk-test' }).vendor).toBe('anthropic');
+    expect(createLlmProviderFromEnv({
+      LLM_PROVIDER: 'omniroute',
+      OMNIROUTE_BASE_URL: 'http://localhost:20128/v1',
+      OMNIROUTE_API_KEY: 'omni-test',
+      OMNIROUTE_MODEL: 'gpt-5.6-sol',
+    }).vendor).toBe('omniroute');
     expect(() => createLlmProviderFromEnv({ LLM_PROVIDER: 'other' })).toThrow(/Unsupported LLM_PROVIDER/);
+  });
+
+  it('posts the OpenAI-compatible OmniRoute payload and maps optional usage', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchMock: typeof fetch = (url, init) => {
+      const requestUrl = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      calls.push({ url: requestUrl, init });
+      return Promise.resolve(new Response(JSON.stringify({
+        choices: [{ message: { content: '{"entities":[]}' } }],
+        usage: { prompt_tokens: 51, completion_tokens: 9, total_tokens: 60 },
+      }), { status: 200 }));
+    };
+    const provider = new OmniRouteProvider({
+      baseUrl: 'http://localhost:20128/v1/',
+      apiKey: 'omni-secret',
+      model: 'gpt-5.6-sol',
+    }, { fetch: fetchMock });
+    const messages = [
+      { role: 'system' as const, content: 'system rules' },
+      { role: 'user' as const, content: 'extract' },
+    ];
+
+    const result = await provider.complete({
+      model: 'gateway-tier-model-is-not-used',
+      messages,
+      maxTokens: 100,
+      temperature: 0,
+      traceId: 'trace-omni',
+    });
+
+    expect(result).toEqual({
+      text: '{"entities":[]}',
+      usage: { inputTokens: 51, outputTokens: 9 },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe('http://localhost:20128/v1/chat/completions');
+    const rawBody = calls[0]?.init?.body;
+    expect(typeof rawBody).toBe('string');
+    expect(JSON.parse(typeof rawBody === 'string' ? rawBody : '{}')).toEqual({ model: 'gpt-5.6-sol', messages });
+    expect(calls[0]?.init?.headers).toEqual({
+      Accept: 'application/json',
+      Authorization: 'Bearer omni-secret',
+      'content-type': 'application/json',
+    });
+    expect(calls[0]?.init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('uses zero token counts when OmniRoute omits usage', async () => {
+    const provider = new OmniRouteProvider({
+      baseUrl: 'http://localhost:20128/v1', apiKey: 'key', model: 'model',
+    }, {
+      fetch: () => Promise.resolve(new Response(JSON.stringify({
+        choices: [{ message: { content: 'real text' } }],
+      }), { status: 200 })),
+    });
+    await expect(provider.complete({
+      model: 'ignored', messages: [{ role: 'user', content: 'x' }],
+      maxTokens: 10, temperature: 0, traceId: 'trace',
+    })).resolves.toEqual({ text: 'real text', usage: { inputTokens: 0, outputTokens: 0 } });
+  });
+
+  it('throws a typed, body-free OmniRoute error on HTTP failure', async () => {
+    const apiKey = 'omni-top-secret';
+    const provider = new OmniRouteProvider({
+      baseUrl: 'http://localhost:20128/v1', apiKey, model: 'gpt-5.6-sol',
+    }, {
+      fetch: () => Promise.resolve(new Response('sensitive upstream response body', {
+        status: 429,
+        headers: { 'x-request-id': 'omni-req-42' },
+      })),
+    });
+
+    const error = await provider.complete({
+      model: 'ignored', messages: [{ role: 'user', content: 'sensitive prompt body' }],
+      maxTokens: 10, temperature: 0, traceId: 'trace',
+    }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(LlmGatewayError);
+    expect(error).toMatchObject({ code: 'http_error', metadata: { status: 429, requestId: 'omni-req-42' } });
+    expect(String(error)).not.toContain(apiKey);
+    expect(String(error)).not.toContain('sensitive upstream response body');
+    expect(String(error)).not.toContain('sensitive prompt body');
+  });
+
+  it('throws a typed OmniRoute error on malformed response content', async () => {
+    const provider = new OmniRouteProvider({
+      baseUrl: 'http://localhost:20128/v1', apiKey: 'key', model: 'model',
+    }, {
+      fetch: () => Promise.resolve(new Response(JSON.stringify({ choices: [] }), { status: 200 })),
+    });
+    const request = provider.complete({
+      model: 'ignored', messages: [{ role: 'user', content: 'x' }],
+      maxTokens: 10, temperature: 0, traceId: 'trace',
+    });
+    await expect(request).rejects.toMatchObject({ code: 'invalid_response' });
+    await expect(request).rejects.toBeInstanceOf(LlmGatewayError);
+  });
+
+  it('aborts OmniRoute requests at the configured timeout and throws a typed error', async () => {
+    const fetchMock: typeof fetch = (_url, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    });
+    const provider = new OmniRouteProvider({
+      baseUrl: 'http://localhost:20128/v1', apiKey: 'key', model: 'model',
+    }, { fetch: fetchMock, timeoutMs: 5 });
+    const request = provider.complete({
+      model: 'ignored', messages: [{ role: 'user', content: 'x' }],
+      maxTokens: 10, temperature: 0, traceId: 'trace',
+    });
+    await expect(request).rejects.toMatchObject({ code: 'timeout' });
+    await expect(request).rejects.toBeInstanceOf(LlmGatewayError);
   });
 });

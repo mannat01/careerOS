@@ -17,6 +17,7 @@ describe('env schema (packages/config)', () => {
     const env = loadEnv(VALID);
     expect(env.DATABASE_URL).toBe(VALID['DATABASE_URL']);
     expect(env.LLM_PRIMARY_PROVIDER).toBe('anthropic');
+    expect(env.LLM_PROVIDER).toBe('fake');
     expect(env.LLM_CHEAP_MODEL.length).toBeGreaterThan(0);
     expect(env.LLM_FRONTIER_MODEL.length).toBeGreaterThan(0);
     expect(env.AUTH_PROVIDER).toBe('dev');
@@ -57,5 +58,21 @@ describe('env schema (packages/config)', () => {
   it('unknown AUTH_PROVIDER fails closed', () => {
     const r = envSchema.safeParse({ ...VALID, AUTH_PROVIDER: 'homegrown' });
     expect(r.success).toBe(false);
+  });
+
+  it('accepts and preserves OmniRoute configuration for the composition root', () => {
+    const env = envSchema.parse({
+      ...VALID,
+      LLM_PROVIDER: 'omniroute',
+      OMNIROUTE_BASE_URL: 'http://localhost:20128/v1',
+      OMNIROUTE_API_KEY: 'omniroute-test-key',
+      OMNIROUTE_MODEL: 'gpt-5.6-sol',
+    });
+    expect(env).toMatchObject({
+      LLM_PROVIDER: 'omniroute',
+      OMNIROUTE_BASE_URL: 'http://localhost:20128/v1',
+      OMNIROUTE_API_KEY: 'omniroute-test-key',
+      OMNIROUTE_MODEL: 'gpt-5.6-sol',
+    });
   });
 });

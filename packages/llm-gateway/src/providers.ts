@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { OmniRouteProvider } from './omniroute-provider.js';
 import type { LlmMessage, LlmProvider, LlmUsage } from './types.js';
 
 /** Deterministic fake for tests — no network, records every call it receives. */
@@ -115,10 +116,13 @@ export class AnthropicProvider implements LlmProvider {
   }
 }
 
-export type LlmProviderName = 'anthropic' | 'fake';
+export type LlmProviderName = 'anthropic' | 'fake' | 'omniroute';
 export interface LlmProviderEnv {
   LLM_PROVIDER?: string;
   ANTHROPIC_API_KEY?: string;
+  OMNIROUTE_BASE_URL?: string;
+  OMNIROUTE_API_KEY?: string;
+  OMNIROUTE_MODEL?: string;
 }
 
 /**
@@ -131,5 +135,12 @@ export function createLlmProviderFromEnv(
   const selected = env.LLM_PROVIDER?.trim() || 'fake';
   if (selected === 'fake') return new FakeLlmProvider();
   if (selected === 'anthropic') return new AnthropicProvider(env.ANTHROPIC_API_KEY ?? '');
-  throw new Error(`Unsupported LLM_PROVIDER '${selected}'; expected 'anthropic' or 'fake'`);
+  if (selected === 'omniroute') {
+    return new OmniRouteProvider({
+      baseUrl: env.OMNIROUTE_BASE_URL ?? '',
+      apiKey: env.OMNIROUTE_API_KEY ?? '',
+      model: env.OMNIROUTE_MODEL ?? '',
+    });
+  }
+  throw new Error(`Unsupported LLM_PROVIDER '${selected}'; expected 'anthropic', 'fake', or 'omniroute'`);
 }

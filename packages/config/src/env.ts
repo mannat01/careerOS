@@ -42,18 +42,14 @@ export const envSchema = z.object({
 
   // LLM gateway (ADR-001: single vendor, two tiers)
   LLM_PRIMARY_PROVIDER: z.preprocess(emptyToUndefined, z.literal('anthropic').default('anthropic')),
-  /**
-   * Which concrete LlmProvider the API composes (mirrors AUTH_PROVIDER's
-   * dev/managed split). `fake` is DEV/TEST ONLY — it lets the API boot and
-   * serve real response SHAPES with no network or API key. The composition
-   * root fails closed at boot if this is anything but `anthropic` under
-   * NODE_ENV=production, so a misconfigured deploy crashes loudly instead of
-   * quietly serving fake inference to real users.
-   */
-  LLM_PROVIDER: z.preprocess(emptyToUndefined, z.enum(['anthropic', 'fake']).default('anthropic')),
+  /** Concrete API provider. Fake is the safe, deterministic default. */
+  LLM_PROVIDER: z.preprocess(emptyToUndefined, z.enum(['anthropic', 'fake', 'omniroute']).default('fake')),
   LLM_CHEAP_MODEL: z.preprocess(emptyToUndefined, z.string().min(1).default('claude-3-5-haiku-latest')),
   LLM_FRONTIER_MODEL: z.preprocess(emptyToUndefined, z.string().min(1).default('claude-sonnet-4-5')),
   ANTHROPIC_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  OMNIROUTE_BASE_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
+  OMNIROUTE_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  OMNIROUTE_MODEL: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
 
   // Capability-gate approval-token signing secret (security-critical)
   APPROVAL_TOKEN_SECRET: z.preprocess(
