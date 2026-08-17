@@ -143,9 +143,10 @@ export function OpportunitiesClient({
             <h1 id="opportunities-heading" className="text-2xl font-semibold text-text-primary">Opportunities</h1>
             <p className="mt-1 text-text-secondary">Browse roles from sanctioned sources, with grounded match explanations.</p>
           </div>
-          <Link href="/opportunities/pipeline" className="text-sm font-semibold text-brand-base underline focus-visible:ring-2 focus-visible:ring-brand-base">
-            View application pipeline
-          </Link>
+          <div className="flex flex-wrap gap-3 text-sm font-semibold">
+            <Link href="/opportunities/interview-prep" className="text-brand-base underline focus-visible:ring-2 focus-visible:ring-brand-base">Open interview prep</Link>
+            <Link href="/opportunities/pipeline" className="text-brand-base underline focus-visible:ring-2 focus-visible:ring-brand-base">View application pipeline</Link>
+          </div>
         </div>
       </header>
 

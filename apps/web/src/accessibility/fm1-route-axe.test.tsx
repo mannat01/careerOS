@@ -29,6 +29,8 @@ import { ResumeStudioClient } from '../../app/(app)/you/ResumeStudioClient';
 import { BASE_RESUME, GROUNDED_VARIANT, RESUME_OPPORTUNITY, RESUME_PIPELINE, THIN_VARIANT } from '../../app/(app)/you/resume-fixtures';
 import { ApprovalsRoomClient } from '../../app/(app)/approvals/ApprovalsRoomClient';
 import { TrustKitClient } from '../../app/(app)/%5Fdev/trust/TrustKitClient';
+import { InterviewPrepRoomClient } from '../../app/(app)/opportunities/interview-prep/InterviewPrepRoomClient';
+import { GROUNDED_INTERVIEW_PREP, INTERVIEW_OPPORTUNITY, INTERVIEW_PIPELINE, THIN_INTERVIEW_PREP } from '../../app/(app)/opportunities/interview-prep/interview-prep-fixtures';
 import { AppShell } from '../shell';
 import { RoutingRecovery } from '../auth';
 import { ApiError } from '../api/errors';
@@ -59,6 +61,7 @@ const routes: ReadonlyArray<{ name: string; path: string; renderRoute: () => Rea
   { name: 'Today', path: '/today', renderRoute: () => <AppShell><section aria-labelledby="today-axe-heading"><h1 id="today-axe-heading">Today</h1><TodayRoomClient dependencies={{ pendingApprovals: () => Promise.resolve(successFixtures.pendingApprovals()), latestBriefing: () => Promise.resolve(briefingLatestResponseSchema.parse({ ...successFixtures.briefing(), items: [{ ...successFixtures.briefing().items[0], kind: 'focus', autonomyTier: 'green', payload: { recommendation: 'Review the grounded role.', confidence: 0.82, evidenceRefs: ['experience:1'], modelVersion: 'reasoner@fake' } }] })), applications: () => Promise.resolve(POPULATED_PIPELINE) }} /></section></AppShell> },
   { name: 'Opportunities', path: '/opportunities', renderRoute: () => <AppShell><OpportunitiesClient dependencies={{ list: () => Promise.resolve(POPULATED_OPPORTUNITIES), match: (id) => Promise.resolve(MATCH_BY_OPPORTUNITY[id] ?? POPULATED_MATCH) }} /></AppShell> },
   { name: 'Pipeline', path: '/opportunities/pipeline', renderRoute: () => <AppShell><PipelineBoardClient dependencies={{ list: () => Promise.resolve(EMPTY_PIPELINE), patch: () => Promise.reject(new Error('Empty pipeline never patches.')) }} /></AppShell> },
+  { name: 'Interview prep', path: '/opportunities/interview-prep', renderRoute: () => <AppShell><section aria-labelledby="interview-prep-axe-heading"><h1 id="interview-prep-axe-heading">Interview prep</h1><InterviewPrepRoomClient dependencies={{ listApplications: () => Promise.resolve(INTERVIEW_PIPELINE), getOpportunity: () => Promise.resolve(INTERVIEW_OPPORTUNITY), prepare: () => Promise.resolve(GROUNDED_INTERVIEW_PREP) }} /></section></AppShell> },
   { name: 'Plan', path: '/plan', renderRoute: () => <AppShell><PlanPage /></AppShell> },
   { name: 'You', path: '/you', renderRoute: () => <AppShell><section aria-labelledby="you-heading" className="flex flex-col gap-4"><h1 id="you-heading">You</h1><ResumeStudioClient dependencies={{ getBase: () => Promise.resolve(BASE_RESUME), listApplications: () => Promise.resolve(RESUME_PIPELINE), getOpportunity: () => Promise.resolve(RESUME_OPPORTUNITY), tailor: () => Promise.resolve(GROUNDED_VARIANT), getVariant: () => Promise.resolve(GROUNDED_VARIANT) }} /></section></AppShell> },
   { name: 'Approvals', path: '/approvals', renderRoute: () => <AppShell><section aria-labelledby="approvals-heading"><h1 id="approvals-heading">Approvals</h1><ApprovalsRoomClient dependencies={{ list: () => Promise.resolve(successFixtures.pendingApprovals()), mint: () => Promise.reject(new Error('not exercised by static axe')), edit: () => Promise.reject(new Error('not exercised by static axe')), execute: () => Promise.reject(new Error('not exercised by static axe')), deny: () => Promise.reject(new Error('not exercised by static axe')) }} /></section></AppShell> },
@@ -245,6 +248,49 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
     );
     await user.click(await screen.findByRole('button', { name: 'Tailor résumé draft' }));
     expect(await screen.findByRole('heading', { name: 'No grounded tailored content returned' })).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.1 full grounded interview-prep flow is axe-clean and keyboard reachable', async () => {
+    pathname = '/opportunities/interview-prep';
+    const user = userEvent.setup();
+    const { container } = render(
+      <AppShell>
+        <section aria-labelledby="interview-prep-flow-heading">
+          <h1 id="interview-prep-flow-heading">Interview prep</h1>
+          <InterviewPrepRoomClient dependencies={{
+            listApplications: () => Promise.resolve(INTERVIEW_PIPELINE),
+            getOpportunity: () => Promise.resolve(INTERVIEW_OPPORTUNITY),
+            prepare: () => Promise.resolve(GROUNDED_INTERVIEW_PREP),
+          }} />
+        </section>
+      </AppShell>,
+    );
+    const action = await screen.findByRole('button', { name: 'Generate practice questions' });
+    action.focus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByTestId('grounded-interview-prep')).toBeVisible();
+    expect(screen.queryByTestId('ai-surface')).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.1 thin interview-prep flow remains axe-clean', async () => {
+    pathname = '/opportunities/interview-prep';
+    const user = userEvent.setup();
+    const { container } = render(
+      <AppShell>
+        <section aria-labelledby="interview-prep-thin-heading">
+          <h1 id="interview-prep-thin-heading">Interview prep</h1>
+          <InterviewPrepRoomClient dependencies={{
+            listApplications: () => Promise.resolve(INTERVIEW_PIPELINE),
+            getOpportunity: () => Promise.resolve(INTERVIEW_OPPORTUNITY),
+            prepare: () => Promise.resolve(THIN_INTERVIEW_PREP),
+          }} />
+        </section>
+      </AppShell>,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Generate practice questions' }));
+    expect(await screen.findByRole('heading', { name: 'Not enough grounded interview material' })).toBeVisible();
     expect(await axe(container)).toHaveNoViolations();
   });
 
