@@ -22,14 +22,15 @@
  *   - `InterviewMemoryPort`    — where the Debriefer writes its MemoryEvent.
  */
 import type { InterviewDebrieferAgent, InterviewPrepAgent } from './agent.js';
-import type {
-  DerivedDimension,
-  InterviewPrep,
-  JobDescription,
-  MemoryEvent,
-  MockOutcome,
-  PlanGraphNode,
-  ProfileFact,
+import {
+  INTERVIEWER_MODEL_VERSION,
+  type DerivedDimension,
+  type InterviewPrep,
+  type JobDescription,
+  type MemoryEvent,
+  type MockOutcome,
+  type PlanGraphNode,
+  type ProfileFact,
 } from './model.js';
 
 // ---------- ports ----------
@@ -96,6 +97,13 @@ export class InterviewPrepService {
       this.deps.opportunities.readOpportunity(userId, opportunityId),
       this.deps.evidence.readAllowedFactRefs(userId),
     ]);
+    // Questions may be grounded in the real opportunity, but suggested answer
+    // framing requires real caller evidence. With no profile facts (or no
+    // sanctioned refs) return an empty post-guardrail result so the HTTP layer
+    // can surface `insufficient_data`; never manufacture an answer.
+    if (profile.length === 0 || allowedFactRefs.length === 0) {
+      return { questions: [], answers: [], modelVersion: INTERVIEWER_MODEL_VERSION };
+    }
     return this.deps.agent.prepare({
       profile,
       stateModel,

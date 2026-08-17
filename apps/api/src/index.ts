@@ -72,6 +72,11 @@ export {
   type MatchHandlerDeps,
 } from './modules/cie/resume.handlers.js';
 export {
+  prepareInterview,
+  type InterviewPrepHandlerDeps,
+  type InterviewPrepOpportunityPort,
+} from './modules/cie/interview.handlers.js';
+export {
   listOpportunities,
   getOpportunity,
   getOpportunityMatch,

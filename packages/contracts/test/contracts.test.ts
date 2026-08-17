@@ -19,6 +19,8 @@ import {
   cieStateResponseSchema,
   decisionSupportRequestSchema,
   decisionSupportResponseSchema,
+  interviewPrepRequestSchema,
+  interviewPrepResponseSchema,
   profileFactEditRequestSchema,
   profileFactEditResponseSchema,
   auditEntrySchema,
@@ -46,6 +48,58 @@ import {
 
 const NOW = '2026-07-08T00:00:00.000Z';
 const UID = '3f1e2d3c-4b5a-6978-8899-aabbccddeeff';
+const INTERVIEW_OPPORTUNITY_ID = '00000000-0000-4000-8000-000000000061';
+
+describe('FM6.1-pre interview prep contracts', () => {
+  it('accepts only a server-resolved opportunityId request', () => {
+    const request = { opportunityId: INTERVIEW_OPPORTUNITY_ID };
+    expect(interviewPrepRequestSchema.parse(request)).toEqual(request);
+    expect(interviewPrepRequestSchema.safeParse({
+      ...request,
+      jobDescription: 'Free-text JD must never cross this boundary.',
+    }).success).toBe(false);
+    expect(interviewPrepRequestSchema.safeParse({ opportunityId: 'not-a-uuid' }).success).toBe(false);
+  });
+
+  it('strictly parses the post-guardrail grounded response', () => {
+    const response = {
+      status: 'ready' as const,
+      opportunityId: INTERVIEW_OPPORTUNITY_ID,
+      questions: [{
+        id: 'iq-1',
+        kind: 'technical' as const,
+        prompt: 'Tell me about your experience with TypeScript services.',
+        grounding: {
+          opportunityId: INTERVIEW_OPPORTUNITY_ID,
+          requirements: ['TypeScript services'],
+          profileFactRefs: ['experience:1'],
+        },
+        suggestedAnswer: {
+          framing: 'Ground the answer in the real service work.',
+          evidence: [{ claim: 'real service work', factRef: 'experience:1' }],
+        },
+      }],
+      modelVersion: 'interviewer@1.0.0',
+    };
+    expect(interviewPrepResponseSchema.parse(response)).toEqual(response);
+    expect(interviewPrepResponseSchema.safeParse({ ...response, rawProposal: {} }).success).toBe(false);
+    expect(interviewPrepResponseSchema.safeParse({
+      ...response,
+      questions: [{ ...response.questions[0], grounding: { requirements: ['TypeScript services'] } }],
+    }).success).toBe(false);
+  });
+
+  it('strictly parses an honest insufficient_data response', () => {
+    const response = {
+      status: 'insufficient_data' as const,
+      opportunityId: INTERVIEW_OPPORTUNITY_ID,
+      reason: 'Not enough real profile evidence to build grounded answer framing.',
+      modelVersion: 'interviewer@1.0.0',
+    };
+    expect(interviewPrepResponseSchema.parse(response)).toEqual(response);
+    expect(interviewPrepResponseSchema.safeParse({ ...response, questions: [] }).success).toBe(false);
+  });
+});
 
 describe('FM5.1-pre approval lifecycle contracts', () => {
   const pending = {

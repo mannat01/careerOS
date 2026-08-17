@@ -26,6 +26,7 @@ import type { CalibrationHandlerDeps } from '../modules/cie/calibration.handlers
 import type { MarketIntelHandlerDeps } from '../modules/cie/market-intel.handlers.js';
 import type { NegotiationHandlerDeps } from '../modules/cie/negotiation.handlers.js';
 import type { PkmHandlerDeps } from '../modules/cie/pkm.handlers.js';
+import type { InterviewPrepHandlerDeps } from '../modules/cie/interview.handlers.js';
 
 import type { ObjectStorage } from '../common/storage/object-storage.js';
 import type { ExportQueue } from '../common/queue/export-queue.js';
@@ -47,6 +48,8 @@ export interface AppDeps {
   state: StateHandlerDeps;
   resume: ResumeHandlerDeps;
   match: MatchHandlerDeps;
+  /** Green/advisory interview practice, limited to caller-stored opportunities. */
+  interview: InterviewPrepHandlerDeps;
   decide: DecideHandlerDeps;
   decideOffers: DecideOffersHandlerDeps;
   opportunity: OpportunityHandlerDeps;

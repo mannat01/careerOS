@@ -56,3 +56,16 @@ Records the decisions that were open in `readiness-review.md`. Each is now **Acc
 **Rationale.** Free must deliver genuine standalone value (the wedge) and prove "it gets me," while the compounding, always-on strategist capabilities (automation, research, long-horizon planning) are the paid wedge — they're the ongoing *work* we monetize (PRD §12), not one-time documents.
 
 **Consequences.** Milestones that ship gated capabilities (M06 planner horizons, M07 automation/research, M08 dashboards, M09 prep/drafts) must implement an entitlement check + budget metering as part of their Definition of Done. Validate price/gates with real conversion data post-launch; this ADR is the starting point, not a permanent commitment.
+
+---
+
+## ADR-004 — Grounded generation vs. scored inference
+**Status:** Accepted · **Affects:** `packages/contracts`, `packages/cie/*`, `apps/api`, `apps/web` Trust Kit usage.
+
+**Decision.** Grounded generative output—such as résumé variants, interview prep, and drafts—carries provenance and evidence grounding, plus an explicit `insufficient_data` result when the available grounding is thin. It does **not** carry a calibrated numeric confidence and is **not** wrapped in `AiSurface`.
+
+`AiSurface`, with its required evidence and calibrated `Confidence`, is reserved for scored inferences such as extraction and opportunity/fit scoring, where calibrated confidence is a real, meaningful quantity.
+
+**Rationale.** Manufacturing a confidence number for grounded generation would violate the calibrated-confidence guarantee. Grounded generation earns trust through resolvable provenance, evidence-constrained content, deterministic anti-fabrication guardrails, and honest refusal when evidence is insufficient—not through an invented score.
+
+**Consequences.** Contracts for grounded generation must expose the evidence and provenance needed to inspect every generated claim and must preserve an honest thin-data shape. Frontends render those outputs like the résumé studio: show their grounding directly and use `InsufficientData` when thin. They must neither synthesize confidence nor wrap the output in `AiSurface`. Scored-inference contracts and surfaces continue to require calibrated confidence.

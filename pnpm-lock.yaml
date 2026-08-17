@@ -44,6 +44,9 @@ importers:
       '@careeros/cie-drafting':
         specifier: workspace:*
         version: link:../../packages/cie/drafting
+      '@careeros/cie-interview':
+        specifier: workspace:*
+        version: link:../../packages/cie/interview
       '@careeros/cie-market-intel':
         specifier: workspace:*
         version: link:../../packages/cie/market-intel

@@ -55,6 +55,7 @@ import {
 import { LlmStrategicPlannerAgent, StrategicPlannerService } from '@careeros/cie-planner';
 import { GapAnalyzerService } from '@careeros/cie-skills';
 import { LlmDrafterAgent, DraftingService } from '@careeros/cie-drafting';
+import { DebrieferAgent, InterviewPrepService, LlmInterviewerAgent } from '@careeros/cie-interview';
 import {
   DashboardMetricComposerService,
   LlmDashboardMetricComposerAgent,
@@ -102,6 +103,13 @@ import {
   OpportunityDraftAdapter,
   StateServiceDraftStateAdapter,
 } from '../modules/cie/drafts.adapters.js';
+import {
+  GraphMemoryInterviewAdapter,
+  MemoryInterviewProfileAdapter,
+  OpportunityInterviewAdapter,
+  ProfileInterviewEvidenceAdapter,
+  StateServiceInterviewAdapter,
+} from '../modules/cie/interview.adapters.js';
 import {
   InMemoryDraftStore,
   StaticChannelPolicy,
@@ -292,6 +300,28 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
   // deterministic FakeEmbedder as the memory tiers (STUB(M02)).
   const graph = new GraphMemoryService(new PrismaGraphStore(prisma), new FakeEmbedder());
 
+  const interviewOpportunityRead = new PrismaOpportunityReadStore(prisma);
+  const interviewApplicationRead = new PrismaApplicationStore(prisma);
+  const interviewService = new InterviewPrepService({
+    profile: new MemoryInterviewProfileAdapter(profileReader),
+    state: new StateServiceInterviewAdapter(stateService),
+    graph: new GraphMemoryInterviewAdapter(graph),
+    opportunities: new OpportunityInterviewAdapter(interviewOpportunityRead),
+    evidence: new ProfileInterviewEvidenceAdapter(profileReader),
+    agent: new LlmInterviewerAgent(gateway),
+    debriefer: new DebrieferAgent(),
+    memory: {
+      appendMemoryEvent: async (userId, event) => {
+        await memory.recordEvent({
+          userId,
+          type: 'system',
+          payload: { ...event },
+          rationale: 'Recorded an interview mock debrief.',
+        });
+      },
+    },
+  });
+
   // Strategic Planner (M06 Stage-6). Advisory Green: derives a grounded plan
   // set from the caller's real profile facts + state model + explicitly stated
   // goals + career graph. Runs on the frontier tier; the deterministic
@@ -376,6 +406,16 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
       opportunities: new StoredOpportunityResumeAdapter(resumeOpportunityRead, resumeApplicationRead),
     },
     match: overrides?.match ?? { service: matchScorerService },
+    interview: overrides?.interview ?? {
+      service: interviewService,
+      opportunities: {
+        exists: async (opportunityId: string) =>
+          (await interviewOpportunityRead.getById(opportunityId)) !== null,
+        isStoredByUser: async (userId: string, opportunityId: string) =>
+          (await interviewApplicationRead.list(userId))
+            .some((application) => application.opportunityId === opportunityId),
+      },
+    },
     decide: overrides?.decide ?? { service: strategicReasonerService },
     decideOffers: overrides?.decideOffers ?? { service: offerComparisonService },
     // M04 discovery reads + discovery-time scoring. The read + match stores are

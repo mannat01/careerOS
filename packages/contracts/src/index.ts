@@ -92,6 +92,20 @@ export {
   type DecisionSupportResponse,
 } from './decision-support.js';
 export {
+  interviewPrepRequestSchema,
+  interviewQuestionKindSchema,
+  interviewEvidenceSchema,
+  interviewHonestGapSchema,
+  interviewPracticeQuestionSchema,
+  interviewPrepResponseSchema,
+  type InterviewPrepRequest,
+  type InterviewQuestionKind,
+  type InterviewEvidence,
+  type InterviewHonestGap,
+  type InterviewPracticeQuestion,
+  type InterviewPrepResponse,
+} from './interview-prep.js';
+export {
   resumeSelectedItemSchema,
   resumeModelSchema,
   resumeTailorRequestSchema,

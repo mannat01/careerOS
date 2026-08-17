@@ -17,6 +17,7 @@
     "@careeros/capability-gate": "workspace:*",
     "@careeros/cie-calibration": "workspace:*",
     "@careeros/cie-drafting": "workspace:*",
+    "@careeros/cie-interview": "workspace:*",
     "@careeros/cie-market-intel": "workspace:*",
     "@careeros/cie-metrics": "workspace:*",
     "@careeros/cie-pkm": "workspace:*",
