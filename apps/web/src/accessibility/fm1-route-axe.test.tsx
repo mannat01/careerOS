@@ -24,7 +24,8 @@ import {
 } from '../../app/(app)/opportunities/opportunity-fixtures';
 import { EMPTY_PIPELINE, POPULATED_PIPELINE, SAVED_APPLICATION_DETAIL } from '../../app/(app)/pipeline/pipeline-fixtures';
 import { PipelineBoardClient } from '../../app/(app)/pipeline/PipelineBoardClient';
-import PlanPage from '../../app/(app)/plan/page';
+import { PlanRoomClient } from '../../app/(app)/plan/PlanRoomClient';
+import { POPULATED_PLAN, THIN_PLAN } from '../../app/(app)/plan/plan-fixtures';
 import { ResumeStudioClient } from '../../app/(app)/you/ResumeStudioClient';
 import { BASE_RESUME, GROUNDED_VARIANT, RESUME_OPPORTUNITY, RESUME_PIPELINE, THIN_VARIANT } from '../../app/(app)/you/resume-fixtures';
 import { ApprovalsRoomClient } from '../../app/(app)/approvals/ApprovalsRoomClient';
@@ -62,7 +63,7 @@ const routes: ReadonlyArray<{ name: string; path: string; renderRoute: () => Rea
   { name: 'Opportunities', path: '/opportunities', renderRoute: () => <AppShell><OpportunitiesClient dependencies={{ list: () => Promise.resolve(POPULATED_OPPORTUNITIES), match: (id) => Promise.resolve(MATCH_BY_OPPORTUNITY[id] ?? POPULATED_MATCH) }} /></AppShell> },
   { name: 'Pipeline', path: '/opportunities/pipeline', renderRoute: () => <AppShell><PipelineBoardClient dependencies={{ list: () => Promise.resolve(EMPTY_PIPELINE), patch: () => Promise.reject(new Error('Empty pipeline never patches.')) }} /></AppShell> },
   { name: 'Interview prep', path: '/opportunities/interview-prep', renderRoute: () => <AppShell><section aria-labelledby="interview-prep-axe-heading"><h1 id="interview-prep-axe-heading">Interview prep</h1><InterviewPrepRoomClient dependencies={{ listApplications: () => Promise.resolve(INTERVIEW_PIPELINE), getOpportunity: () => Promise.resolve(INTERVIEW_OPPORTUNITY), prepare: () => Promise.resolve(GROUNDED_INTERVIEW_PREP) }} /></section></AppShell> },
-  { name: 'Plan', path: '/plan', renderRoute: () => <AppShell><PlanPage /></AppShell> },
+  { name: 'Plan', path: '/plan', renderRoute: () => <AppShell><section aria-labelledby="plan-axe-heading"><h1 id="plan-axe-heading">Plan</h1><PlanRoomClient dependencies={{ getPlans: () => Promise.resolve(POPULATED_PLAN) }} /></section></AppShell> },
   { name: 'You', path: '/you', renderRoute: () => <AppShell><section aria-labelledby="you-heading" className="flex flex-col gap-4"><h1 id="you-heading">You</h1><ResumeStudioClient dependencies={{ getBase: () => Promise.resolve(BASE_RESUME), listApplications: () => Promise.resolve(RESUME_PIPELINE), getOpportunity: () => Promise.resolve(RESUME_OPPORTUNITY), tailor: () => Promise.resolve(GROUNDED_VARIANT), getVariant: () => Promise.resolve(GROUNDED_VARIANT) }} /></section></AppShell> },
   { name: 'Approvals', path: '/approvals', renderRoute: () => <AppShell><section aria-labelledby="approvals-heading"><h1 id="approvals-heading">Approvals</h1><ApprovalsRoomClient dependencies={{ list: () => Promise.resolve(successFixtures.pendingApprovals()), mint: () => Promise.reject(new Error('not exercised by static axe')), edit: () => Promise.reject(new Error('not exercised by static axe')), execute: () => Promise.reject(new Error('not exercised by static axe')), deny: () => Promise.reject(new Error('not exercised by static axe')) }} /></section></AppShell> },
   { name: '/_dev/trust (development)', path: '/_dev/trust', renderRoute: () => <AppShell><TrustKitClient data={{ state: successFixtures.state(), opportunities: successFixtures.opportunities(), match: successFixtures.match(), audit: successFixtures.audit(), briefing: successFixtures.briefing() }} /></AppShell> },
@@ -294,6 +295,39 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
+  it('FM6.2 populated grounded Plan room is axe-clean and keyboard navigable', async () => {
+    pathname = '/plan';
+    const user = userEvent.setup();
+    const { container } = render(
+      <AppShell>
+        <section aria-labelledby="plan-populated-heading">
+          <h1 id="plan-populated-heading">Plan</h1>
+          <PlanRoomClient dependencies={{ getPlans: () => Promise.resolve(POPULATED_PLAN) }} />
+        </section>
+      </AppShell>,
+    );
+    const opportunities = await screen.findByRole('link', { name: 'Open Opportunities' });
+    opportunities.focus();
+    await user.keyboard('{Tab}');
+    expect(screen.getByRole('link', { name: 'Open You' })).toHaveFocus();
+    expect(screen.queryByTestId('ai-surface')).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.2 thin Plan room remains axe-clean', async () => {
+    pathname = '/plan';
+    const { container } = render(
+      <AppShell>
+        <section aria-labelledby="plan-thin-heading">
+          <h1 id="plan-thin-heading">Plan</h1>
+          <PlanRoomClient dependencies={{ getPlans: () => Promise.resolve(THIN_PLAN) }} />
+        </section>
+      </AppShell>,
+    );
+    expect(await screen.findByRole('heading', { name: 'Not enough grounded state for a plan' })).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
   it('FM5.1 populated Approvals room and lifecycle dialog are axe-clean and keyboard reachable', async () => {
     pathname = '/approvals';
     const user = userEvent.setup();
@@ -321,7 +355,8 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
   it('FM5.1 ambient Twin dialog is axe-clean and keyboard reachable', async () => {
     pathname = '/plan';
     const user = userEvent.setup();
-    const { container } = render(<AppShell><PlanPage /></AppShell>);
+    const { container } = render(<AppShell><PlanRoomClient dependencies={{ getPlans: () => Promise.resolve(POPULATED_PLAN) }} /></AppShell>);
+    await screen.findByTestId('populated-plan');
     const openTwin = screen.getByRole('button', { name: 'Open Twin (Command K)' });
     openTwin.focus();
     await user.keyboard('{Enter}');
