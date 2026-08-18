@@ -106,6 +106,22 @@ export {
   type InterviewPrepResponse,
 } from './interview-prep.js';
 export {
+  planHorizonSchema,
+  planActionKindSchema,
+  planActionStatusSchema,
+  planActionResponseSchema,
+  planResponseSchema,
+  todaysMoveSchema,
+  planSetResponseSchema,
+  type PlanHorizon,
+  type PlanActionKind,
+  type PlanActionStatus,
+  type PlanActionResponse,
+  type PlanResponse,
+  type TodaysMove,
+  type PlanSetResponse,
+} from './plan.js';
+export {
   resumeSelectedItemSchema,
   resumeModelSchema,
   resumeTailorRequestSchema,

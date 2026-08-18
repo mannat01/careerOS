@@ -17,6 +17,7 @@
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import type { AuditClient, AuditRecord, AuditRecordInput } from '@careeros/observability';
+import { planSetResponseSchema } from '@careeros/contracts';
 import type {
   PlanChangeEvent,
   ReplanResult,
@@ -319,9 +320,38 @@ describe('plan handlers — persistence + adaptive regeneration', () => {
     await createPlans(ctx, {}, deps);
     const res = await getPlans(ctx, deps);
     expect(res.status).toBe(200);
-    const body = res.body as { plans: Array<{ horizon: string; status: string }> };
+    const body = planSetResponseSchema.parse(res.body);
+    expect(body.status).toBe('ready');
+    if (body.status !== 'ready') throw new Error('Expected a ready plan response.');
     expect(body.plans.map((p) => p.horizon)).toEqual(['30d', '90d', '1y', '3y', '5y']);
-    for (const p of body.plans) expect(p.status).toBe('active');
+    expect(body.todaysMove?.horizon).toBe('30d');
+    expect(body.plans[0]?.goalRefs).toEqual(['goal:career_goals:0']);
+    expect(body.plans[0]?.actions[0]?.evidenceRefs).toEqual([
+      'goal:career_goals:0',
+      'node:skill:1',
+    ]);
+
+    const rawPlan = body.plans[0] as unknown as Record<string, unknown>;
+    const rawAction = body.plans[0]?.actions[0] as unknown as Record<string, unknown>;
+    expect(rawPlan).not.toHaveProperty('status');
+    expect(rawPlan).not.toHaveProperty('supersededById');
+    expect(rawPlan).not.toHaveProperty('confidence');
+    expect(rawAction).not.toHaveProperty('actionKey');
+    expect(rawAction).not.toHaveProperty('orderIndex');
+    expect(rawAction).not.toHaveProperty('confidence');
+  });
+
+  it('GET /v1/cie/plans returns an honest insufficient_data response when no plan exists', async () => {
+    const { deps } = buildDeps();
+    const res = await getPlans(ctx, deps);
+
+    expect(res.status).toBe(200);
+    expect(planSetResponseSchema.parse(res.body)).toEqual({
+      status: 'insufficient_data',
+      plans: [],
+      todaysMove: null,
+      reason: 'No active plan is available yet.',
+    });
   });
 
   it('GET /v1/cie/plans/:horizon returns 404 for unknown horizon and the plan for a valid one', async () => {

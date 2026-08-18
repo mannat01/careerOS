@@ -174,8 +174,6 @@ export {
   patchPlanAction,
   type PlanHandlerDeps,
   type PlanMemoryPort,
-  type PlanResponse,
-  type PlanSetResponse,
 } from './modules/cie/plan.handlers.js';
 export {
   listResearchFindings,

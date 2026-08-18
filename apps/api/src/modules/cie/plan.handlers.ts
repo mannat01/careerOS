@@ -30,6 +30,12 @@
  * No duplication; the compiler enforces parity.
  */
 import type { AuditClient } from '@careeros/observability';
+import {
+  planResponseSchema,
+  planSetResponseSchema,
+  type PlanResponse,
+  type PlanSetResponse,
+} from '@careeros/contracts';
 import type {
   PlanChangeEvent,
   PlanGraphNode,
@@ -84,17 +90,6 @@ export interface PlanHandlerDeps {
   store: StrategyPlanStorePortShape;
   memory: PlanMemoryPort;
   audit: AuditClient;
-}
-
-// ---------------- domain response shapes ----------------
-
-/** One horizon plan + actions the API returns (mirrors the store record). */
-export type PlanResponse = StrategyPlanRecordLike;
-
-/** Full plan-set response + today's move (top action of the active 30d plan). */
-export interface PlanSetResponse {
-  plans: PlanResponse[];
-  todaysMove: { actionId: string; horizon: PlanHorizonLike; title: string } | null;
 }
 
 // ---------------- POST /v1/cie/plans — first-generation (or force regenerate all) ----------------
@@ -157,7 +152,7 @@ export async function getPlanByHorizon(
       traceId: ctx.traceId,
     });
   }
-  return ok(found);
+  return ok(toPlanResponse(found));
 }
 
 // ---------------- POST /v1/cie/plans/:horizon/regenerate — §4A-gated ----------------
@@ -260,7 +255,7 @@ export async function regeneratePlan(
     traceId: ctx.traceId,
   });
 
-  return ok({ regenerated: true, plan: stored, explanation });
+  return ok({ regenerated: true, plan: toPlanResponse(stored), explanation });
 }
 
 // ---------------- PATCH /v1/cie/plans/actions/:id — status/progress ----------------
@@ -377,12 +372,51 @@ function emptyPlanSet(): StrategyPlanSet {
  * from the ACTIVE 30-day plan, if one exists.
  */
 function buildPlanSetResponse(plans: StrategyPlanRecordLike[]): PlanSetResponse {
+  if (plans.length === 0) {
+    return planSetResponseSchema.parse({
+      status: 'insufficient_data',
+      plans: [],
+      todaysMove: null,
+      reason: 'No active plan is available yet.',
+    });
+  }
+
+  const publicPlans = plans.map(toPlanResponse);
   const p30 = plans.find((p) => p.horizon === '30d');
   const top = p30?.actions[0];
   const todaysMove = top
     ? { actionId: top.id, horizon: '30d' as PlanHorizonLike, title: top.title }
     : null;
-  return { plans, todaysMove };
+  return planSetResponseSchema.parse({ status: 'ready', plans: publicPlans, todaysMove });
+}
+
+/**
+ * Explicit persistence → wire projection. Persistence mechanics such as
+ * `actionKey`, `orderIndex`, active/superseded status, and `supersededById`
+ * cannot leak through this boundary. The shared schema is also the serializer:
+ * any internal drift fails closed before an HTTP response is returned.
+ */
+function toPlanResponse(plan: StrategyPlanRecordLike): PlanResponse {
+  return planResponseSchema.parse({
+    id: plan.id,
+    horizon: plan.horizon,
+    summary: plan.summary,
+    goalRefs: plan.goalRefs,
+    diffSummary: plan.diffSummary,
+    rationale: plan.rationale,
+    modelVersion: plan.modelVersion,
+    createdAt: plan.createdAt,
+    updatedAt: plan.updatedAt,
+    actions: plan.actions.map((action) => ({
+      id: action.id,
+      kind: action.kind,
+      title: action.title,
+      rationale: action.rationale,
+      status: action.status,
+      progress: action.progress,
+      evidenceRefs: action.evidenceRefs,
+    })),
+  });
 }
 
 // ---------------- parsers ----------------
