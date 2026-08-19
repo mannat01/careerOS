@@ -19,6 +19,11 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { Draft, DraftKind, DraftRecipient, DraftingService } from '@careeros/cie-drafting';
+import {
+  draftGenerateRequestSchema,
+  draftResponseSchema,
+  type DraftResponse,
+} from '@careeros/contracts';
 import type { RequestContext } from '../../common/auth/request-context.js';
 import { errorResponse, ok, type HandlerResponse } from '../../common/errors/http-error.js';
 import { DraftOpportunityNotFoundError } from './drafts.adapters.js';
@@ -69,6 +74,10 @@ export interface DraftSendPort {
 
 export interface DraftsHandlerDeps {
   service: DraftingService;
+  opportunities: {
+    exists(opportunityId: string): Promise<boolean>;
+    isStoredByUser(userId: string, opportunityId: string): Promise<boolean>;
+  };
   store: DraftStorePort;
   channels: ChannelPolicyPort;
   sender: DraftSendPort;
@@ -120,13 +129,31 @@ export async function createDraft(
   ctx: RequestContext,
   body: unknown,
   deps: DraftsHandlerDeps,
-): Promise<HandlerResponse<DraftDto>> {
-  const parsed = parseCreateBody(body);
-  if (!parsed) {
-    return errorResponse('validation_failed', 'Expected { kind: "cover_letter"|"outreach", opportunityId, recipient? }.', {
-      details: { expected: '{ kind, opportunityId, recipient?: { name?, role?, channel? } }' },
+): Promise<HandlerResponse<DraftResponse>> {
+  const parsed = draftGenerateRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return errorResponse('validation_failed', 'Invalid draft generation payload.', {
+      details: { issues: parsed.error.issues },
       traceId: ctx.traceId,
     });
+  }
+
+  const { opportunityId } = parsed.data;
+  if (!await deps.opportunities.exists(opportunityId)) {
+    return errorResponse('not_found', 'Opportunity not found.', {
+      details: { opportunityId },
+      traceId: ctx.traceId,
+    });
+  }
+  if (!await deps.opportunities.isStoredByUser(ctx.userId, opportunityId)) {
+    return errorResponse(
+      'capability_denied',
+      'You can only generate a draft for an opportunity saved in your pipeline.',
+      {
+        details: { opportunityId, reason: 'opportunity_not_owned' },
+        traceId: ctx.traceId,
+      },
+    );
   }
 
   let draft: Draft;
@@ -135,18 +162,25 @@ export async function createDraft(
     // state / graph / opportunity inputs via its ports and the deterministic
     // guardrail recomputes the draft — zero fabrication before persist.
     draft = await deps.service.generate(ctx.userId, {
-      kind: parsed.kind,
-      opportunityId: parsed.opportunityId,
-      recipient: parsed.recipient,
+      kind: parsed.data.kind,
+      opportunityId,
+      recipient: parsed.data.recipient,
     });
   } catch (err) {
     if (err instanceof DraftOpportunityNotFoundError) {
       return errorResponse('not_found', 'Opportunity not found.', {
-        details: { opportunityId: parsed.opportunityId },
+        details: { opportunityId },
         traceId: ctx.traceId,
       });
     }
     throw err;
+  }
+
+  // The guardrail may honestly find no claim that resolves to the caller's
+  // evidence allow-list. Never persist or emit its generic salutation/filler;
+  // grounded generation without grounding is explicitly insufficient data.
+  if (draft.claims.length === 0) {
+    return ok(draftResponseSchema.parse({ status: 'insufficient_data' }));
   }
 
   const now = (deps.now ?? (() => new Date()))();
@@ -154,8 +188,8 @@ export async function createDraft(
     id: randomUUID(),
     userId: ctx.userId,
     kind: draft.kind,
-    opportunityId: parsed.opportunityId,
-    recipient: parsed.recipient ?? null,
+    opportunityId,
+    recipient: parsed.data.recipient ?? null,
     subject: draft.subject,
     body: draft.body,
     claims: draft.claims,
@@ -164,7 +198,7 @@ export async function createDraft(
     createdAt: now.toISOString(),
     sentAt: null,
   });
-  return ok(toDto(record));
+  return ok(draftResponseSchema.parse(toDto(record)));
 }
 
 // ---------- GET /v1/drafts/:id (GREEN) ----------
@@ -254,25 +288,4 @@ export async function sendDraft(
 function toDto(record: DraftRecord): DraftDto {
   const { userId: _userId, ...dto } = record;
   return dto;
-}
-
-function parseCreateBody(
-  body: unknown,
-): { kind: DraftKind; opportunityId: string; recipient?: DraftRecipient } | null {
-  if (typeof body !== 'object' || body === null) return null;
-  const b = body as Record<string, unknown>;
-  const kind = b.kind === 'cover_letter' || b.kind === 'outreach' ? b.kind : null;
-  const opportunityId = str(b.opportunityId);
-  if (!kind || !opportunityId) return null;
-
-  let recipient: DraftRecipient | undefined;
-  if (typeof b.recipient === 'object' && b.recipient !== null) {
-    const r = b.recipient as Record<string, unknown>;
-    recipient = { name: str(r.name), role: str(r.role), channel: str(r.channel) };
-  }
-  return { kind, opportunityId, recipient };
-}
-
-function str(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }

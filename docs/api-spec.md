@@ -68,7 +68,7 @@ Any side-effecting route tagged Yellow requires a valid `ApprovalToken` (header 
 - `GET /v1/skills/gaps` · `GET /v1/skills/learning` · `PATCH /v1/skills/learning/:id` (progress).
 
 ### Drafts (cover/outreach) — Yellow at send
-- `POST /v1/drafts` `{ type, opportunityId }` → generate draft (Green).
+- `POST /v1/drafts` `{ kind: "cover_letter" | "outreach", opportunityId, recipient? }` → generate a caller-pipeline-scoped grounded draft (Green), or `{ status: "insufficient_data" }` when no claims survive grounding. A grounded response remains `status: "draft"` with `sentAt: null`; generation never sends.
 - `POST /v1/drafts/:id/send` → **Yellow**, requires approval token; only via user-connected channel where ToS permits; otherwise returns `capability_denied` with guidance to send manually.
 
 ### Portfolio — Yellow at publish, private by default

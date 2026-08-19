@@ -106,6 +106,18 @@ export {
   type InterviewPrepResponse,
 } from './interview-prep.js';
 export {
+  draftKindSchema,
+  draftRecipientSchema,
+  draftGenerateRequestSchema,
+  draftClaimSchema,
+  draftResponseSchema,
+  type DraftKind,
+  type DraftRecipient,
+  type DraftGenerateRequest,
+  type DraftClaim,
+  type DraftResponse,
+} from './draft.js';
+export {
   planHorizonSchema,
   planActionKindSchema,
   planActionStatusSchema,

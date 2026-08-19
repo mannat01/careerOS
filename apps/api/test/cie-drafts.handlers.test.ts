@@ -42,6 +42,8 @@ import { DraftOpportunityNotFoundError } from '../src/modules/cie/drafts.adapter
 const SECRET = 'k'.repeat(32);
 const USER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const USER_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const OPPORTUNITY_ID = '00000000-0000-4000-8000-000000000063';
+const UNKNOWN_OPPORTUNITY_ID = '00000000-0000-4000-8000-000000000099';
 const NOW = new Date('2026-07-22T12:00:00.000Z');
 
 const PROFILE = [
@@ -84,7 +86,7 @@ function makeService(): DraftingService {
     graph: { readGraph: () => Promise.resolve(GRAPH) },
     opportunity: {
       readOpportunity: (_userId, opportunityId) => {
-        if (opportunityId !== 'opp-1') throw new DraftOpportunityNotFoundError(opportunityId);
+        if (opportunityId !== OPPORTUNITY_ID) throw new DraftOpportunityNotFoundError(opportunityId);
         return Promise.resolve({
           title: 'Staff Engineer',
           company: 'Nimbus',
@@ -111,6 +113,11 @@ describe('/v1/drafts handlers (draft Green, send Yellow)', () => {
     sentCalls = [];
     deps = {
       service: makeService(),
+      opportunities: {
+        exists: (opportunityId) => Promise.resolve(opportunityId === OPPORTUNITY_ID),
+        isStoredByUser: (userId, opportunityId) =>
+          Promise.resolve(userId === USER_A && opportunityId === OPPORTUNITY_ID),
+      },
       store: new InMemoryDraftStore(),
       channels: new StaticChannelPolicy(),
       sender: {
@@ -142,7 +149,7 @@ describe('/v1/drafts handlers (draft Green, send Yellow)', () => {
       ctxA,
       {
         kind: 'outreach',
-        opportunityId: 'opp-1',
+        opportunityId: OPPORTUNITY_ID,
         recipient: { name: 'Dana', role: 'Hiring Manager', channel: recipientChannel },
       },
       deps,
@@ -168,11 +175,15 @@ describe('/v1/drafts handlers (draft Green, send Yellow)', () => {
   });
 
   it('unknown opportunity → not_found; bad body → validation_failed', async () => {
-    const missing = await createDraft(ctxA, { kind: 'cover_letter', opportunityId: 'nope' }, deps);
+    const missing = await createDraft(
+      ctxA,
+      { kind: 'cover_letter', opportunityId: UNKNOWN_OPPORTUNITY_ID },
+      deps,
+    );
     expect(missing.status).toBe(404);
     expect((missing.body as ApiError).error.code).toBe('not_found');
 
-    const bad = await createDraft(ctxA, { kind: 'poem', opportunityId: 'opp-1' }, deps);
+    const bad = await createDraft(ctxA, { kind: 'poem', opportunityId: OPPORTUNITY_ID }, deps);
     expect(bad.status).toBe(422);
     expect((bad.body as ApiError).error.code).toBe('validation_failed');
   });

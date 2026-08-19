@@ -530,6 +530,13 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
         evidence: new CompositeDraftEvidenceAdapter(profileReader, graph),
         agent: new LlmDrafterAgent(gateway),
       }),
+      opportunities: {
+        exists: async (opportunityId: string) =>
+          (await interviewOpportunityRead.getById(opportunityId)) !== null,
+        isStoredByUser: async (userId: string, opportunityId: string) =>
+          (await interviewApplicationRead.list(userId))
+            .some((application) => application.opportunityId === opportunityId),
+      },
       store: new InMemoryDraftStore(),
       channels: new StaticChannelPolicy(),
       sender: {
