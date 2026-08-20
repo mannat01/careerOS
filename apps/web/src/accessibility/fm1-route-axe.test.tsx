@@ -32,6 +32,8 @@ import { ApprovalsRoomClient } from '../../app/(app)/approvals/ApprovalsRoomClie
 import { TrustKitClient } from '../../app/(app)/%5Fdev/trust/TrustKitClient';
 import { InterviewPrepRoomClient } from '../../app/(app)/opportunities/interview-prep/InterviewPrepRoomClient';
 import { GROUNDED_INTERVIEW_PREP, INTERVIEW_OPPORTUNITY, INTERVIEW_PIPELINE, THIN_INTERVIEW_PREP } from '../../app/(app)/opportunities/interview-prep/interview-prep-fixtures';
+import { DraftsRoomClient } from '../../app/(app)/opportunities/drafts/DraftsRoomClient';
+import { DRAFT_OPPORTUNITY, DRAFT_PIPELINE, GROUNDED_DRAFT, THIN_DRAFT } from '../../app/(app)/opportunities/drafts/draft-fixtures';
 import { AppShell } from '../shell';
 import { RoutingRecovery } from '../auth';
 import { ApiError } from '../api/errors';
@@ -63,6 +65,7 @@ const routes: ReadonlyArray<{ name: string; path: string; renderRoute: () => Rea
   { name: 'Opportunities', path: '/opportunities', renderRoute: () => <AppShell><OpportunitiesClient dependencies={{ list: () => Promise.resolve(POPULATED_OPPORTUNITIES), match: (id) => Promise.resolve(MATCH_BY_OPPORTUNITY[id] ?? POPULATED_MATCH) }} /></AppShell> },
   { name: 'Pipeline', path: '/opportunities/pipeline', renderRoute: () => <AppShell><PipelineBoardClient dependencies={{ list: () => Promise.resolve(EMPTY_PIPELINE), patch: () => Promise.reject(new Error('Empty pipeline never patches.')) }} /></AppShell> },
   { name: 'Interview prep', path: '/opportunities/interview-prep', renderRoute: () => <AppShell><section aria-labelledby="interview-prep-axe-heading"><h1 id="interview-prep-axe-heading">Interview prep</h1><InterviewPrepRoomClient dependencies={{ listApplications: () => Promise.resolve(INTERVIEW_PIPELINE), getOpportunity: () => Promise.resolve(INTERVIEW_OPPORTUNITY), prepare: () => Promise.resolve(GROUNDED_INTERVIEW_PREP) }} /></section></AppShell> },
+  { name: 'Drafts', path: '/opportunities/drafts', renderRoute: () => <AppShell><section aria-labelledby="drafts-axe-heading"><h1 id="drafts-axe-heading">Drafts</h1><DraftsRoomClient dependencies={{ listApplications: () => Promise.resolve(DRAFT_PIPELINE), getOpportunity: () => Promise.resolve(DRAFT_OPPORTUNITY), generate: () => Promise.resolve(GROUNDED_DRAFT), copyText: () => Promise.resolve() }} /></section></AppShell> },
   { name: 'Plan', path: '/plan', renderRoute: () => <AppShell><section aria-labelledby="plan-axe-heading"><h1 id="plan-axe-heading">Plan</h1><PlanRoomClient dependencies={{ getPlans: () => Promise.resolve(POPULATED_PLAN) }} /></section></AppShell> },
   { name: 'You', path: '/you', renderRoute: () => <AppShell><section aria-labelledby="you-heading" className="flex flex-col gap-4"><h1 id="you-heading">You</h1><ResumeStudioClient dependencies={{ getBase: () => Promise.resolve(BASE_RESUME), listApplications: () => Promise.resolve(RESUME_PIPELINE), getOpportunity: () => Promise.resolve(RESUME_OPPORTUNITY), tailor: () => Promise.resolve(GROUNDED_VARIANT), getVariant: () => Promise.resolve(GROUNDED_VARIANT) }} /></section></AppShell> },
   { name: 'Approvals', path: '/approvals', renderRoute: () => <AppShell><section aria-labelledby="approvals-heading"><h1 id="approvals-heading">Approvals</h1><ApprovalsRoomClient dependencies={{ list: () => Promise.resolve(successFixtures.pendingApprovals()), mint: () => Promise.reject(new Error('not exercised by static axe')), edit: () => Promise.reject(new Error('not exercised by static axe')), execute: () => Promise.reject(new Error('not exercised by static axe')), deny: () => Promise.reject(new Error('not exercised by static axe')) }} /></section></AppShell> },
@@ -292,6 +295,54 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
     );
     await user.click(await screen.findByRole('button', { name: 'Generate practice questions' }));
     expect(await screen.findByRole('heading', { name: 'Not enough grounded interview material' })).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.3 grounded Drafts flow is axe-clean, keyboard reachable, and action-safe', async () => {
+    pathname = '/opportunities/drafts';
+    const user = userEvent.setup();
+    const { container } = render(
+      <AppShell>
+        <section aria-labelledby="drafts-grounded-heading">
+          <h1 id="drafts-grounded-heading">Drafts</h1>
+          <DraftsRoomClient dependencies={{
+            listApplications: () => Promise.resolve(DRAFT_PIPELINE),
+            getOpportunity: () => Promise.resolve(DRAFT_OPPORTUNITY),
+            generate: () => Promise.resolve(GROUNDED_DRAFT),
+            copyText: () => Promise.resolve(),
+          }} />
+        </section>
+      </AppShell>,
+    );
+    const action = await screen.findByRole('button', { name: 'Generate draft' });
+    action.focus();
+    await user.keyboard('{Enter}');
+    const draft = await screen.findByTestId('grounded-draft');
+    expect(within(draft).getByRole('button', { name: 'Copy draft to clipboard' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: /send|submit|approve/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('ai-surface')).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.3 insufficient-data Drafts flow remains axe-clean without fabricated text', async () => {
+    pathname = '/opportunities/drafts';
+    const user = userEvent.setup();
+    const { container } = render(
+      <AppShell>
+        <section aria-labelledby="drafts-thin-heading">
+          <h1 id="drafts-thin-heading">Drafts</h1>
+          <DraftsRoomClient dependencies={{
+            listApplications: () => Promise.resolve(DRAFT_PIPELINE),
+            getOpportunity: () => Promise.resolve(DRAFT_OPPORTUNITY),
+            generate: () => Promise.resolve(THIN_DRAFT),
+            copyText: () => Promise.resolve(),
+          }} />
+        </section>
+      </AppShell>,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Generate draft' }));
+    expect(await screen.findByRole('heading', { name: 'Not enough grounded evidence for a draft' })).toBeVisible();
+    expect(screen.queryByTestId('grounded-draft')).not.toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 

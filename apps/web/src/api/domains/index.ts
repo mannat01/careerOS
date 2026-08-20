@@ -19,6 +19,7 @@ import { createResumesApi, type ResumesApi } from './resumes';
 import { createApprovalsApi, type ApprovalsApi } from './approvals';
 import { createInterviewsApi, type InterviewsApi } from './interviews';
 import { createPlansApi, type PlansApi } from './plans';
+import { createDraftsApi, type DraftsApi } from './drafts';
 
 export * from './me';
 export * from './profile';
@@ -32,6 +33,7 @@ export * from './resumes';
 export * from './approvals';
 export * from './interviews';
 export * from './plans';
+export * from './drafts';
 
 export interface Api {
   me: MeApi;
@@ -46,6 +48,7 @@ export interface Api {
   approvals: ApprovalsApi;
   interviews: InterviewsApi;
   plans: PlansApi;
+  drafts: DraftsApi;
 }
 
 export function createApi(client: ApiClient): Api {
@@ -62,5 +65,6 @@ export function createApi(client: ApiClient): Api {
     approvals: createApprovalsApi(client),
     interviews: createInterviewsApi(client),
     plans: createPlansApi(client),
+    drafts: createDraftsApi(client),
   };
 }

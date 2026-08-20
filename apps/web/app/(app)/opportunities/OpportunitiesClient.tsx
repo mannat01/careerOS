@@ -145,6 +145,7 @@ export function OpportunitiesClient({
           </div>
           <div className="flex flex-wrap gap-3 text-sm font-semibold">
             <Link href="/opportunities/interview-prep" className="text-brand-base underline focus-visible:ring-2 focus-visible:ring-brand-base">Open interview prep</Link>
+            <Link href="/opportunities/drafts" className="text-brand-base underline focus-visible:ring-2 focus-visible:ring-brand-base">Open Drafts</Link>
             <Link href="/opportunities/pipeline" className="text-brand-base underline focus-visible:ring-2 focus-visible:ring-brand-base">View application pipeline</Link>
           </div>
         </div>

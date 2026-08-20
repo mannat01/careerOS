@@ -45,6 +45,16 @@ describe('FM1 CI-BLOCKING SIX-GUARANTEE SUITE', () => {
       expect(exportNames.some((name) => name.replaceAll('_', '').includes(compact))).toBe(false);
     }
     expect(Object.keys(apiSurface).some((name) => /postred|executered/i.test(name))).toBe(false);
+    const drafts = domainsSurface.createDraftsApi({
+      get: <T,>(): Promise<T> => Promise.reject(new Error('not used')),
+      postGreen: <T,>(): Promise<T> => Promise.resolve({} as T),
+      postYellow: <T,>(): Promise<T> => Promise.reject(new Error('Drafts room cannot execute Yellow actions.')),
+      patch: <T,>(): Promise<T> => Promise.reject(new Error('not used')),
+      del: <T,>(): Promise<T> => Promise.reject(new Error('not used')),
+    });
+    expect(Object.keys(drafts)).toEqual(['generate']);
+    expect(drafts).not.toHaveProperty('send');
+    expect(drafts).not.toHaveProperty('submit');
   });
 
   it('4/6 approval_required halts Twin streaming—no later token, tool, or reconnect', async () => {
