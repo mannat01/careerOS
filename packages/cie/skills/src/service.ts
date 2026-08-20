@@ -48,7 +48,9 @@ export class GapAnalyzerService {
     if (violations.length === 0) return analysis;
     const bad = new Set(violations.map((v) => v.subject));
     return {
+      status: analysis.status,
       modelVersion: analysis.modelVersion,
+      analyzedOpportunityIds: analysis.analyzedOpportunityIds,
       gaps: analysis.gaps.filter((g) => !bad.has(g.key)),
       learningItems: analysis.learningItems.filter((i) => !bad.has(i.gapKey)),
     };

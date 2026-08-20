@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Patch, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Patch, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import {
   getSkillGaps,
@@ -26,8 +26,12 @@ export class SkillsController {
   constructor(@Inject(APP_DEPS) private readonly deps: AppDeps) {}
 
   @Get('gaps')
-  async gaps(@Req() req: AuthedRequest, @Res() res: Response): Promise<void> {
-    send(res, await getSkillGaps(req.ctx, this.deps.skills));
+  async gaps(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+    @Query() query: Record<string, string | undefined>,
+  ): Promise<void> {
+    send(res, await getSkillGaps(req.ctx, query, this.deps.skills));
   }
 
   @Get('learning')

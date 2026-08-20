@@ -96,7 +96,11 @@ export interface ComputedLearningItem {
 
 /** The analyzer's full output: gaps + recommendations, integrity-checked. */
 export interface GapAnalysis {
+  /** Whether real profile signal plus at least one comparison anchor existed. */
+  status: 'ok' | 'insufficient_data';
   modelVersion: string;
+  /** Opportunities whose real requirements and match subscores were analyzable. */
+  analyzedOpportunityIds: string[];
   gaps: ComputedSkillGap[];
   learningItems: ComputedLearningItem[];
 }

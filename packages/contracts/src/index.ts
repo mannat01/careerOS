@@ -118,6 +118,20 @@ export {
   type DraftResponse,
 } from './draft.js';
 export {
+  skillGapsQuerySchema,
+  skillGapEvidenceRefSchema,
+  skillGapSeveritySchema,
+  skillGapSourceSchema,
+  skillGapSchema,
+  skillGapsResponseSchema,
+  type SkillGapsQuery,
+  type SkillGapEvidenceRef,
+  type SkillGapSeverity,
+  type SkillGapSource,
+  type SkillGap,
+  type SkillGapsResponse,
+} from './skill-gap.js';
+export {
   planHorizonSchema,
   planActionKindSchema,
   planActionStatusSchema,

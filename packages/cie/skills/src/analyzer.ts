@@ -56,6 +56,25 @@ export function analyzeGaps(input: GapAnalyzerInput): GapAnalysis {
   const demonstrated = demonstratedSkills(input);
   const gaps: ComputedSkillGap[] = [];
   const seen = new Set<string>();
+  const analyzedOpportunityIds = input.matches
+    .filter((match) => match.subscores.length > 0 && match.requiredSkills.some((skill) => skill.trim().length > 0))
+    .map((match) => match.opportunityId);
+  const hasProfileSignal = input.stateModel.some((dimension) =>
+    dimension.values.some((value) => value.trim().length > 0),
+  );
+  const status = hasProfileSignal && (analyzedOpportunityIds.length > 0 || input.targetRoles.length > 0)
+    ? 'ok'
+    : 'insufficient_data';
+
+  if (status === 'insufficient_data') {
+    return {
+      status,
+      modelVersion: GAP_ANALYZER_MODEL_VERSION,
+      analyzedOpportunityIds,
+      gaps: [],
+      learningItems: [],
+    };
+  }
 
   // ---- per-opp pass: low subscore + demanded-but-missing requirement ----
   for (const match of input.matches) {
@@ -128,7 +147,7 @@ export function analyzeGaps(input: GapAnalyzerInput): GapAnalysis {
           },
   }));
 
-  return { modelVersion: GAP_ANALYZER_MODEL_VERSION, gaps, learningItems };
+  return { status, modelVersion: GAP_ANALYZER_MODEL_VERSION, analyzedOpportunityIds, gaps, learningItems };
 }
 
 /**

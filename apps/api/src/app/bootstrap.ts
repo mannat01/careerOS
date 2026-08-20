@@ -490,6 +490,11 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     skills: overrides?.skills ?? {
       store: skillGapStore,
       profileResolver: new PrismaProfileResolver(prisma),
+      opportunities: {
+        isStoredByUser: async (userId: string, opportunityId: string) =>
+          (await interviewApplicationRead.list(userId))
+            .some((application) => application.opportunityId === opportunityId),
+      },
       analyzer: new GapAnalyzerService({
         matches: new GapSignalMatchAdapter(
           new PrismaGapSignalReadStore(prisma),

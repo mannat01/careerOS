@@ -28,6 +28,13 @@ import type {
   SkillGapStorePortShape,
 } from '@careeros/db';
 import type { GapAnalysis } from '@careeros/cie-skills';
+import {
+  skillGapsQuerySchema,
+  skillGapsResponseSchema,
+  type SkillGap,
+  type SkillGapEvidenceRef,
+  type SkillGapsResponse,
+} from '@careeros/contracts';
 
 // ---------------- ports (adapters live in bootstrap) ----------------
 
@@ -50,26 +57,20 @@ export interface SkillsDashboardRecomputePort {
   recompute(userId: string): Promise<void>;
 }
 
+/** Pipeline-only ownership check for optional opportunity-scoped analysis. */
+export interface SkillsOpportunityPort {
+  isStoredByUser(userId: string, opportunityId: string): Promise<boolean>;
+}
+
 export interface SkillsHandlerDeps {
   store: SkillGapStorePortShape;
   profileResolver: SkillsProfileResolverPort;
   analyzer: SkillsGapAnalyzerPort;
+  opportunities: SkillsOpportunityPort;
   dashboards?: SkillsDashboardRecomputePort;
 }
 
 // ---------------- response shapes ----------------
-
-export interface SkillGapResponse {
-  id: string;
-  skill: string;
-  gap: string;
-  severity: string;
-  source: 'per_opp' | 'aggregate';
-  opportunityId: string | null;
-  evidenceRefs: string[];
-  modelVersion: string;
-  computedAt: string;
-}
 
 export interface LearningItemResponse {
   id: string;
@@ -86,14 +87,40 @@ const LEARNING_STATUSES = new Set(['suggested', 'in_progress', 'done']);
 /** GET /v1/skills/gaps — recompute + persist + return the caller's gap set. */
 export async function getSkillGaps(
   ctx: RequestContext,
+  query: unknown,
   deps: SkillsHandlerDeps,
-): Promise<HandlerResponse<{ gaps: SkillGapResponse[] }>> {
+): Promise<HandlerResponse<SkillGapsResponse>> {
+  const parsedQuery = skillGapsQuerySchema.safeParse(query);
+  if (!parsedQuery.success) {
+    return errorResponse('validation_failed', 'opportunityId must be a UUID when provided.', {
+      details: { expected: '?opportunityId=<uuid>' },
+      traceId: ctx.traceId,
+    });
+  }
+  const opportunityId = parsedQuery.data.opportunityId;
+  if (opportunityId && !await deps.opportunities.isStoredByUser(ctx.userId, opportunityId)) {
+    return errorResponse(
+      'capability_denied',
+      'You can only analyze an opportunity saved in your pipeline.',
+      {
+        details: { opportunityId, reason: 'opportunity_not_owned' },
+        traceId: ctx.traceId,
+      },
+    );
+  }
+
   const profileId = await deps.profileResolver.resolveProfileId(ctx.userId);
   if (!profileId) return errorResponse('not_found', 'No profile.', { traceId: ctx.traceId });
 
   // Deterministic + self-verified: the analyzer discards anything its own
   // guardrail flags, so what we persist is integrity-clean by construction.
   const analysis = await deps.analyzer.analyze(ctx.userId);
+  if (
+    analysis.status === 'insufficient_data' ||
+    (opportunityId !== undefined && !analysis.analyzedOpportunityIds.includes(opportunityId))
+  ) {
+    return ok(skillGapsResponseSchema.parse({ status: 'insufficient_data' }));
+  }
   const itemsByGap = new Map<string, Array<{ resource: Record<string, unknown> }>>();
   for (const item of analysis.learningItems) {
     const list = itemsByGap.get(item.gapKey) ?? [];
@@ -122,7 +149,13 @@ export async function getSkillGaps(
       /* best-effort */
     }
   }
-  return ok({ gaps: rows.map(toGapResponse) });
+  const selectedRows = opportunityId
+    ? rows.filter((row) => row.source === 'per_opp' && row.opportunityId === opportunityId)
+    : rows;
+  return ok(skillGapsResponseSchema.parse({
+    status: 'ok',
+    gaps: selectedRows.map(toGapResponse),
+  }));
 }
 
 /** GET /v1/skills/learning — the caller's learning items with progress. */
@@ -189,18 +222,68 @@ function parsePatch(
   return out;
 }
 
-function toGapResponse(row: SkillGapRowLike): SkillGapResponse {
-  return {
+function toGapResponse(row: SkillGapRowLike): SkillGap {
+  const common = {
     id: row.id,
     skill: row.skill,
     gap: row.gap,
-    severity: row.severity,
-    source: row.source,
-    opportunityId: row.opportunityId,
-    evidenceRefs: row.evidenceRefs,
+    severity: parseSeverity(row.severity),
     modelVersion: row.modelVersion,
     computedAt: row.computedAt,
   };
+  if (row.source === 'per_opp') {
+    if (!row.opportunityId) throw new Error('A persisted per-opportunity gap requires opportunityId.');
+    return {
+      ...common,
+      source: 'per_opp',
+      opportunityId: row.opportunityId,
+      evidenceRefs: row.evidenceRefs.map((ref) => toEvidenceRef(ref, row.opportunityId)),
+    };
+  }
+  if (row.opportunityId !== null) {
+    throw new Error('A persisted aggregate gap cannot carry opportunityId.');
+  }
+  return {
+    ...common,
+    source: 'aggregate',
+    opportunityId: null,
+    evidenceRefs: row.evidenceRefs.map((ref) => toEvidenceRef(ref, null)),
+  };
+}
+
+function parseSeverity(value: string): SkillGap['severity'] {
+  if (value === 'low' || value === 'medium' || value === 'high') return value;
+  throw new Error(`Unsupported persisted skill-gap severity: ${value}`);
+}
+
+function toEvidenceRef(ref: string, opportunityId: string | null): SkillGapEvidenceRef {
+  if (ref.startsWith('subscore:') && opportunityId) {
+    const encoded = ref.slice('subscore:'.length);
+    const separator = encoded.lastIndexOf('=');
+    const key = separator >= 0 ? encoded.slice(0, separator) : '';
+    const value = Number(separator >= 0 ? encoded.slice(separator + 1) : Number.NaN);
+    if (key && Number.isFinite(value)) {
+      return { kind: 'match_subscore', opportunityId, key, value };
+    }
+  }
+  if (ref.startsWith('requirement:') && opportunityId) {
+    const requirement = ref.slice('requirement:'.length);
+    if (requirement) return { kind: 'opportunity_requirement', opportunityId, requirement };
+  }
+  if (ref.startsWith('dimension:')) {
+    const encoded = ref.slice('dimension:'.length);
+    const absentSuffix = ':absent';
+    const absent = encoded.endsWith(absentSuffix);
+    const dimension = absent
+      ? encoded.slice(0, -absentSuffix.length)
+      : encoded.split('@', 1)[0] ?? '';
+    if (dimension) return { kind: 'state_dimension', dimension, signal: absent ? 'missing' : 'weak' };
+  }
+  if (ref.startsWith('target_role:')) {
+    const role = ref.slice('target_role:'.length);
+    if (role) return { kind: 'target_role', role };
+  }
+  throw new Error(`Unsupported persisted skill-gap evidence ref: ${ref}`);
 }
 
 function toItemResponse(row: LearningItemRowLike): LearningItemResponse {

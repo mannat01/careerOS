@@ -96,12 +96,42 @@ describe('analyzeGaps (oracle)', () => {
   it('is deterministic (same input → identical output)', () => {
     expect(analyzeGaps(INPUT)).toEqual(analyzeGaps(INPUT));
   });
+
+  it('distinguishes thin input from an analyzed profile with no gaps', () => {
+    expect(analyzeGaps({ matches: [], stateModel: [], targetRoles: [] })).toMatchObject({
+      status: 'insufficient_data',
+      analyzedOpportunityIds: [],
+      gaps: [],
+    });
+
+    const noGaps = analyzeGaps({
+      matches: [
+        {
+          opportunityId: 'opp-strong',
+          opportunityLabel: 'Acme — Engineer',
+          subscores: [{ key: 'skills', value: 95 }],
+          requiredSkills: ['Python'],
+        },
+      ],
+      stateModel: [
+        { dimension: 'demonstrated_skills', values: ['Python'], confidence: 0.9 },
+      ],
+      targetRoles: [],
+    });
+    expect(noGaps).toMatchObject({
+      status: 'ok',
+      analyzedOpportunityIds: ['opp-strong'],
+      gaps: [],
+    });
+  });
 });
 
 describe('verifyGapAnalysis (fabricators caught)', () => {
   it('catches an INVENTED gap no real demand supports', () => {
     const fabricated: GapAnalysis = {
+      status: 'ok',
       modelVersion: GAP_ANALYZER_MODEL_VERSION,
+      analyzedOpportunityIds: ['opp-1', 'opp-2'],
       gaps: [
         {
           key: 'per_opp:rust:opp-1',
@@ -121,7 +151,9 @@ describe('verifyGapAnalysis (fabricators caught)', () => {
 
   it('catches a gap for a skill the user ALREADY demonstrates', () => {
     const fabricated: GapAnalysis = {
+      status: 'ok',
       modelVersion: GAP_ANALYZER_MODEL_VERSION,
+      analyzedOpportunityIds: ['opp-1', 'opp-2'],
       gaps: [
         {
           key: 'per_opp:python:opp-1',
@@ -141,7 +173,9 @@ describe('verifyGapAnalysis (fabricators caught)', () => {
 
   it('catches a gap citing an opportunity that is not among the real signals', () => {
     const fabricated: GapAnalysis = {
+      status: 'ok',
       modelVersion: GAP_ANALYZER_MODEL_VERSION,
+      analyzedOpportunityIds: ['opp-1', 'opp-2'],
       gaps: [
         {
           key: 'per_opp:kubernetes:opp-999',
@@ -161,7 +195,9 @@ describe('verifyGapAnalysis (fabricators caught)', () => {
 
   it('catches a learning item that does not link to a real gap', () => {
     const fabricated: GapAnalysis = {
+      status: 'ok',
       modelVersion: GAP_ANALYZER_MODEL_VERSION,
+      analyzedOpportunityIds: ['opp-1', 'opp-2'],
       gaps: [],
       learningItems: [
         {
