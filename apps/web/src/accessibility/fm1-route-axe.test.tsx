@@ -34,6 +34,8 @@ import { InterviewPrepRoomClient } from '../../app/(app)/opportunities/interview
 import { GROUNDED_INTERVIEW_PREP, INTERVIEW_OPPORTUNITY, INTERVIEW_PIPELINE, THIN_INTERVIEW_PREP } from '../../app/(app)/opportunities/interview-prep/interview-prep-fixtures';
 import { DraftsRoomClient } from '../../app/(app)/opportunities/drafts/DraftsRoomClient';
 import { DRAFT_OPPORTUNITY, DRAFT_PIPELINE, GROUNDED_DRAFT, THIN_DRAFT } from '../../app/(app)/opportunities/drafts/draft-fixtures';
+import { SkillsRoomClient } from '../../app/(app)/plan/skills/SkillsRoomClient';
+import { EMPTY_SKILL_GAPS, INSUFFICIENT_SKILL_GAPS, POPULATED_SKILL_GAPS, SCOPED_SKILL_GAPS, SKILLS_OPPORTUNITY, SKILLS_PIPELINE } from '../../app/(app)/plan/skills/skills-fixtures';
 import { AppShell } from '../shell';
 import { RoutingRecovery } from '../auth';
 import { ApiError } from '../api/errors';
@@ -67,6 +69,7 @@ const routes: ReadonlyArray<{ name: string; path: string; renderRoute: () => Rea
   { name: 'Interview prep', path: '/opportunities/interview-prep', renderRoute: () => <AppShell><section aria-labelledby="interview-prep-axe-heading"><h1 id="interview-prep-axe-heading">Interview prep</h1><InterviewPrepRoomClient dependencies={{ listApplications: () => Promise.resolve(INTERVIEW_PIPELINE), getOpportunity: () => Promise.resolve(INTERVIEW_OPPORTUNITY), prepare: () => Promise.resolve(GROUNDED_INTERVIEW_PREP) }} /></section></AppShell> },
   { name: 'Drafts', path: '/opportunities/drafts', renderRoute: () => <AppShell><section aria-labelledby="drafts-axe-heading"><h1 id="drafts-axe-heading">Drafts</h1><DraftsRoomClient dependencies={{ listApplications: () => Promise.resolve(DRAFT_PIPELINE), getOpportunity: () => Promise.resolve(DRAFT_OPPORTUNITY), generate: () => Promise.resolve(GROUNDED_DRAFT), copyText: () => Promise.resolve() }} /></section></AppShell> },
   { name: 'Plan', path: '/plan', renderRoute: () => <AppShell><section aria-labelledby="plan-axe-heading"><h1 id="plan-axe-heading">Plan</h1><PlanRoomClient dependencies={{ getPlans: () => Promise.resolve(POPULATED_PLAN) }} /></section></AppShell> },
+  { name: 'Skills', path: '/plan/skills', renderRoute: () => <AppShell><section aria-labelledby="skills-axe-heading"><h1 id="skills-axe-heading">Skills</h1><SkillsRoomClient dependencies={{ listApplications: () => Promise.resolve(SKILLS_PIPELINE), getOpportunity: () => Promise.resolve(SKILLS_OPPORTUNITY), getGaps: () => Promise.resolve(POPULATED_SKILL_GAPS) }} /></section></AppShell> },
   { name: 'You', path: '/you', renderRoute: () => <AppShell><section aria-labelledby="you-heading" className="flex flex-col gap-4"><h1 id="you-heading">You</h1><ResumeStudioClient dependencies={{ getBase: () => Promise.resolve(BASE_RESUME), listApplications: () => Promise.resolve(RESUME_PIPELINE), getOpportunity: () => Promise.resolve(RESUME_OPPORTUNITY), tailor: () => Promise.resolve(GROUNDED_VARIANT), getVariant: () => Promise.resolve(GROUNDED_VARIANT) }} /></section></AppShell> },
   { name: 'Approvals', path: '/approvals', renderRoute: () => <AppShell><section aria-labelledby="approvals-heading"><h1 id="approvals-heading">Approvals</h1><ApprovalsRoomClient dependencies={{ list: () => Promise.resolve(successFixtures.pendingApprovals()), mint: () => Promise.reject(new Error('not exercised by static axe')), edit: () => Promise.reject(new Error('not exercised by static axe')), execute: () => Promise.reject(new Error('not exercised by static axe')), deny: () => Promise.reject(new Error('not exercised by static axe')) }} /></section></AppShell> },
   { name: '/_dev/trust (development)', path: '/_dev/trust', renderRoute: () => <AppShell><TrustKitClient data={{ state: successFixtures.state(), opportunities: successFixtures.opportunities(), match: successFixtures.match(), audit: successFixtures.audit(), briefing: successFixtures.briefing() }} /></AppShell> },
@@ -376,6 +379,68 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
       </AppShell>,
     );
     expect(await screen.findByRole('heading', { name: 'Not enough grounded state for a plan' })).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.4 populated Skills room renders both grounded sources axe-clean and keyboard reachable', async () => {
+    pathname = '/plan/skills';
+    const user = userEvent.setup();
+    const { container } = render(
+      <AppShell>
+        <section aria-labelledby="skills-populated-heading">
+          <h1 id="skills-populated-heading">Skills</h1>
+          <SkillsRoomClient dependencies={{
+            listApplications: () => Promise.resolve(SKILLS_PIPELINE),
+            getOpportunity: () => Promise.resolve(SKILLS_OPPORTUNITY),
+            getGaps: (query) => Promise.resolve(query.opportunityId ? SCOPED_SKILL_GAPS : POPULATED_SKILL_GAPS),
+          }} />
+        </section>
+      </AppShell>,
+    );
+    const picker = await screen.findByRole('combobox', { name: 'Pipeline opportunity' });
+    expect(screen.getByTestId('skill-gap-per_opp')).toHaveTextContent('Real role requirement');
+    expect(screen.getByTestId('skill-gap-aggregate')).toHaveTextContent('Stated target role');
+    picker.focus();
+    await user.selectOptions(picker, SKILLS_OPPORTUNITY.id);
+    expect(await screen.findByTestId('skill-gap-per_opp')).toBeVisible();
+    expect(screen.queryByTestId('skill-gap-aggregate')).not.toBeInTheDocument();
+    screen.getByRole('link', { name: 'Open You' }).focus();
+    await user.tab();
+    expect(screen.getByRole('link', { name: 'Open Plan' })).toHaveFocus();
+    expect(screen.queryByTestId('ai-surface')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /generate|send|submit|approve|execute/i })).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.4 analyzed-empty Skills state is axe-clean and distinct from insufficient data', async () => {
+    pathname = '/plan/skills';
+    const { container } = render(
+      <AppShell>
+        <SkillsRoomClient dependencies={{
+          listApplications: () => Promise.resolve(SKILLS_PIPELINE),
+          getOpportunity: () => Promise.resolve(SKILLS_OPPORTUNITY),
+          getGaps: () => Promise.resolve(EMPTY_SKILL_GAPS),
+        }} />
+      </AppShell>,
+    );
+    expect(await screen.findByRole('heading', { name: 'Analyzed — no gaps found' })).toBeVisible();
+    expect(screen.queryByTestId('insufficient-data')).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.4 insufficient-data Skills state is axe-clean without fabricated gaps', async () => {
+    pathname = '/plan/skills';
+    const { container } = render(
+      <AppShell>
+        <SkillsRoomClient dependencies={{
+          listApplications: () => Promise.resolve(SKILLS_PIPELINE),
+          getOpportunity: () => Promise.resolve(SKILLS_OPPORTUNITY),
+          getGaps: () => Promise.resolve(INSUFFICIENT_SKILL_GAPS),
+        }} />
+      </AppShell>,
+    );
+    expect(await screen.findByRole('heading', { name: 'Not enough to analyze' })).toBeVisible();
+    expect(screen.queryByRole('list', { name: 'Grounded skill gaps' })).not.toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 
