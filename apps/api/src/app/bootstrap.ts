@@ -378,6 +378,7 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
   // contract). Cheap best-effort recompute; failure never fails the caller.
   const dashboardsDeps = buildDashboardDeps({
     prisma,
+    profileReader,
     stateService,
     graph,
     gateway,
@@ -695,6 +696,7 @@ function buildTwinDeps(input: {
  */
 function buildDashboardDeps(input: {
   prisma: PrismaClient;
+  profileReader: PrismaProfileReader;
   stateService: CareerStateService;
   graph: GraphMemoryService;
   gateway: ReturnType<typeof createLlmGateway>;
@@ -742,23 +744,29 @@ function buildDashboardDeps(input: {
     composer: new DashboardComposerAdapter(composerService),
     evidenceResolver: {
       resolve: async (userId: string, refs: string[]) => {
-        // Hydrate refs by looking up graph nodes + plan actions the caller
-        // owns. Any ref that doesn't resolve is returned as-is with kind
-        // `unknown` — the composer already filtered against the allow-list
-        // at write time, so this only trims the label surface.
-        const nodes = await input.graph.listNodes(userId);
+        const [facts, nodes, findings, activePlans] = await Promise.all([
+          input.profileReader.readFacts(userId),
+          input.graph.listNodes(userId),
+          findingsAdapter.readFindings(userId),
+          strategyPlanStore.getActivePlans(userId),
+        ]);
+        const factById = new Map(facts.map((fact) => [fact.ref, fact]));
         const nodeById = new Map(nodes.map((n) => [n.id, n]));
-        const activePlans = await strategyPlanStore.getActivePlans(userId);
+        const findingById = new Map(findings.map((finding) => [finding.id, finding]));
         const actionById = new Map<string, { title: string }>();
         for (const p of activePlans) {
           for (const a of p.actions) actionById.set(a.id, { title: a.title });
         }
         return refs.map((ref) => {
+          const fact = factById.get(ref);
+          if (fact) return { kind: 'profile_fact' as const, id: ref, label: fact.text };
           const node = nodeById.get(ref);
-          if (node) return { ref, kind: node.kind, label: node.label };
+          if (node) return { kind: 'graph_node' as const, id: ref, label: node.label };
+          const finding = findingById.get(ref);
+          if (finding) return { kind: 'research_finding' as const, id: ref, label: finding.claim };
           const action = actionById.get(ref);
-          if (action) return { ref, kind: 'plan_action', label: action.title };
-          return { ref, kind: 'unknown', label: ref };
+          if (action) return { kind: 'plan_action' as const, id: ref, label: action.title };
+          throw new Error(`Dashboard evidence ref no longer resolves: ${ref}`);
         });
       },
     },

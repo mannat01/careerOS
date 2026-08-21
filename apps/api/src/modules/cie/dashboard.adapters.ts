@@ -21,7 +21,6 @@ import type {
 } from '@careeros/memory';
 import type {
   DashboardMetricComposerService,
-  DashboardMetricComposition,
   MetricStatePort,
   MetricGraphPort,
   MetricFindingPort,
@@ -34,12 +33,13 @@ import type {
   MetricPlanAction,
   MetricApplicationOutcome,
 } from '@careeros/cie-metrics';
+import { METRIC_COMPOSER_MODEL_VERSION } from '@careeros/cie-metrics';
 import type {
   StrategyPlanStorePortShape,
   ApplicationStorePortShape,
 } from '@careeros/db';
 import type { ResearchFindingReadPort } from './research.handlers.js';
-import type { DashboardComposerPort } from './dashboard.handlers.js';
+import type { DashboardComposerPort, DashboardComposition } from './dashboard.handlers.js';
 
 // -------------------- MetricStatePort ← CareerStateService --------------------
 
@@ -245,7 +245,11 @@ export class ComposedMetricEvidenceAdapter implements MetricEvidencePort {
 export class DashboardComposerAdapter implements DashboardComposerPort {
   constructor(private readonly service: DashboardMetricComposerService) {}
 
-  compose(userId: string): Promise<DashboardMetricComposition> {
-    return this.service.compose(userId);
+  async compose(userId: string): Promise<DashboardComposition> {
+    const composition = await this.service.compose(userId);
+    return {
+      metrics: composition.metrics,
+      modelVersion: composition.modelVersion ?? METRIC_COMPOSER_MODEL_VERSION,
+    };
   }
 }

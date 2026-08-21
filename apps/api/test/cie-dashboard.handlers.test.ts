@@ -19,41 +19,43 @@ import {
   getDashboardMetric,
   getDashboards,
   recomputeAndPersist,
+  type DashboardCompositionMetric,
   type DashboardComposerPort,
   type DashboardEvidenceResolverPort,
   type DashboardHandlerDeps,
+  type DashboardMetricRecord,
+  type DashboardMetricStorePort,
   type DashboardPlanActionResolverPort,
   type DashboardProfileResolverPort,
+  type PersistDashboardMetric,
 } from '../src/modules/cie/dashboard.handlers.js';
 import { contextFromVerifiedClaims } from '../src/index.js';
-import type {
-  DashboardMetricRecordLike,
-  DashboardMetricStorePortShape,
-  PersistDashboardMetricLike,
-} from '@careeros/db';
-import type { DashboardMetric, DashboardMetricComposition } from '@careeros/cie-metrics';
-import { METRIC_COMPOSER_MODEL_VERSION } from '@careeros/cie-metrics';
+import {
+  dashboardDetailResponseSchema,
+  dashboardListResponseSchema,
+} from '@careeros/contracts';
 
 const USER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PROFILE_A = 'profile-a';
+const MODEL_VERSION = 'metric-composer@1.0.0';
 
 const ctx = (userId: string) =>
   contextFromVerifiedClaims({ userId, traceId: 'trace-m8' });
 
 // -------- fakes --------
 
-class FakeStore implements DashboardMetricStorePortShape {
-  public rows: DashboardMetricRecordLike[] = [];
+class FakeStore implements DashboardMetricStorePort {
+  public rows: DashboardMetricRecord[] = [];
   public writes = 0;
 
   async writeMetrics(
     _profileId: string,
-    metrics: PersistDashboardMetricLike[],
+    metrics: PersistDashboardMetric[],
     computedAt: Date,
-  ): Promise<DashboardMetricRecordLike[]> {
+  ): Promise<DashboardMetricRecord[]> {
     await Promise.resolve();
     this.writes += 1;
-    const persisted: DashboardMetricRecordLike[] = metrics.map((m, i) => ({
+    const persisted: DashboardMetricRecord[] = metrics.map((m, i) => ({
       id: `row-${this.writes}-${i}`,
       metric: m.metric,
       status: m.status,
@@ -69,10 +71,10 @@ class FakeStore implements DashboardMetricStorePortShape {
     this.rows.push(...persisted);
     return persisted;
   }
-  async getLatestForProfile(_profileId: string): Promise<DashboardMetricRecordLike[]> {
+  async getLatestForProfile(_profileId: string): Promise<DashboardMetricRecord[]> {
     await Promise.resolve();
     const seen = new Set<string>();
-    const latest: DashboardMetricRecordLike[] = [];
+    const latest: DashboardMetricRecord[] = [];
     for (const r of [...this.rows].reverse()) {
       if (seen.has(r.metric)) continue;
       seen.add(r.metric);
@@ -84,7 +86,7 @@ class FakeStore implements DashboardMetricStorePortShape {
   async getLatestForMetric(
     _profileId: string,
     metric: string,
-  ): Promise<DashboardMetricRecordLike | null> {
+  ): Promise<DashboardMetricRecord | null> {
     await Promise.resolve();
     for (const r of [...this.rows].reverse()) {
       if (r.metric === metric) return r;
@@ -101,15 +103,15 @@ class FakeProfileResolver implements DashboardProfileResolverPort {
   }
 }
 
-function mkComposer(metrics: DashboardMetric[]): DashboardComposerPort {
+function mkComposer(metrics: DashboardCompositionMetric[]): DashboardComposerPort {
   return {
-    compose(): Promise<DashboardMetricComposition> {
-      return Promise.resolve({ metrics, modelVersion: METRIC_COMPOSER_MODEL_VERSION });
+    compose(): ReturnType<DashboardComposerPort['compose']> {
+      return Promise.resolve({ metrics, modelVersion: MODEL_VERSION });
     },
   };
 }
 
-function mkMetric(over: Partial<DashboardMetric>): DashboardMetric {
+function mkMetric(over: Partial<DashboardCompositionMetric>): DashboardCompositionMetric {
   return {
     key: 'career_momentum',
     status: 'ok',
@@ -117,7 +119,7 @@ function mkMetric(over: Partial<DashboardMetric>): DashboardMetric {
     trend: 'rising',
     explanation: 'You logged 3 shipped features in the last 30 days.',
     evidenceRefs: ['dim:executionCadence'],
-    confidence: 0.8,
+    confidence: 0.83,
     ...over,
   };
 }
@@ -125,7 +127,7 @@ function mkMetric(over: Partial<DashboardMetric>): DashboardMetric {
 const evidenceResolver: DashboardEvidenceResolverPort = {
   async resolve(_userId, refs) {
     await Promise.resolve();
-    return refs.map((ref) => ({ ref, kind: 'state_dimension', label: `label:${ref}` }));
+    return refs.map((ref) => ({ kind: 'profile_fact', id: ref, label: `label:${ref}` }));
   },
 };
 
@@ -156,33 +158,19 @@ describe('getDashboards', () => {
     const deps = mkDeps();
     const res = await getDashboards(ctx(USER_A), deps);
     expect(res.status).toBe(200);
-    const body = (res as { body: { metrics: unknown[]; freshness: unknown; modelVersion: string } })
-      .body as {
-      metrics: Array<{
-        metric: string;
-        status: string;
-        value: number | null;
-        trend: string;
-        explanation: string;
-        evidenceRefs: string[];
-        linkedAction: unknown;
-        confidence: number;
-        modelVersion: string;
-        freshness: { computedAt: string };
-      }>;
-      freshness: { generatedAt: string; oldestComputedAt: string | null };
-      modelVersion: string;
-    };
+    if (res.status !== 200) throw new Error('Expected dashboard list success.');
+    const body = dashboardListResponseSchema.parse(res.body);
     expect(body.metrics).toHaveLength(1);
     const m = body.metrics[0]!;
     expect(m.status).toBe('ok');
     expect(m.value).toBe(72);
     expect(m.trend).toBe('rising');
     expect(m.explanation).toContain('shipped features');
-    expect(m.evidenceRefs).toEqual(['dim:executionCadence']);
+    expect(m.evidenceRefs).toEqual([{ kind: 'profile_fact', id: 'dim:executionCadence' }]);
+    expect(m.confidence).toBe(0.83);
     expect(m.freshness.computedAt).toEqual(expect.any(String));
     expect(body.freshness.oldestComputedAt).toBe(m.freshness.computedAt);
-    expect(body.modelVersion).toBe(METRIC_COMPOSER_MODEL_VERSION);
+    expect(body.modelVersion).toBe(MODEL_VERSION);
   });
 
   it('reads cached rows on subsequent calls (does not recompose)', async () => {
@@ -209,18 +197,19 @@ describe('getDashboards', () => {
           key: 'interview_readiness',
           status: 'insufficient_data',
           value: undefined,
-          confidence: 0.2,
+          confidence: 0.27,
           explanation: 'No interview evidence yet.',
           evidenceRefs: [],
         }),
       ]),
     });
     const res = await getDashboards(ctx(USER_A), deps);
-    const body = (res as { body: { metrics: Array<{ status: string; value: number | null; confidence: number; explanation: string }> } }).body;
+    if (res.status !== 200) throw new Error('Expected dashboard list success.');
+    const body = dashboardListResponseSchema.parse(res.body);
     const m0 = body.metrics[0]!;
     expect(m0.status).toBe('insufficient_data');
     expect(m0.value).toBeNull();
-    expect(m0.confidence).toBeLessThanOrEqual(0.5);
+    expect(m0.confidence).toBe(0.27);
     expect(m0.explanation).toContain('No interview evidence');
   });
 });
@@ -239,10 +228,17 @@ describe('getDashboardMetric', () => {
     });
     const res = await getDashboardMetric(ctx(USER_A), 'career_momentum', deps);
     expect(res.status).toBe(200);
-    const body = (res as { body: { evidence: Array<{ ref: string; kind: string; label: string }>; linkedAction: { id: string; title: string | null } | null } }).body;
+    if (res.status !== 200) throw new Error('Expected dashboard detail success.');
+    const body = dashboardDetailResponseSchema.parse(res.body);
     expect(body.evidence).toHaveLength(2);
     expect(body.evidence[0]!.label).toBe('label:dim:executionCadence');
+    expect(body.evidence[0]).toEqual({
+      kind: 'profile_fact',
+      id: 'dim:executionCadence',
+      label: 'label:dim:executionCadence',
+    });
     expect(body.linkedAction).toEqual({ id: 'action-1', title: 'Ship a portfolio piece' });
+    expect(body.confidence).toBe(0.83);
   });
 
   it('404 on unknown metric key', async () => {
@@ -257,6 +253,28 @@ describe('getDashboardMetric', () => {
     });
     const res = await getDashboardMetric(ctx(USER_A), 'career_momentum', deps);
     expect(res.status).toBe(404);
+  });
+
+  it('preserves insufficient_data and real thin confidence in detail', async () => {
+    const deps = mkDeps({
+      composer: mkComposer([
+        mkMetric({
+          key: 'interview_readiness',
+          status: 'insufficient_data',
+          value: undefined,
+          confidence: 0.31,
+          explanation: 'No interview outcomes are available yet.',
+          evidenceRefs: [],
+        }),
+      ]),
+    });
+    const res = await getDashboardMetric(ctx(USER_A), 'interview_readiness', deps);
+    if (res.status !== 200) throw new Error('Expected dashboard detail success.');
+    const body = dashboardDetailResponseSchema.parse(res.body);
+    expect(body.status).toBe('insufficient_data');
+    expect(body.value).toBeNull();
+    expect(body.confidence).toBe(0.31);
+    expect(body.evidence).toEqual([]);
   });
 });
 

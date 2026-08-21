@@ -25,13 +25,18 @@
  */
 import type { RequestContext } from '../../common/auth/request-context.js';
 import { errorResponse, ok, type HandlerResponse } from '../../common/errors/http-error.js';
-import type {
-  DashboardMetricRecordLike,
-  DashboardMetricStorePortShape,
-  PersistDashboardMetricLike,
-} from '@careeros/db';
-import type { DashboardMetric, DashboardMetricComposition } from '@careeros/cie-metrics';
-import { ALL_METRIC_KEYS, METRIC_COMPOSER_MODEL_VERSION } from '@careeros/cie-metrics';
+import {
+  dashboardDetailResponseSchema,
+  dashboardListResponseSchema,
+  dashboardMetricKeySchema,
+  dashboardMetricSchema,
+  type DashboardDetailResponse,
+  type DashboardListResponse,
+  type DashboardMetric as DashboardMetricContract,
+  type DashboardMetricEvidenceRef,
+  type DashboardMetricKey,
+  type DashboardResolvedEvidence,
+} from '@careeros/contracts';
 
 // ---------------- ports (adapters live in bootstrap) ----------------
 
@@ -40,19 +45,35 @@ export interface DashboardProfileResolverPort {
   resolveProfileId(userId: string): Promise<string | null>;
 }
 
+/** Internal composer output projected structurally; never exposed as the wire shape. */
+export interface DashboardCompositionMetric {
+  key: string;
+  status: 'ok' | 'insufficient_data';
+  value?: number;
+  trend: 'rising' | 'flat' | 'declining';
+  explanation: string;
+  evidenceRefs: string[];
+  linkedPlanActionId?: string;
+  confidence: number;
+}
+
+export interface DashboardComposition {
+  metrics: DashboardCompositionMetric[];
+  modelVersion: string;
+}
+
 /** Compose the caller's dashboard on demand — used by change-hook recompute. */
 export interface DashboardComposerPort {
-  compose(userId: string): Promise<DashboardMetricComposition>;
+  compose(userId: string): Promise<DashboardComposition>;
 }
 
 /**
- * Optional evidence resolver — the drill-down enriches the raw `evidenceRefs`
- * ids into resolved evidence objects the UI can render. If unset the endpoint
- * returns the raw ids (still grounded — the composer already validated them
- * against the allow-list at write time).
+ * Resolve every sanctioned internal id into its typed public source collection
+ * and a human-readable label. The handler strips labels for list references and
+ * retains them for detail evidence.
  */
 export interface DashboardEvidenceResolverPort {
-  resolve(userId: string, refs: string[]): Promise<ResolvedEvidence[]>;
+  resolve(userId: string, refs: string[]): Promise<DashboardResolvedEvidence[]>;
 }
 
 /** Optional plan-action lookup — hydrates the linkedActionId with a title. */
@@ -60,43 +81,50 @@ export interface DashboardPlanActionResolverPort {
   resolveTitle(userId: string, actionId: string): Promise<string | null>;
 }
 
-export interface DashboardHandlerDeps {
-  store: DashboardMetricStorePortShape;
-  profileResolver: DashboardProfileResolverPort;
-  composer: DashboardComposerPort;
-  evidenceResolver?: DashboardEvidenceResolverPort;
-  planActionResolver?: DashboardPlanActionResolverPort;
+/** Persistence input projected structurally from the internal read model. */
+export interface PersistDashboardMetric {
+  metric: string;
+  status: 'ok' | 'insufficient_data';
+  value?: number;
+  trend: 'rising' | 'flat' | 'declining';
+  explanation: string;
+  evidenceRefs: string[];
+  linkedActionId?: string | null;
+  confidence: number;
+  modelVersion: string;
 }
 
-// ---------------- response shapes ----------------
-
-export interface ResolvedEvidence {
-  ref: string;
-  kind: string;
-  label: string;
-}
-
-export interface DashboardMetricResponse {
+/** Persisted internal row. It must be contract-mapped before crossing HTTP. */
+export interface DashboardMetricRecord {
+  id: string;
   metric: string;
   status: 'ok' | 'insufficient_data';
   value: number | null;
   trend: 'rising' | 'flat' | 'declining';
   explanation: string;
   evidenceRefs: string[];
-  linkedAction: { id: string; title: string | null } | null;
+  linkedActionId: string | null;
   confidence: number;
   modelVersion: string;
-  freshness: { computedAt: string };
+  computedAt: string;
 }
 
-export interface DashboardListResponse {
-  metrics: DashboardMetricResponse[];
-  freshness: { generatedAt: string; oldestComputedAt: string | null };
-  modelVersion: string;
+export interface DashboardMetricStorePort {
+  writeMetrics(
+    profileId: string,
+    metrics: PersistDashboardMetric[],
+    computedAt: Date,
+  ): Promise<DashboardMetricRecord[]>;
+  getLatestForProfile(profileId: string): Promise<DashboardMetricRecord[]>;
+  getLatestForMetric(profileId: string, metric: string): Promise<DashboardMetricRecord | null>;
 }
 
-export interface DashboardDetailResponse extends DashboardMetricResponse {
-  evidence: ResolvedEvidence[];
+export interface DashboardHandlerDeps {
+  store: DashboardMetricStorePort;
+  profileResolver: DashboardProfileResolverPort;
+  composer: DashboardComposerPort;
+  evidenceResolver: DashboardEvidenceResolverPort;
+  planActionResolver?: DashboardPlanActionResolverPort;
 }
 
 // ---------------- handlers ----------------
@@ -123,9 +151,15 @@ export async function getDashboards(
     rows = await deps.store.getLatestForProfile(profileId);
   }
 
-  const metrics: DashboardMetricResponse[] = [];
+  if (rows.length === 0) {
+    return errorResponse('not_found', 'Metrics not yet computed for this profile.', {
+      traceId: ctx.traceId,
+    });
+  }
+
+  const metrics: DashboardMetricContract[] = [];
   for (const row of rows) {
-    metrics.push(await enrich(ctx.userId, row, deps, { withPlan: true }));
+    metrics.push(await toContractMetric(ctx.userId, row, deps));
   }
 
   const oldest = rows.reduce<string | null>((acc, r) => {
@@ -133,14 +167,14 @@ export async function getDashboards(
     return r.computedAt < acc ? r.computedAt : acc;
   }, null);
 
-  return ok<DashboardListResponse>({
+  return ok<DashboardListResponse>(dashboardListResponseSchema.parse({
     metrics,
     freshness: {
       generatedAt: new Date().toISOString(),
       oldestComputedAt: oldest,
     },
-    modelVersion: METRIC_COMPOSER_MODEL_VERSION,
-  });
+    modelVersion: rows[0]!.modelVersion,
+  }));
 }
 
 /**
@@ -154,7 +188,8 @@ export async function getDashboardMetric(
   metric: string,
   deps: DashboardHandlerDeps,
 ): Promise<HandlerResponse<DashboardDetailResponse>> {
-  if (!(ALL_METRIC_KEYS as string[]).includes(metric)) {
+  const parsedMetric = dashboardMetricKeySchema.safeParse(metric);
+  if (!parsedMetric.success) {
     return errorResponse('not_found', `Unknown metric key: ${metric}`, {
       details: { metric },
       traceId: ctx.traceId,
@@ -165,10 +200,10 @@ export async function getDashboardMetric(
     return errorResponse('not_found', 'No profile.', { traceId: ctx.traceId });
   }
 
-  let row = await deps.store.getLatestForMetric(profileId, metric);
+  let row = await deps.store.getLatestForMetric(profileId, parsedMetric.data);
   if (!row) {
     await recomputeAndPersist(ctx.userId, profileId, deps);
-    row = await deps.store.getLatestForMetric(profileId, metric);
+    row = await deps.store.getLatestForMetric(profileId, parsedMetric.data);
   }
   if (!row) {
     return errorResponse('not_found', 'Metric not yet computed for this profile.', {
@@ -177,12 +212,10 @@ export async function getDashboardMetric(
     });
   }
 
-  const base = await enrich(ctx.userId, row, deps, { withPlan: true });
-  const evidence = deps.evidenceResolver
-    ? await deps.evidenceResolver.resolve(ctx.userId, row.evidenceRefs)
-    : row.evidenceRefs.map((ref) => ({ ref, kind: 'unknown', label: ref }));
+  const evidence = await deps.evidenceResolver.resolve(ctx.userId, row.evidenceRefs);
+  const base = await toContractMetric(ctx.userId, row, deps, evidence);
 
-  return ok<DashboardDetailResponse>({ ...base, evidence });
+  return ok<DashboardDetailResponse>(dashboardDetailResponseSchema.parse({ ...base, evidence }));
 }
 
 // ---------------- recompute helper (change-hook + first-read fallback) ----------------
@@ -202,24 +235,24 @@ export async function recomputeAndPersist(
   userId: string,
   profileId: string,
   deps: DashboardHandlerDeps,
-): Promise<DashboardMetricRecordLike[]> {
+): Promise<DashboardMetricRecord[]> {
   const composition = await deps.composer.compose(userId);
   const now = new Date();
-  const rows: PersistDashboardMetricLike[] = composition.metrics.map((m) =>
+  const rows: PersistDashboardMetric[] = composition.metrics.map((m) =>
     toPersist(m, composition.modelVersion),
   );
   return deps.store.writeMetrics(profileId, rows, now);
 }
 
-function toPersist(m: DashboardMetric, modelVersion: string | undefined): PersistDashboardMetricLike {
-  const base: PersistDashboardMetricLike = {
+function toPersist(m: DashboardCompositionMetric, modelVersion: string): PersistDashboardMetric {
+  const base: PersistDashboardMetric = {
     metric: m.key,
     status: m.status,
     trend: m.trend,
     explanation: m.explanation,
     evidenceRefs: m.evidenceRefs,
     confidence: m.confidence,
-    modelVersion: modelVersion ?? METRIC_COMPOSER_MODEL_VERSION,
+    modelVersion,
     linkedActionId: m.linkedPlanActionId ?? null,
   };
   if (m.status === 'ok' && typeof m.value === 'number') {
@@ -230,30 +263,33 @@ function toPersist(m: DashboardMetric, modelVersion: string | undefined): Persis
 
 // ---------------- shared serialization ----------------
 
-async function enrich(
+async function toContractMetric(
   userId: string,
-  row: DashboardMetricRecordLike,
+  row: DashboardMetricRecord,
   deps: DashboardHandlerDeps,
-  opts: { withPlan: boolean },
-): Promise<DashboardMetricResponse> {
-  let linkedAction: DashboardMetricResponse['linkedAction'] = null;
+  resolvedEvidence?: DashboardResolvedEvidence[],
+): Promise<DashboardMetricContract> {
+  const metric: DashboardMetricKey = dashboardMetricKeySchema.parse(row.metric);
+  let linkedAction: DashboardMetricContract['linkedAction'] = null;
   if (row.linkedActionId) {
     let title: string | null = null;
-    if (opts.withPlan && deps.planActionResolver) {
+    if (deps.planActionResolver) {
       title = await deps.planActionResolver.resolveTitle(userId, row.linkedActionId);
     }
     linkedAction = { id: row.linkedActionId, title };
   }
-  return {
-    metric: row.metric,
+  const evidence = resolvedEvidence ?? await deps.evidenceResolver.resolve(userId, row.evidenceRefs);
+  const evidenceRefs: DashboardMetricEvidenceRef[] = evidence.map(({ kind, id }) => ({ kind, id }));
+  return dashboardMetricSchema.parse({
+    metric,
     status: row.status,
     value: row.value,
     trend: row.trend,
     explanation: row.explanation,
-    evidenceRefs: row.evidenceRefs,
+    evidenceRefs,
     linkedAction,
     confidence: row.confidence,
     modelVersion: row.modelVersion,
     freshness: { computedAt: row.computedAt },
-  };
+  });
 }
