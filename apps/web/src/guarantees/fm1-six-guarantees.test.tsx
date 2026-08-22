@@ -66,6 +66,17 @@ describe('FM1 CI-BLOCKING SIX-GUARANTEE SUITE', () => {
     expect(skills).not.toHaveProperty('generate');
     expect(skills).not.toHaveProperty('approve');
     expect(skills).not.toHaveProperty('execute');
+    const dashboards = domainsSurface.createDashboardsApi({
+      get: <T,>(): Promise<T> => Promise.resolve({} as T),
+      postGreen: <T,>(): Promise<T> => Promise.reject(new Error('Dashboards cannot execute Green actions.')),
+      postYellow: <T,>(): Promise<T> => Promise.reject(new Error('Dashboards cannot execute Yellow actions.')),
+      patch: <T,>(): Promise<T> => Promise.reject(new Error('Dashboards cannot mutate.')),
+      del: <T,>(): Promise<T> => Promise.reject(new Error('Dashboards cannot delete.')),
+    });
+    expect(Object.keys(dashboards)).toEqual(['list', 'detail']);
+    expect(dashboards).not.toHaveProperty('generate');
+    expect(dashboards).not.toHaveProperty('approve');
+    expect(dashboards).not.toHaveProperty('execute');
   });
 
   it('4/6 approval_required halts Twin streaming—no later token, tool, or reconnect', async () => {

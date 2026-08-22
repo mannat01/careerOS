@@ -21,6 +21,7 @@ import { createInterviewsApi, type InterviewsApi } from './interviews';
 import { createPlansApi, type PlansApi } from './plans';
 import { createDraftsApi, type DraftsApi } from './drafts';
 import { createSkillsApi, type SkillsApi } from './skills';
+import { createDashboardsApi, type DashboardsApi } from './dashboards';
 
 export * from './me';
 export * from './profile';
@@ -36,6 +37,7 @@ export * from './interviews';
 export * from './plans';
 export * from './drafts';
 export * from './skills';
+export * from './dashboards';
 
 export interface Api {
   me: MeApi;
@@ -52,6 +54,7 @@ export interface Api {
   plans: PlansApi;
   drafts: DraftsApi;
   skills: SkillsApi;
+  dashboards: DashboardsApi;
 }
 
 export function createApi(client: ApiClient): Api {
@@ -70,5 +73,6 @@ export function createApi(client: ApiClient): Api {
     plans: createPlansApi(client),
     drafts: createDraftsApi(client),
     skills: createSkillsApi(client),
+    dashboards: createDashboardsApi(client),
   };
 }

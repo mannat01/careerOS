@@ -36,6 +36,8 @@ import { DraftsRoomClient } from '../../app/(app)/opportunities/drafts/DraftsRoo
 import { DRAFT_OPPORTUNITY, DRAFT_PIPELINE, GROUNDED_DRAFT, THIN_DRAFT } from '../../app/(app)/opportunities/drafts/draft-fixtures';
 import { SkillsRoomClient } from '../../app/(app)/plan/skills/SkillsRoomClient';
 import { EMPTY_SKILL_GAPS, INSUFFICIENT_SKILL_GAPS, POPULATED_SKILL_GAPS, SCOPED_SKILL_GAPS, SKILLS_OPPORTUNITY, SKILLS_PIPELINE } from '../../app/(app)/plan/skills/skills-fixtures';
+import { DashboardsRoomClient } from '../../app/(app)/plan/dashboards/DashboardsRoomClient';
+import { CAREER_MOMENTUM_DETAIL, POPULATED_DASHBOARD, THIN_DASHBOARD, detailFor } from '../../app/(app)/plan/dashboards/dashboard-fixtures';
 import { AppShell } from '../shell';
 import { RoutingRecovery } from '../auth';
 import { ApiError } from '../api/errors';
@@ -441,6 +443,63 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
     );
     expect(await screen.findByRole('heading', { name: 'Not enough to analyze' })).toBeVisible();
     expect(screen.queryByRole('list', { name: 'Grounded skill gaps' })).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.5 populated Dashboards room and keyboard-opened resolved evidence are axe-clean', async () => {
+    pathname = '/plan/dashboards';
+    const user = userEvent.setup();
+    const { container } = render(
+      <AppShell>
+        <section aria-labelledby="dashboards-axe-heading">
+          <h1 id="dashboards-axe-heading">Dashboards</h1>
+          <DashboardsRoomClient dependencies={{
+            list: () => Promise.resolve(POPULATED_DASHBOARD),
+            detail: (metric) => Promise.resolve(metric === 'career_momentum'
+              ? CAREER_MOMENTUM_DETAIL
+              : detailFor(POPULATED_DASHBOARD.metrics.find((item) => item.metric === metric)!)),
+          }} />
+        </section>
+      </AppShell>,
+    );
+    const card = await screen.findByTestId('metric-card-career_momentum');
+    const detail = within(card).getByRole('button', { name: 'View resolved evidence for Career momentum' });
+    detail.focus();
+    await user.keyboard('{Enter}');
+    expect(await within(card).findByRole('heading', { name: 'Resolved evidence' })).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.5 insufficient-data metric remains axe-clean and distinct from a real low score', async () => {
+    pathname = '/plan/dashboards';
+    const { container } = render(
+      <AppShell>
+        <DashboardsRoomClient dependencies={{
+          list: () => Promise.resolve(THIN_DASHBOARD),
+          detail: (metric) => Promise.resolve(detailFor(THIN_DASHBOARD.metrics.find((item) => item.metric === metric)!)),
+        }} />
+      </AppShell>,
+    );
+    expect(await screen.findByRole('heading', { name: 'Interview readiness: not enough signal yet' })).toBeVisible();
+    expect(screen.getByTestId('metric-card-networking_strength')).toHaveTextContent('47');
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.5 single-card typed recovery is axe-clean without removing the dashboard', async () => {
+    pathname = '/plan/dashboards';
+    const user = userEvent.setup();
+    const { container } = render(
+      <AppShell>
+        <DashboardsRoomClient dependencies={{
+          list: () => Promise.resolve(POPULATED_DASHBOARD),
+          detail: () => Promise.reject(new ApiError({ code: 'not_found', status: 404, message: 'Metric missing.' })),
+        }} />
+      </AppShell>,
+    );
+    const card = await screen.findByTestId('metric-card-career_momentum');
+    await user.click(within(card).getByRole('button', { name: 'View resolved evidence for Career momentum' }));
+    expect(await within(card).findByTestId('error-recovery')).toHaveAttribute('data-code', 'not_found');
+    expect(screen.getByTestId('metric-card-skill_momentum')).toBeVisible();
     expect(await axe(container)).toHaveNoViolations();
   });
 
