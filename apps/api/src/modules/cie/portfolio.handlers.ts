@@ -1,65 +1,54 @@
-/**
- * /v1/portfolio HTTP handlers — M09 Step 5 public portfolio generation.
- *
- * Autonomy boundary (architecture.md §5 / api-spec.md §Portfolio):
- *   - POST /v1/portfolio           (generate/update draft) → GREEN — the
- *     PortfolioService composes strictly from REAL profile facts + projects +
- *     graph evidence (via ports) and self-verifies zero fabrication before
- *     persist. The draft stays PRIVATE.
- *   - GET  /v1/portfolio           (owner view)            → GREEN — read-only.
- *   - POST /v1/portfolio/publish                           → YELLOW — the
- *     controller wraps this handler in withCapabilityGate('portfolio.publish')
- *     so a valid single-use ApprovalToken is REQUIRED (and the gate audits the
- *     decision) before the handler body ever runs. Publishing freezes the
- *     current draft into `publishedContent` — the ONLY payload public reads
- *     may serve.
- *   - PUBLIC READ (getPublicPortfolio) serves ONLY status='published' rows'
- *     frozen snapshot. PRIVATE BY DEFAULT: a not-yet-published portfolio is
- *     never publicly readable — the lookup itself filters on published.
- *
- * Handlers are DB-free; persistence sits behind the narrow PortfolioStorePort.
- */
+/** Contract-shaped /v1/portfolio handlers with private-by-default publication. */
 import { randomUUID } from 'node:crypto';
-import type { PortfolioContent, PortfolioService } from '@careeros/cie-portfolio';
+import type { PortfolioService } from '@careeros/cie-portfolio';
+import {
+  portfolioContentSchema,
+  portfolioGenerateRequestSchema,
+  portfolioGenerateResponseSchema,
+  portfolioPublishRequestSchema,
+  portfolioPublishResponseSchema,
+  portfolioPublishTokenRequestSchema,
+  portfolioPublishTokenResponseSchema,
+  portfolioResponseSchema,
+  publicPortfolioResponseSchema,
+  type PortfolioContent,
+  type PortfolioGenerateResponse,
+  type PortfolioPublishResponse,
+  type PortfolioPublishTokenResponse,
+  type PortfolioResponse,
+  type PublicPortfolioResponse,
+  type ReadyPortfolioContent,
+} from '@careeros/contracts';
+import { hashPayload, mintApprovalToken, type EnforceDeps } from '@careeros/capability-gate';
+import type { UserAutonomyResolver } from '../../common/capability-gate/gate-interceptor.js';
+import { withCapabilityGate } from '../../common/capability-gate/gate-interceptor.js';
 import type { RequestContext } from '../../common/auth/request-context.js';
 import { errorResponse, ok, type HandlerResponse } from '../../common/errors/http-error.js';
 
-// ---------- DTOs ----------
+export const PORTFOLIO_PUBLISH_ACTION = 'portfolio.publish' as const;
+export const DEFAULT_PORTFOLIO_APPROVAL_TTL_MS = 15 * 60 * 1000;
 
-/** A persisted portfolio row as stored (per-user via userId). */
+/** Internal persistence shape. It must never be returned from an HTTP handler. */
 export interface PortfolioRecord {
   id: string;
   userId: string;
   status: 'private' | 'published';
   slug: string;
-  /** Current generator draft — owner-only until published. */
   content: PortfolioContent;
-  /** Frozen snapshot the public read serves; null until first publish. */
   publishedContent: PortfolioContent | null;
   publishedAt: string | null;
-  modelVersion: string;
   generatedAt: string;
 }
 
-/** Owner view — strips userId (per-user scoping is a server concern). */
-export type PortfolioDto = Omit<PortfolioRecord, 'userId'>;
-
-/** Public view — ONLY the frozen published snapshot + handle. */
-export interface PublicPortfolioDto {
-  slug: string;
-  content: PortfolioContent;
-  publishedAt: string;
-}
-
-// ---------- ports ----------
-
 export interface PortfolioStorePort {
-  /** Upsert the user's single portfolio draft (status untouched on update). */
   upsertDraft(record: PortfolioRecord): Promise<PortfolioRecord>;
   findByUser(userId: string): Promise<PortfolioRecord | null>;
-  /** Freeze the draft: status=published, publishedContent=content snapshot. */
-  publish(userId: string, publishedAt: string): Promise<PortfolioRecord | null>;
-  /** PUBLIC lookup — MUST return only status='published' rows. */
+  /** Atomically freeze only the exact draft that passed token verification. */
+  publishIfContentMatches(
+    userId: string,
+    expectedContentHash: string,
+    publishedAt: string,
+  ): Promise<PortfolioRecord | null>;
   findPublishedBySlug(slug: string): Promise<PortfolioRecord | null>;
 }
 
@@ -67,22 +56,16 @@ export interface PortfolioHandlerDeps {
   service: PortfolioService;
   store: PortfolioStorePort;
   now?: () => Date;
+  approvalTtlMs?: number;
 }
 
-// ---------- in-memory store (until a Prisma PortfolioStore lands) ----------
-
 export class InMemoryPortfolioStore implements PortfolioStorePort {
-  private readonly rows = new Map<string, PortfolioRecord>(); // by userId
+  private readonly rows = new Map<string, PortfolioRecord>();
 
   upsertDraft(record: PortfolioRecord): Promise<PortfolioRecord> {
     const existing = this.rows.get(record.userId);
     const merged: PortfolioRecord = existing
-      ? {
-          ...existing,
-          content: record.content,
-          modelVersion: record.modelVersion,
-          generatedAt: record.generatedAt,
-        }
+      ? { ...existing, content: record.content, generatedAt: record.generatedAt }
       : record;
     this.rows.set(record.userId, merged);
     return Promise.resolve(merged);
@@ -92,9 +75,13 @@ export class InMemoryPortfolioStore implements PortfolioStorePort {
     return Promise.resolve(this.rows.get(userId) ?? null);
   }
 
-  publish(userId: string, publishedAt: string): Promise<PortfolioRecord | null> {
+  publishIfContentMatches(
+    userId: string,
+    expectedContentHash: string,
+    publishedAt: string,
+  ): Promise<PortfolioRecord | null> {
     const row = this.rows.get(userId);
-    if (!row) return Promise.resolve(null);
+    if (!row || hashPayload(row.content) !== expectedContentHash) return Promise.resolve(null);
     const updated: PortfolioRecord = {
       ...row,
       status: 'published',
@@ -107,106 +94,186 @@ export class InMemoryPortfolioStore implements PortfolioStorePort {
 
   findPublishedBySlug(slug: string): Promise<PortfolioRecord | null> {
     for (const row of this.rows.values()) {
-      // PRIVATE BY DEFAULT: only published rows are publicly resolvable.
       if (row.slug === slug && row.status === 'published') return Promise.resolve(row);
     }
     return Promise.resolve(null);
   }
 }
 
-// ---------- POST /v1/portfolio — generate/update draft (GREEN) ----------
-
+/** POST /v1/portfolio — generate/update the caller's private draft. */
 export async function generatePortfolioDraft(
   ctx: RequestContext,
+  body: unknown,
   deps: PortfolioHandlerDeps,
-): Promise<HandlerResponse<PortfolioDto>> {
-  // Green: the service composes from real port-supplied facts and throws
-  // PortfolioIntegrityError if the zero-fabrication oracle rejects — nothing
-  // unverified is ever persisted.
-  const content = await deps.service.generate(ctx.userId);
+): Promise<HandlerResponse<PortfolioGenerateResponse>> {
+  const request = portfolioGenerateRequestSchema.safeParse(body);
+  if (!request.success) return invalid(ctx, 'Invalid portfolio generation request.');
 
-  const now = (deps.now ?? (() => new Date()))();
+  const content = portfolioContentSchema.parse(await deps.service.generate(ctx.userId));
+  const at = now(deps);
   const record = await deps.store.upsertDraft({
     id: randomUUID(),
     userId: ctx.userId,
-    status: 'private', // private by default; only the Yellow publish flips it
+    status: 'private',
     slug: `u-${ctx.userId.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
     content,
     publishedContent: null,
     publishedAt: null,
-    modelVersion: content.modelVersion,
-    generatedAt: now.toISOString(),
+    generatedAt: at.toISOString(),
   });
-  return ok(toDto(record));
+  return ok(portfolioGenerateResponseSchema.parse(toOwnerResponse(record)));
 }
 
-// ---------- GET /v1/portfolio — owner view (GREEN) ----------
-
+/** GET /v1/portfolio — owner-scoped current draft and publication metadata. */
 export async function getOwnPortfolio(
   ctx: RequestContext,
   deps: PortfolioHandlerDeps,
-): Promise<HandlerResponse<PortfolioDto>> {
+): Promise<HandlerResponse<PortfolioResponse>> {
   const record = await deps.store.findByUser(ctx.userId);
-  if (!record) {
-    return errorResponse('not_found', 'No portfolio generated yet.', {
-      details: { hint: 'POST /v1/portfolio to generate a draft.' },
-      traceId: ctx.traceId,
-    });
-  }
-  return ok(toDto(record));
+  if (!record) return noPortfolio(ctx);
+  return ok(portfolioResponseSchema.parse(toOwnerResponse(record)));
 }
 
-// ---------- POST /v1/portfolio/publish (YELLOW — gate runs BEFORE this handler) ----------
+/**
+ * POST /v1/portfolio/publish/mint — deliberate user confirmation over the
+ * exact authoritative draft. It is Green, accepts no content, and never needs
+ * a token merely to mint a token.
+ */
+export async function mintPortfolioPublishToken(
+  ctx: RequestContext,
+  body: unknown,
+  deps: PortfolioHandlerDeps,
+  gate: EnforceDeps,
+): Promise<HandlerResponse<PortfolioPublishTokenResponse>> {
+  const request = portfolioPublishTokenRequestSchema.safeParse(body);
+  if (!request.success) return invalid(ctx, 'Invalid portfolio publish confirmation request.');
+  const record = await deps.store.findByUser(ctx.userId);
+  if (!record) return noPortfolio(ctx);
+  if (record.content.status !== 'ready') return insufficientToPublish(ctx);
+
+  const at = now(deps);
+  const ttlMs = deps.approvalTtlMs ?? DEFAULT_PORTFOLIO_APPROVAL_TTL_MS;
+  const token = await mintApprovalToken({
+    userId: ctx.userId,
+    action: PORTFOLIO_PUBLISH_ACTION,
+    payload: record.content,
+    ttlMs,
+    secret: gate.secret,
+    store: gate.tokenStore,
+    now: () => at.getTime(),
+  });
+  await gate.audit.append({
+    userId: ctx.userId,
+    actor: 'user',
+    action: 'approval.mint',
+    target: PORTFOLIO_PUBLISH_ACTION,
+    reason: 'Single-use token minted for the exact current portfolio content hash.',
+    modelVersion: record.content.modelVersion,
+    traceId: ctx.traceId,
+  });
+  return ok(portfolioPublishTokenResponseSchema.parse({
+    token,
+    expiresAt: new Date(at.getTime() + ttlMs).toISOString(),
+    action: PORTFOLIO_PUBLISH_ACTION,
+    payloadHash: hashPayload(record.content),
+    slug: record.slug,
+    content: record.content,
+  }));
+}
 
 /**
- * Executes AFTER withCapabilityGate('portfolio.publish') has verified +
- * consumed a single-use ApprovalToken (the gate audits the decision).
- * Freezes the current draft into the public snapshot.
+ * POST /v1/portfolio/publish — reload current content, verify and consume the
+ * token against that exact content, then atomically freeze only that content.
  */
 export async function publishPortfolio(
   ctx: RequestContext,
+  body: unknown,
   deps: PortfolioHandlerDeps,
-): Promise<HandlerResponse<PortfolioDto>> {
-  const existing = await deps.store.findByUser(ctx.userId);
-  if (!existing) {
-    return errorResponse('not_found', 'No portfolio to publish — generate a draft first.', {
-      details: { hint: 'POST /v1/portfolio to generate a draft.' },
-      traceId: ctx.traceId,
-    });
-  }
-  const publishedAt = (deps.now ?? (() => new Date()))().toISOString();
-  const updated = await deps.store.publish(ctx.userId, publishedAt);
-  return ok(toDto(updated ?? existing));
+  gate: EnforceDeps,
+  resolveUserTier?: UserAutonomyResolver,
+): Promise<HandlerResponse<PortfolioPublishResponse>> {
+  const request = portfolioPublishRequestSchema.safeParse(body);
+  if (!request.success) return invalid(ctx, 'Invalid portfolio publish request.');
+  const record = await deps.store.findByUser(ctx.userId);
+  if (!record) return noPortfolio(ctx);
+  if (record.content.status !== 'ready') return insufficientToPublish(ctx);
+
+  const content = record.content;
+  const expectedContentHash = hashPayload(content);
+  const gated = withCapabilityGate<ReadyPortfolioContent, PortfolioPublishResponse>(
+    PORTFOLIO_PUBLISH_ACTION,
+    gate,
+    async (gatedCtx) => {
+      const publishedAt = now(deps).toISOString();
+      const updated = await deps.store.publishIfContentMatches(
+        gatedCtx.userId,
+        expectedContentHash,
+        publishedAt,
+      );
+      if (!updated || updated.publishedContent?.status !== 'ready' || updated.publishedAt === null) {
+        return errorResponse('conflict', 'Portfolio changed after confirmation; review and confirm it again.', {
+          details: { reason: 'payload_mismatch' },
+          traceId: gatedCtx.traceId,
+        });
+      }
+      return ok(portfolioPublishResponseSchema.parse({
+        content: updated.publishedContent,
+        publishStatus: 'published',
+        slug: updated.slug,
+        publishedAt: updated.publishedAt,
+        hasPublishedSnapshot: true,
+      }));
+    },
+    resolveUserTier,
+  );
+  return gated(ctx, content);
 }
 
-// ---------- GET /v1/portfolio/public/:slug — public read (published ONLY) ----------
-
-/**
- * Public read: NO auth context — serves ONLY the frozen `publishedContent` of
- * a status='published' portfolio. Unpublished (private) portfolios 404: the
- * store lookup itself filters on published, so private data cannot leak even
- * if the slug is guessed.
- */
+/** GET /v1/portfolio/public/:slug — frozen, published content only. */
 export async function getPublicPortfolio(
   slug: string,
   deps: PortfolioHandlerDeps,
-): Promise<HandlerResponse<PublicPortfolioDto>> {
+): Promise<HandlerResponse<PublicPortfolioResponse>> {
   const record = await deps.store.findPublishedBySlug(slug);
-  if (!record || record.publishedContent === null || record.publishedAt === null) {
-    return errorResponse('not_found', 'Portfolio not found.', {
-      details: { slug },
-    });
+  if (!record || record.publishedContent?.status !== 'ready' || record.publishedAt === null) {
+    return errorResponse('not_found', 'Portfolio not found.', { details: { slug } });
   }
-  return ok({
+  return ok(publicPortfolioResponseSchema.parse({
     slug: record.slug,
     content: record.publishedContent,
     publishedAt: record.publishedAt,
+  }));
+}
+
+function now(deps: PortfolioHandlerDeps): Date {
+  return (deps.now ?? (() => new Date()))();
+}
+
+function toOwnerResponse(record: PortfolioRecord): PortfolioResponse {
+  const hasPublishedSnapshot = record.publishedContent?.status === 'ready' && record.publishedAt !== null;
+  return portfolioResponseSchema.parse({
+    content: record.content,
+    publishStatus: hasPublishedSnapshot ? 'published' : 'private',
+    slug: record.slug,
+    publishedAt: hasPublishedSnapshot ? record.publishedAt : null,
+    hasPublishedSnapshot,
   });
 }
 
-// ---------- helpers ----------
+function invalid(ctx: RequestContext, message: string): HandlerResponse<never> {
+  return errorResponse('validation_failed', message, { traceId: ctx.traceId });
+}
 
-function toDto(record: PortfolioRecord): PortfolioDto {
-  const { userId: _userId, ...dto } = record;
-  return dto;
+function noPortfolio(ctx: RequestContext): HandlerResponse<never> {
+  return errorResponse('not_found', 'No portfolio generated yet.', {
+    details: { hint: 'POST /v1/portfolio to generate a draft.' },
+    traceId: ctx.traceId,
+  });
+}
+
+function insufficientToPublish(ctx: RequestContext): HandlerResponse<never> {
+  return errorResponse('conflict', 'This portfolio has insufficient grounded content to publish.', {
+    details: { reason: 'insufficient_data' },
+    traceId: ctx.traceId,
+  });
 }

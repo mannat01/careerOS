@@ -4,11 +4,9 @@ import {
   generatePortfolioDraft,
   getOwnPortfolio,
   getPublicPortfolio,
+  mintPortfolioPublishToken,
   publishPortfolio,
-  type PortfolioDto,
 } from '../modules/cie/portfolio.handlers.js';
-import { withCapabilityGate } from '../common/capability-gate/gate-interceptor.js';
-import type { RequestContext } from '../common/auth/request-context.js';
 import type { HandlerResponse } from '../common/errors/http-error.js';
 import { BearerAuthGuard, type AuthedRequest } from './bearer-auth.guard.js';
 import { APP_DEPS, type AppDeps } from './deps.js';
@@ -33,8 +31,12 @@ export class PortfolioController {
   constructor(@Inject(APP_DEPS) private readonly deps: AppDeps) {}
 
   @Post()
-  async generate(@Req() req: AuthedRequest, @Res() res: Response): Promise<void> {
-    send(res, await generatePortfolioDraft(req.ctx, this.deps.portfolio));
+  async generate(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+    @Body() body: unknown,
+  ): Promise<void> {
+    send(res, await generatePortfolioDraft(req.ctx, body, this.deps.portfolio));
   }
 
   @Get()
@@ -42,20 +44,28 @@ export class PortfolioController {
     send(res, await getOwnPortfolio(req.ctx, this.deps.portfolio));
   }
 
+  @Post('publish/mint')
+  async mintPublishToken(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+    @Body() body: unknown,
+  ): Promise<void> {
+    send(res, await mintPortfolioPublishToken(req.ctx, body, this.deps.portfolio, this.deps.gate));
+  }
+
   @Post('publish')
   async publish(
     @Req() req: AuthedRequest,
     @Res() res: Response,
-    @Body() _body: unknown,
+    @Body() body: unknown,
   ): Promise<void> {
-    const gated = withCapabilityGate<Record<string, never>, PortfolioDto>(
-      'portfolio.publish',
+    send(res, await publishPortfolio(
+      req.ctx,
+      body,
+      this.deps.portfolio,
       this.deps.gate,
-      (ctx: RequestContext) => publishPortfolio(ctx, this.deps.portfolio),
-      // Honor the user's per-action autonomy override (tightening-only).
       this.deps.userAutonomy,
-    );
-    send(res, await gated(req.ctx, {}));
+    ));
   }
 }
 

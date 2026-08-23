@@ -28,7 +28,10 @@ import type {
 export class MemoryPortfolioProfileAdapter implements PortfolioProfilePort {
   constructor(private readonly profile: ProfileReader) {}
 
-  readProfileHeader(_userId: string): Promise<{ headline?: string; summary?: string }> {
+  readProfileHeader(_userId: string): Promise<{
+    headline?: { text: string; factRefs: string[] };
+    summary?: { text: string; factRefs: string[] };
+  }> {
     // Headline/summary live on the Profile row; ProfileReader exposes facts
     // only, so the generator falls back to empty strings (never invented).
     return Promise.resolve({});

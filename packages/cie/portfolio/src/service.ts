@@ -18,7 +18,7 @@ import type {
 export interface PortfolioProfilePort {
   readProfileHeader(
     userId: string,
-  ): Promise<{ headline?: string; summary?: string }>;
+  ): Promise<{ headline?: { text: string; factRefs: string[] }; summary?: { text: string; factRefs: string[] } }>;
   readProfileFacts(userId: string): Promise<PortfolioFact[]>;
 }
 

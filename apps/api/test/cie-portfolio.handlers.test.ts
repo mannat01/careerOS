@@ -1,274 +1,220 @@
-/**
- * /v1/portfolio handler tests — M09 Step 5.
- *
- * Proves the Stage-9 portfolio invariants at the HTTP boundary:
- *   1. GREEN generate: every rendered item resolves to a real fact (zero
- *      fabrication), and the result is PRIVATE by default.
- *   2. GREEN owner read: per-user scoped.
- *   3. YELLOW publish: withCapabilityGate('portfolio.publish') denies without
- *      an ApprovalToken (audited, nothing published); a valid single-use token
- *      publishes exactly once (replay denied).
- *   4. PRIVATE BY DEFAULT: the public read 404s for unpublished portfolios —
- *      even with the correct slug — and serves ONLY the frozen published
- *      snapshot after publish.
- */
 import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  InMemoryApprovalTokenStore,
-  mintApprovalToken,
-  type EnforceDeps,
-} from '@careeros/capability-gate';
 import { createAuditClient, InMemoryAuditSink } from '@careeros/observability';
-import type { ApiError } from '@careeros/contracts';
+import { InMemoryApprovalTokenStore, type EnforceDeps } from '@careeros/capability-gate';
+import {
+  apiErrorSchema,
+  portfolioGenerateResponseSchema,
+  portfolioPublishResponseSchema,
+  portfolioPublishTokenResponseSchema,
+  portfolioResponseSchema,
+  publicPortfolioResponseSchema,
+  type PortfolioGenerateResponse,
+} from '@careeros/contracts';
 import { PortfolioService } from '@careeros/cie-portfolio';
-import { contextFromVerifiedClaims, withCapabilityGate } from '../src/index.js';
+import { contextFromVerifiedClaims } from '../src/index.js';
 import {
   generatePortfolioDraft,
   getOwnPortfolio,
   getPublicPortfolio,
-  publishPortfolio,
   InMemoryPortfolioStore,
-  type PortfolioDto,
+  mintPortfolioPublishToken,
+  publishPortfolio,
   type PortfolioHandlerDeps,
-  type PublicPortfolioDto,
 } from '../src/modules/cie/portfolio.handlers.js';
 
 const USER_A = 'user-a';
 const USER_B = 'user-b';
 const SECRET = 'portfolio-secret';
-const NOW = new Date('2026-07-22T12:00:00.000Z');
+const NOW = new Date('2026-08-23T12:00:00.000Z');
+const ALLOWED = ['fact-exp-1', 'fact-skill-ts', 'proj-1', 'node-skill-ts'];
 
-const FACTS = [
-  { id: 'fact-exp-1', kind: 'experience' as const, summary: 'Senior Engineer at Acme (2020–2024)' },
-  { id: 'fact-skill-ts', kind: 'skill' as const, summary: 'TypeScript' },
-];
-const PROJECTS = [
-  {
-    id: 'proj-1',
-    name: 'Realtime Analytics Pipeline',
-    description: 'Streaming pipeline processing events at Acme.',
-    skills: ['TypeScript', 'Kafka'],
-  },
-];
-const GRAPH = [
-  { id: 'node-skill-ts', kind: 'skill' as const, label: 'TypeScript' },
-  { id: 'node-outcome-1', kind: 'outcome' as const, label: 'Cut p95 latency', metric: 'p95 -40%' },
-];
-const ALLOWED = [...FACTS.map((f) => f.id), ...PROJECTS.map((p) => p.id), ...GRAPH.map((g) => g.id)];
-
-function makeService(): PortfolioService {
+function makeService(version: { value: number }): PortfolioService {
   return new PortfolioService({
     profile: {
-      readProfileHeader: () =>
-        Promise.resolve({ headline: 'Senior Engineer', summary: 'Backend + platform work.' }),
-      readProfileFacts: () => Promise.resolve(FACTS),
+      readProfileHeader: () => Promise.resolve({
+        headline: { text: `Senior Engineer v${version.value}`, factRefs: ['fact-exp-1'] },
+        summary: { text: 'Backend and platform work.', factRefs: ['fact-exp-1'] },
+      }),
+      readProfileFacts: () => Promise.resolve([
+        { id: 'fact-exp-1', kind: 'experience', summary: 'Senior Engineer at Acme' },
+        { id: 'fact-skill-ts', kind: 'skill', summary: 'TypeScript' },
+      ]),
     },
-    projects: { readProjects: () => Promise.resolve(PROJECTS) },
-    graph: { readGraphEvidence: () => Promise.resolve(GRAPH) },
+    projects: {
+      readProjects: () => Promise.resolve([{
+        id: 'proj-1',
+        name: `Realtime Analytics Pipeline v${version.value}`,
+        description: `Caller-recorded project version ${version.value}.`,
+        skills: ['TypeScript'],
+      }]),
+    },
+    graph: {
+      readGraphEvidence: () => Promise.resolve([
+        { id: 'node-skill-ts', kind: 'skill', label: 'TypeScript' },
+      ]),
+    },
     evidence: { readAllowedFactRefs: () => Promise.resolve(ALLOWED) },
   });
 }
 
-describe('/v1/portfolio handlers (generate Green, publish Yellow, private by default)', () => {
+describe('FM6.6-pre portfolio handlers', () => {
+  let version: { value: number };
   let deps: PortfolioHandlerDeps;
-  let auditSink: InMemoryAuditSink;
-  let tokenStore: InMemoryApprovalTokenStore;
-  let gateDeps: EnforceDeps;
-
+  let gate: EnforceDeps;
   const ctxA = contextFromVerifiedClaims({ userId: USER_A, traceId: 'trace-a', headers: {} });
+  const ctxB = contextFromVerifiedClaims({ userId: USER_B, traceId: 'trace-b', headers: {} });
 
   beforeEach(() => {
+    version = { value: 1 };
     deps = {
-      service: makeService(),
+      service: makeService(version),
       store: new InMemoryPortfolioStore(),
       now: () => NOW,
+      approvalTtlMs: 60_000,
     };
-    auditSink = new InMemoryAuditSink();
-    tokenStore = new InMemoryApprovalTokenStore();
-    gateDeps = {
+    gate = {
       secret: SECRET,
-      tokenStore,
-      audit: createAuditClient({ sink: auditSink, clock: () => NOW }),
+      tokenStore: new InMemoryApprovalTokenStore(),
+      audit: createAuditClient({ sink: new InMemoryAuditSink(), clock: () => NOW }),
       now: () => NOW.getTime(),
     };
   });
 
-  /** The publish route exactly as the controller wires it: gate BEFORE handler. */
-  const publishRoute = () =>
-    withCapabilityGate<Record<string, never>, PortfolioDto>('portfolio.publish', gateDeps, (ctx) =>
-      publishPortfolio(ctx, deps),
-    );
-
-  async function generateOne(): Promise<PortfolioDto> {
-    const res = await generatePortfolioDraft(ctxA, deps);
-    expect(res.status).toBe(200);
-    return res.body as PortfolioDto;
+  async function generate(ctx = ctxA): Promise<PortfolioGenerateResponse> {
+    const response = await generatePortfolioDraft(ctx, {}, deps);
+    expect(response.status).toBe(200);
+    return portfolioGenerateResponseSchema.parse(response.body);
   }
 
-  // ---------- POST /v1/portfolio (GREEN, zero fabrication, private) ----------
+  async function mint(ctx = ctxA) {
+    const response = await mintPortfolioPublishToken(ctx, {}, deps, gate);
+    expect(response.status).toBe(200);
+    return portfolioPublishTokenResponseSchema.parse(response.body);
+  }
 
-  it('generates a draft where every rendered item resolves to a real fact; private by default', async () => {
-    const dto = await generateOne();
+  function withToken(ctx: typeof ctxA, token: string): typeof ctxA {
+    return contextFromVerifiedClaims({
+      userId: ctx.userId,
+      traceId: ctx.traceId,
+      headers: { 'x-approval-token': token },
+    });
+  }
 
-    expect(dto.status).toBe('private'); // private by default
-    expect(dto.publishedContent).toBeNull();
-    expect(dto.publishedAt).toBeNull();
-    expect(dto.content.projects.length).toBeGreaterThan(0);
-    expect(dto.content.skills.length).toBeGreaterThan(0);
-    // Zero-fabrication: every factRef on every rendered item is on the
-    // sanctioned allow-list of REAL fact/project/graph ids.
-    for (const item of dto.content.projects) {
+  it('returns a contract-shaped owner response that is private by default', async () => {
+    const generated = await generate();
+    expect(generated.publishStatus).toBe('private');
+    expect(generated.publishedAt).toBeNull();
+    expect(generated.hasPublishedSnapshot).toBe(false);
+    expect(generated).not.toHaveProperty('userId');
+    expect(generated).not.toHaveProperty('publishedContent');
+    expect(generated.content.status).toBe('ready');
+    if (generated.content.status !== 'ready') throw new Error('Expected ready portfolio.');
+    for (const item of [...generated.content.projects, ...generated.content.skills]) {
       expect(item.factRefs.length).toBeGreaterThan(0);
       for (const ref of item.factRefs) expect(ALLOWED).toContain(ref);
     }
-    for (const s of dto.content.skills) {
-      expect(s.factRefs.length).toBeGreaterThan(0);
-      for (const ref of s.factRefs) expect(ALLOWED).toContain(ref);
-    }
-    // No invented projects: only the real project name renders.
-    for (const item of dto.content.projects) {
-      expect(item.title).toBe('Realtime Analytics Pipeline');
-    }
+
+    const owner = await getOwnPortfolio(ctxA, deps);
+    expect(portfolioResponseSchema.parse(owner.body)).toEqual(generated);
   });
 
-  it('regenerating updates the draft in place without touching publish state', async () => {
-    const first = await generateOne();
-    const second = await generateOne();
-    expect(second.slug).toBe(first.slug); // stable identity across updates
-    expect(second.status).toBe('private');
+  it('unpublished content is not publicly readable even with the exact slug', async () => {
+    const generated = await generate();
+    const response = await getPublicPortfolio(generated.slug, deps);
+    expect(response.status).toBe(404);
+    expect(apiErrorSchema.parse(response.body).error.code).toBe('not_found');
   });
 
-  // ---------- GET /v1/portfolio (GREEN, per-user) ----------
+  it('mints without a prior token and publishes the exact preview once; replay is refused', async () => {
+    const generated = await generate();
+    const withoutToken = await publishPortfolio(ctxA, {}, deps, gate);
+    expect(withoutToken.status).toBe(403);
+    expect((await getPublicPortfolio(generated.slug, deps)).status).toBe(404);
 
-  it('owner view returns own portfolio; another user gets not_found', async () => {
-    await generateOne();
+    const grant = await mint();
+    expect(grant.content).toEqual(generated.content);
+    expect(grant.action).toBe('portfolio.publish');
 
-    const mine = await getOwnPortfolio(ctxA, deps);
-    expect(mine.status).toBe(200);
+    const ctx = withToken(ctxA, grant.token);
+    const publishedResponse = await publishPortfolio(ctx, {}, deps, gate);
+    expect(publishedResponse.status).toBe(200);
+    const published = portfolioPublishResponseSchema.parse(publishedResponse.body);
+    expect(published.content).toEqual(grant.content);
+    expect(published.hasPublishedSnapshot).toBe(true);
 
-    const ctxB = contextFromVerifiedClaims({ userId: USER_B, traceId: 'trace-b', headers: {} });
-    const theirs = await getOwnPortfolio(ctxB, deps);
-    expect(theirs.status).toBe(404);
-    expect((theirs.body as ApiError).error.code).toBe('not_found');
-  });
-
-  // ---------- POST /v1/portfolio/publish (YELLOW) ----------
-
-  it('publish WITHOUT an approval token → capability_denied, nothing published, audited', async () => {
-    const dto = await generateOne();
-
-    const res = await publishRoute()(ctxA, {});
-    expect(res.status).toBe(403);
-    expect((res.body as ApiError).error.code).toBe('capability_denied');
-
-    // Still private — the denial changed nothing.
-    const own = await getOwnPortfolio(ctxA, deps);
-    expect((own.body as PortfolioDto).status).toBe('private');
-
-    // And still not publicly readable.
-    const pub = await getPublicPortfolio(dto.slug, deps);
-    expect(pub.status).toBe(404);
-
-    const audit = auditSink.records();
-    expect(audit).toHaveLength(1);
-    expect(audit[0]).toMatchObject({
-      userId: USER_A,
-      action: 'capability_gate.denied',
-      target: 'portfolio.publish',
-    });
-  });
-
-  it('publish WITH a valid token → published once; replay denied', async () => {
-    const dto = await generateOne();
-    const payload = {};
-    const token = await mintApprovalToken({
-      userId: USER_A,
-      action: 'portfolio.publish',
-      payload,
-      ttlMs: 60_000,
-      secret: SECRET,
-      store: tokenStore,
-      now: () => NOW.getTime(),
-    });
-    const ctx = contextFromVerifiedClaims({
-      userId: USER_A,
-      traceId: 'trace-publish',
-      headers: { 'x-approval-token': token },
-    });
-
-    const res = await publishRoute()(ctx, payload);
-    expect(res.status).toBe(200);
-    const published = res.body as PortfolioDto;
-    expect(published.status).toBe('published');
-    expect(published.publishedAt).toBe(NOW.toISOString());
-    expect(published.publishedContent).not.toBeNull();
-
-    // Single-use token: replaying the exact same approved publish is denied.
-    const replay = await publishRoute()(ctx, payload);
+    const replay = await publishPortfolio(ctx, {}, deps, gate);
     expect(replay.status).toBe(403);
+    expect(apiErrorSchema.parse(replay.body).error.details?.['reason']).toBe('approval_already_consumed');
 
-    // Now (and only now) the public read serves the frozen snapshot.
-    const pub = await getPublicPortfolio(dto.slug, deps);
-    expect(pub.status).toBe(200);
-    const body = pub.body as PublicPortfolioDto;
-    expect(body.slug).toBe(dto.slug);
-    expect(body.content).toEqual(published.publishedContent);
+    const publicView = await getPublicPortfolio(generated.slug, deps);
+    expect(publicView.status).toBe(200);
+    expect(publicPortfolioResponseSchema.parse(publicView.body)).toEqual({
+      slug: generated.slug,
+      content: grant.content,
+      publishedAt: NOW.toISOString(),
+    });
   });
 
-  it('publish with a token but no draft → not_found (gate consumed, nothing to freeze)', async () => {
-    const token = await mintApprovalToken({
-      userId: USER_A,
-      action: 'portfolio.publish',
-      payload: {},
-      ttlMs: 60_000,
-      secret: SECRET,
-      store: tokenStore,
-      now: () => NOW.getTime(),
-    });
-    const ctx = contextFromVerifiedClaims({
-      userId: USER_A,
-      traceId: 'trace-empty',
-      headers: { 'x-approval-token': token },
-    });
-    const res = await publishRoute()(ctx, {});
-    expect(res.status).toBe(404);
-    expect((res.body as ApiError).error.code).toBe('not_found');
+  it('refuses a token after draft regeneration changes the exact content', async () => {
+    await generate();
+    const grant = await mint();
+    version.value = 2;
+    const changed = await generate();
+    expect(changed.content).not.toEqual(grant.content);
+
+    const response = await publishPortfolio(withToken(ctxA, grant.token), {}, deps, gate);
+    expect(response.status).toBe(403);
+    expect(apiErrorSchema.parse(response.body).error.details?.['reason']).toBe('approval_payload_mismatch');
+    const owner = portfolioResponseSchema.parse((await getOwnPortfolio(ctxA, deps)).body);
+    expect(owner.hasPublishedSnapshot).toBe(false);
   });
 
-  // ---------- public read (published ONLY — private by default) ----------
-
-  it('public read 404s for unpublished portfolios even with the correct slug', async () => {
-    const dto = await generateOne();
-    const res = await getPublicPortfolio(dto.slug, deps);
-    expect(res.status).toBe(404);
-    expect((res.body as ApiError).error.code).toBe('not_found');
-  });
-
-  it('public read serves the FROZEN snapshot — later draft edits do not leak', async () => {
-    const dto = await generateOne();
-    const token = await mintApprovalToken({
-      userId: USER_A,
-      action: 'portfolio.publish',
-      payload: {},
-      ttlMs: 60_000,
-      secret: SECRET,
-      store: tokenStore,
-      now: () => NOW.getTime(),
-    });
-    const ctx = contextFromVerifiedClaims({
-      userId: USER_A,
-      traceId: 'trace-freeze',
-      headers: { 'x-approval-token': token },
-    });
-    const published = await publishRoute()(ctx, {});
+  it('post-publish draft edits never leak into the frozen public snapshot', async () => {
+    const generated = await generate();
+    const grant = await mint();
+    const published = await publishPortfolio(withToken(ctxA, grant.token), {}, deps, gate);
     expect(published.status).toBe(200);
-    const snapshot = (published.body as PortfolioDto).publishedContent;
 
-    // Regenerate the draft AFTER publishing — the public read must keep
-    // serving the frozen snapshot, not the new draft.
-    await generateOne();
-    const pub = await getPublicPortfolio(dto.slug, deps);
-    expect(pub.status).toBe(200);
-    expect((pub.body as PublicPortfolioDto).content).toEqual(snapshot);
+    version.value = 2;
+    const edited = await generate();
+    expect(edited.content).not.toEqual(grant.content);
+    expect(edited.hasPublishedSnapshot).toBe(true);
+
+    const publicView = publicPortfolioResponseSchema.parse(
+      (await getPublicPortfolio(generated.slug, deps)).body,
+    );
+    expect(publicView.content).toEqual(grant.content);
+    expect(publicView.content).not.toEqual(edited.content);
+    expect(publicView).not.toHaveProperty('draft');
+    expect(publicView).not.toHaveProperty('hasPublishedSnapshot');
+  });
+
+  it('isolates owner reads and token redemption across users', async () => {
+    const portfolioA = await generate(ctxA);
+    const grantA = await mint(ctxA);
+    const portfolioB = await generate(ctxB);
+    expect(portfolioB.slug).not.toBe(portfolioA.slug);
+
+    const ownerB = portfolioResponseSchema.parse((await getOwnPortfolio(ctxB, deps)).body);
+    expect(ownerB.slug).toBe(portfolioB.slug);
+
+    const crossUser = await publishPortfolio(withToken(ctxB, grantA.token), {}, deps, gate);
+    expect(crossUser.status).toBe(403);
+    expect(apiErrorSchema.parse(crossUser.body).error.details?.['reason']).toBe('approval_wrong_user');
+    expect((await getPublicPortfolio(portfolioA.slug, deps)).status).toBe(404);
+    expect((await getPublicPortfolio(portfolioB.slug, deps)).status).toBe(404);
+  });
+
+  it('rejects client-authored generation, mint, and publish payloads', async () => {
+    expect((await generatePortfolioDraft(ctxA, { userId: USER_B }, deps)).status).toBe(422);
+    await generate();
+    expect((await mintPortfolioPublishToken(ctxA, { content: 'replacement' }, deps, gate)).status).toBe(422);
+    const grant = await mint();
+    expect((await publishPortfolio(
+      withToken(ctxA, grant.token),
+      { content: grant.content },
+      deps,
+      gate,
+    )).status).toBe(422);
   });
 });

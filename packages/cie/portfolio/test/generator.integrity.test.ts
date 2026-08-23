@@ -19,8 +19,8 @@ import {
 } from '../src/index.js';
 
 const INPUT: PortfolioInput = {
-  headline: 'Senior Software Engineer',
-  summary: 'Backend engineer focused on payment systems.',
+  headline: { text: 'Senior Software Engineer', factRefs: ['fact-acme'] },
+  summary: { text: 'Backend engineer focused on payment systems.', factRefs: ['fact-acme'] },
   facts: [
     { id: 'fact-ts', kind: 'skill', summary: 'TypeScript' },
     { id: 'fact-acme', kind: 'experience', summary: 'Senior Engineer at Acme — led checkout-service rewrite' },
@@ -52,7 +52,9 @@ describe('generatePortfolio (deterministic, real-facts-only)', () => {
     const content = generatePortfolio(INPUT);
 
     expect(content.modelVersion).toBe(PORTFOLIO_MODEL_VERSION);
-    expect(content.headline).toBe('Senior Software Engineer');
+    expect(content.status).toBe('ready');
+    if (content.status !== 'ready') throw new Error('Expected grounded portfolio content.');
+    expect(content.headline.text).toBe('Senior Software Engineer');
 
     // Both real projects render, grounded in their real row ids.
     expect(content.projects.map((p) => p.title)).toEqual([
@@ -77,6 +79,7 @@ describe('generatePortfolio (deterministic, real-facts-only)', () => {
       allowedFactRefs: INPUT.allowedFactRefs.filter((r) => r !== 'proj-etl'),
     };
     const content = generatePortfolio(restricted);
+    if (content.status !== 'ready') throw new Error('Expected grounded portfolio content.');
     expect(content.projects.map((p) => p.title)).toEqual(['Checkout Service Rewrite']);
   });
 
@@ -89,10 +92,12 @@ describe('generatePortfolio (deterministic, real-facts-only)', () => {
 
 describe('verifyPortfolio (fabricator caught)', () => {
   it('a fabricated project the user never had is caught', () => {
+    const base = generatePortfolio(INPUT);
+    if (base.status !== 'ready') throw new Error('Expected grounded portfolio content.');
     const fabricated: PortfolioContent = {
-      ...generatePortfolio(INPUT),
+      ...base,
       projects: [
-        ...generatePortfolio(INPUT).projects,
+        ...base.projects,
         {
           title: 'ML Fraud Detection Platform', // the user never built this
           description: 'Built a fraud detection platform serving 10M users.',
@@ -110,6 +115,7 @@ describe('verifyPortfolio (fabricator caught)', () => {
 
   it('a real-looking title citing a real ref of a DIFFERENT project is caught', () => {
     const base = generatePortfolio(INPUT);
+    if (base.status !== 'ready') throw new Error('Expected grounded portfolio content.');
     const relabelled: PortfolioContent = {
       ...base,
       // ref real, title invented
@@ -124,6 +130,7 @@ describe('verifyPortfolio (fabricator caught)', () => {
 
   it('an unevidenced skill is caught; an ungrounded item is caught', () => {
     const base = generatePortfolio(INPUT);
+    if (base.status !== 'ready') throw new Error('Expected grounded portfolio content.');
     const tampered: PortfolioContent = {
       ...base,
       skills: [...base.skills, { skill: 'Rust', factRefs: ['fact-ts'] }],
@@ -155,6 +162,7 @@ describe('PortfolioService (ports only; self-verifying)', () => {
   it('composes a verified portfolio from port-supplied real inputs', async () => {
     const service = new PortfolioService(deps);
     const content = await service.generate('user-1');
+    if (content.status !== 'ready') throw new Error('Expected grounded portfolio content.');
     expect(content.projects).toHaveLength(2);
     expect(verifyPortfolio(INPUT, content).ok).toBe(true);
   });

@@ -33,6 +33,14 @@ import {
 export function generatePortfolio(input: PortfolioInput): PortfolioContent {
   const allowed = new Set(input.allowedFactRefs);
 
+  const groundText = (value: PortfolioInput['headline']): { text: string; factRefs: string[] } => {
+    if (!value || value.text.trim().length === 0) return { text: '', factRefs: [] };
+    const factRefs = value.factRefs.filter((ref) => allowed.has(ref));
+    return factRefs.length > 0 ? { text: value.text.trim(), factRefs } : { text: '', factRefs: [] };
+  };
+  const headline = groundText(input.headline);
+  const summary = groundText(input.summary);
+
   // Projects: only REAL Project rows on the allow-list.
   const projects: PortfolioItem[] = input.projects
     .filter((p) => allowed.has(p.id))
@@ -70,9 +78,18 @@ export function generatePortfolio(input: PortfolioInput): PortfolioContent {
     }),
   );
 
+  if (headline.factRefs.length === 0 && summary.factRefs.length === 0 && projects.length === 0 && skills.length === 0) {
+    return {
+      status: 'insufficient_data',
+      reason: 'No grounded portfolio claims are available yet.',
+      modelVersion: PORTFOLIO_MODEL_VERSION,
+    };
+  }
+
   return {
-    headline: input.headline?.trim() ?? '',
-    summary: input.summary?.trim() ?? '',
+    status: 'ready',
+    headline,
+    summary,
     projects,
     skills,
     modelVersion: PORTFOLIO_MODEL_VERSION,
@@ -97,6 +114,25 @@ export function verifyPortfolio(
 ): PortfolioVerification {
   const allowed = new Set(input.allowedFactRefs);
   const violations: PortfolioViolation[] = [];
+
+  if (content.status === 'insufficient_data') return { ok: true, violations };
+
+  for (const [label, text] of [['headline', content.headline], ['summary', content.summary]] as const) {
+    if (text.text.length > 0 && text.factRefs.length === 0) {
+      violations.push({
+        code: 'ungrounded_item',
+        detail: `Portfolio ${label} cites no factRefs.`,
+      });
+    }
+    for (const ref of text.factRefs) {
+      if (!allowed.has(ref)) {
+        violations.push({
+          code: 'unknown_fact_ref',
+          detail: `Portfolio ${label} cites unknown factRef "${ref}".`,
+        });
+      }
+    }
+  }
 
   const realProjectByRef = new Map(input.projects.map((p) => [p.id, p]));
   const skillEvidence = new Set<string>();

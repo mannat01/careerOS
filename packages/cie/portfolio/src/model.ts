@@ -11,6 +11,13 @@
  * the generator + the data contract the UI will consume.
  */
 
+import type {
+  PortfolioContent as ContractPortfolioContent,
+  PortfolioGroundedText,
+  PortfolioProject as ContractPortfolioProject,
+  PortfolioSkill as ContractPortfolioSkill,
+} from '@careeros/contracts';
+
 export const PORTFOLIO_MODEL_VERSION = 'portfolio@1.0.0';
 
 /** One REAL profile fact (id = the authoritative row/graph id). */
@@ -40,8 +47,8 @@ export interface PortfolioGraphEvidence {
 
 /** Everything the generator may draw from — all REAL, all port-supplied. */
 export interface PortfolioInput {
-  headline?: string;
-  summary?: string;
+  headline?: PortfolioGroundedText;
+  summary?: PortfolioGroundedText;
   facts: PortfolioFact[];
   projects: PortfolioProject[];
   graph: PortfolioGraphEvidence[];
@@ -53,28 +60,10 @@ export interface PortfolioInput {
   allowedFactRefs: string[];
 }
 
-/** One rendered portfolio item. `factRefs` ground it in real facts. */
-export interface PortfolioItem {
-  title: string;
-  description: string;
-  skills: string[];
-  factRefs: string[];
-}
-
-/** One rendered skill entry, grounded in the real fact(s) evidencing it. */
-export interface PortfolioSkillItem {
-  skill: string;
-  factRefs: string[];
-}
-
-/** The composed public-portfolio content — the data contract the UI renders. */
-export interface PortfolioContent {
-  headline: string;
-  summary: string;
-  projects: PortfolioItem[];
-  skills: PortfolioSkillItem[];
-  modelVersion: string;
-}
+/** Public wire shapes are owned by @careeros/contracts, never re-declared here. */
+export type PortfolioItem = ContractPortfolioProject;
+export type PortfolioSkillItem = ContractPortfolioSkill;
+export type PortfolioContent = ContractPortfolioContent;
 
 /** One integrity violation found by the verifier. */
 export interface PortfolioViolation {
