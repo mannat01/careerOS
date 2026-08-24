@@ -1,15 +1,14 @@
 /**
- * Sanitize UNTRUSTED PKM body text before it reaches an LLM prompt, the graph,
- * or the state model. PKM entries are the user's own free-text — but they can
+ * Utility for sanitizing UNTRUSTED PKM body text before it reaches an LLM prompt
+ * or another derived consumer. PKM entries are the user's own free-text, but can
  * still contain accidental or malicious prompt-injection markers (system-role
  * tags, tool-use blocks, fake instructions targeting the twin), or HTML/script
  * fragments pasted from a browser.
  *
  * The sanitizer is deliberately conservative: it strips markup and neutralizes
  * common injection markers, but preserves the user's actual language. It also
- * FLAGS bodies where injection-like patterns were found so the caller can
- * persist `injectionFlagged=true` for audit + downgrade the entry's weight in
- * graph ingest.
+ * FLAGS bodies where injection-like patterns were found so a future derived
+ * consumer can reject or downweight the text without changing the source entry.
  *
  * This mirrors the same defense-in-depth we apply to ingested opportunity /
  * research text (untrusted source text — sanitize before it reaches an LLM).

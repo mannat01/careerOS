@@ -33,6 +33,11 @@ enum Provenance {
   inferred_confirmed
 }
 
+/// PKM provenance is not client-selectable: every entry is authored by its owner.
+enum PkmProvenance {
+  user
+}
+
 enum SkillLevel {
   beginner
   intermediate
@@ -174,10 +179,30 @@ model User {
   applications   Application[]
   briefingRuns   BriefingRun[]
   strategyPlans  StrategyPlan[]
+  pkmEntries     PkmEntry[]
 
   @@map("users")
 
 
+}
+
+/// Private, caller-owned personal knowledge. Provenance is server-controlled:
+/// API writes always use `user`, and the database default protects direct writes.
+model PkmEntry {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title      String
+  body       String
+  tags       String[]   @default([])
+  provenance PkmProvenance @default(user)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("pkm_entries")
 }
 
 model UserSettings {

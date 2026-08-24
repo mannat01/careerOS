@@ -35,6 +35,7 @@ export {
   PrismaSemanticStore,
 } from './stores/prisma-memory-stores.js';
 export { PrismaGraphStore } from './stores/prisma-graph-store.js';
+export { PrismaPkmStore } from './stores/prisma-pkm-store.js';
 export { PrismaOpportunityStore } from './stores/prisma-opportunity-store.js';
 export {
   PrismaOpportunityReadStore,

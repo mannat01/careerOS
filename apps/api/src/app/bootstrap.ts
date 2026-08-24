@@ -29,6 +29,7 @@ import {
   PrismaDashboardMetricStore,
   PrismaSkillGapStore,
   PrismaGapSignalReadStore,
+  PrismaPkmStore,
 } from '@careeros/db';
 
 import { createLlmGateway } from '@careeros/llm-gateway';
@@ -139,7 +140,7 @@ import {
   SettingsOptInAdapter,
 } from '../modules/cie/market-intel.adapters.js';
 import { MarketIntelCompRangeAdapter } from '../modules/cie/negotiation.adapters.js';
-import { InMemoryPkmGraphIngest, InMemoryPkmStore, PkmService } from '@careeros/cie-pkm';
+import { PkmService } from '@careeros/cie-pkm';
 import type {
   ResearchFindingReadPort,
   PersistedResearchFinding,
@@ -163,6 +164,7 @@ import { MinioObjectStorage } from '../common/storage/minio-object-storage.js';
 import { BullMqExportQueue, type ExportQueue } from '../common/queue/export-queue.js';
 import { AgentExtractionAdapter } from '../modules/profile/extractor-adapter.js';
 import { MemoryServiceEventAdapter } from '../modules/profile/memory-adapter.js';
+import { PkmMemoryServiceAdapter } from '../modules/cie/pkm-memory-adapter.js';
 import { makeUserAutonomyResolver } from '../common/capability-gate/user-autonomy-resolver.js';
 import { ApiExceptionFilter } from '../common/errors/api-exception.filter.js';
 
@@ -601,15 +603,13 @@ export function buildDepsFromEnv(env: Env, overrides?: Partial<AppDeps>): AppDep
     },
 
     // M10 Step 5 — Personal Knowledge Management (Green, per-user).
-    // PkmService sanitizes untrusted body BEFORE persist/graph-ingest, tags
-    // derived graph nodes with `pkm:user-authored:<entryId>` provenance, and
-    // atomically purges that contribution on delete. Wired against the DB-free
-    // ports; a Prisma-backed PkmStorePort + graph-ingest adapter is the
-    // follow-up for durable multi-instance deployments (behavior is the same).
+    // Durable Prisma store behind the DB-free PkmStorePort. Identity comes only
+    // from verified context, provenance is fixed to `user`, and every successful
+    // create/update/delete appends a user-decision MemoryEvent.
     pkm: overrides?.pkm ?? {
       pkm: new PkmService({
-        store: new InMemoryPkmStore(),
-        graph: new InMemoryPkmGraphIngest(),
+        store: new PrismaPkmStore(prisma),
+        memory: new PkmMemoryServiceAdapter(memory),
       }),
     },
 

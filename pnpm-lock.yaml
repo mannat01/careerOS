@@ -546,6 +546,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@careeros/cie-pkm':
+        specifier: workspace:*
+        version: link:../cie/pkm
       '@careeros/connectors':
         specifier: workspace:*
         version: link:../connectors

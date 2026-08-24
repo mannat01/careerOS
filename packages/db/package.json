@@ -16,6 +16,7 @@
   "dependencies": {
     "@careeros/connectors": "workspace:*",
     "@careeros/contracts": "workspace:*",
+    "@careeros/cie-pkm": "workspace:*",
     "@careeros/memory": "workspace:*",
     "@prisma/client": "^6.16.2"
   },

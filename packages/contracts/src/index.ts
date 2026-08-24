@@ -8,6 +8,16 @@ export {
 } from './error.js';
 export { autonomyTierSchema, type AutonomyTier } from './autonomy.js';
 export {
+  pkmEntrySchema,
+  pkmCreateRequestSchema,
+  pkmUpdateRequestSchema,
+  pkmListResponseSchema,
+  type PkmEntry,
+  type PkmCreateRequest,
+  type PkmUpdateRequest,
+  type PkmListResponse,
+} from './pkm.js';
+export {
   approvalTokenSchema,
   approvalResourceRefSchema,
   approvalLifecycleStateSchema,

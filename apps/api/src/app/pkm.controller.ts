@@ -1,10 +1,11 @@
-import { Body, Controller, Delete, Get, Inject, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import {
   createPkmEntry,
   deletePkmEntry,
   getPkmEntry,
   listPkmEntries,
+  updatePkmEntry,
 } from '../modules/cie/pkm.handlers.js';
 import type { HandlerResponse } from '../common/errors/http-error.js';
 import { BearerAuthGuard, type AuthedRequest } from './bearer-auth.guard.js';
@@ -17,16 +18,15 @@ function send<T>(res: Response, r: HandlerResponse<T>): void {
 /**
  * /v1/pkm — M10 Step 5 Personal Knowledge Management surface (Green, per-user).
  *
- *   POST   /v1/pkm         — create note/journal/saved (sanitize → persist → graph)
- *   GET    /v1/pkm         — list caller's entries (?kind= optional)
+ *   POST   /v1/pkm         — create a user-authored entry
+ *   GET    /v1/pkm         — list caller's entries
  *   GET    /v1/pkm/:id     — get one (cross-user → 404)
- *   DELETE /v1/pkm/:id     — delete + purge derived graph contribution
+ *   PATCH  /v1/pkm/:id     — update caller-editable fields (cross-user → 404)
+ *   DELETE /v1/pkm/:id     — delete one (cross-user → 404)
  *
  * PER-USER by construction: userId flows from BearerAuthGuard → RequestContext;
- * handlers NEVER trust body/query ids. The PkmService sanitizes untrusted input
- * BEFORE persistence or graph ingest and tags derived nodes with
- * `pkm:user-authored:<entryId>` provenance so downstream consumers (state
- * model, planner) can weight PKM signals honestly.
+ * handlers NEVER trust body/query ids or client-supplied provenance. Successful
+ * mutations append one user-decision MemoryEvent.
  */
 @Controller('v1/pkm')
 @UseGuards(BearerAuthGuard)
@@ -46,6 +46,16 @@ export class PkmController {
   @Get(':id')
   async get(@Req() req: AuthedRequest, @Res() res: Response, @Param('id') id: string): Promise<void> {
     send(res, await getPkmEntry(req.ctx, id, this.deps.pkm));
+  }
+
+  @Patch(':id')
+  async update(
+    @Req() req: AuthedRequest,
+    @Res() res: Response,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ): Promise<void> {
+    send(res, await updatePkmEntry(req.ctx, id, body, this.deps.pkm));
   }
 
   @Delete(':id')

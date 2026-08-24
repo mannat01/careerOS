@@ -153,11 +153,9 @@ export interface AppDeps {
   negotiation: NegotiationHandlerDeps;
   /**
    * M10 Step 5 — Personal Knowledge Management (Green, per-user scoped).
-   * The PkmService sanitizes untrusted user text BEFORE persistence or graph
-   * ingest, tags derived graph nodes with `pkm:user-authored:<entryId>`
-   * provenance, and atomically purges the derived contribution on delete. All
-   * DB access is via narrow ports (PkmStorePort + PkmGraphIngestPort) — never
-   * @careeros/db. Cross-user reads/deletes are impossible by construction.
+   * Durable writes use the narrow PkmStorePort, provenance is fixed to `user`,
+   * and successful mutations append a MemoryEvent. Cross-user reads, updates,
+   * and deletes are impossible by construction.
    */
   pkm: PkmHandlerDeps;
   gate: EnforceDeps;

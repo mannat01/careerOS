@@ -55,6 +55,10 @@ const DEV_IDS = {
     '00000000-0000-4000-8000-000000000051',
     '00000000-0000-4000-8000-000000000052',
   ],
+  pkmEntries: [
+    '00000000-0000-4000-8000-000000000070',
+    '00000000-0000-4000-8000-000000000071',
+  ],
 } as const;
 
 /** Conservative autonomy defaults, mirroring contracts' CONSERVATIVE_AUTONOMY_DEFAULTS. */
@@ -168,6 +172,28 @@ async function seedDevDataset(): Promise<void> {
     },
     update: { autonomyDefaults: DEV_AUTONOMY_DEFAULTS, sourcePrefs: { [sourceKey]: true } },
   });
+
+  const pkmEntries = [
+    {
+      id: DEV_IDS.pkmEntries[0],
+      title: 'Platform engineering notes',
+      body: 'Prefer small, reversible migrations and measure the operational impact.',
+      tags: ['platform', 'architecture'],
+    },
+    {
+      id: DEV_IDS.pkmEntries[1],
+      title: 'Staff engineer reflection',
+      body: 'Increase leverage by clarifying decisions and mentoring across team boundaries.',
+      tags: ['career', 'leadership'],
+    },
+  ];
+  for (const entry of pkmEntries) {
+    await prisma.pkmEntry.upsert({
+      where: { id: entry.id },
+      create: { ...entry, userId: DEV_USER_ID, provenance: 'user' },
+      update: { title: entry.title, body: entry.body, tags: entry.tags, provenance: 'user' },
+    });
+  }
 
   // --- profile -------------------------------------------------------------
   await prisma.profile.upsert({
@@ -447,18 +473,19 @@ async function main(): Promise<void> {
   await seedDevDataset();
 
   const enabled = await prisma.sourceRegistry.findMany({ where: { enabled: true } });
-  const [opportunityCount, matchCount, itemCount, auditCount] = await Promise.all([
+  const [opportunityCount, matchCount, itemCount, auditCount, pkmCount] = await Promise.all([
     prisma.opportunity.count(),
     prisma.matchScore.count({ where: { profileId: DEV_IDS.profile } }),
     prisma.briefingItem.count({ where: { briefingRunId: DEV_IDS.briefingRun } }),
     prisma.auditLog.count({ where: { userId: DEV_USER_ID } }),
+    prisma.pkmEntry.count({ where: { userId: DEV_USER_ID } }),
   ]);
   console.log(
     `seeded: ${SOURCE_REGISTRY_SEED.length} source(s); enabled: ${enabled.map((s) => s.key).join(', ')}`,
   );
   console.log(
     `dev user ${DEV_USER_ID}: ${opportunityCount} opportunit(ies), ${matchCount} match score(s), ` +
-      `${itemCount} briefing item(s), ${auditCount} audit row(s)`,
+      `${itemCount} briefing item(s), ${auditCount} audit row(s), ${pkmCount} PKM entr(ies)`,
   );
 }
 
