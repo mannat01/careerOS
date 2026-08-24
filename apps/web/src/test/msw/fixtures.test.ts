@@ -1,7 +1,7 @@
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { apiErrorSchema, briefingRunDetailSchema, cieStateResponseSchema, meResponseSchema, opportunityListResponseSchema, opportunityMatchResponseSchema, pendingApprovalListResponseSchema, resumeModelSchema, resumeVariantSchema } from '@careeros/contracts';
+import { apiErrorSchema, briefingRunDetailSchema, cieStateResponseSchema, meResponseSchema, opportunityListResponseSchema, opportunityMatchResponseSchema, pendingApprovalListResponseSchema, portfolioResponseSchema, resumeModelSchema, resumeVariantSchema } from '@careeros/contracts';
 import { createContractHandlers } from './handlers';
 import { errorFixtures, parseFixtureForTest, stateFixtures, successFixtures } from './fixtures';
 
@@ -24,6 +24,7 @@ describe('contract-backed MSW fixtures', () => {
     expect(resumeModelSchema.parse(successFixtures.resumeModel())).toBeDefined();
     expect(resumeVariantSchema.parse(successFixtures.resumeVariant()).bullets).toEqual([]);
     expect(pendingApprovalListResponseSchema.parse(successFixtures.pendingApprovals()).data[0]?.why).toContain('exact contents');
+    expect(portfolioResponseSchema.parse(successFixtures.portfolio()).content.status).toBe('ready');
   });
 
   it('serves schema-backed bodies through MSW', async () => {
@@ -36,6 +37,14 @@ describe('contract-backed MSW fixtures', () => {
     const response = await fetch('https://api.example.test/v1/me/bootstrap', { method: 'POST' });
     expect(response.status).toBe(200);
     expect(meResponseSchema.parse(await response.json()).onboarding.status).toBe('complete');
+  });
+
+  it('serves a strict grounded Portfolio owner response through MSW', async () => {
+    const response = await fetch('https://api.example.test/v1/portfolio');
+    expect(response.status).toBe(200);
+    const portfolio = portfolioResponseSchema.parse(await response.json());
+    expect(portfolio.publishStatus).toBe('private');
+    expect(portfolio.content.status).toBe('ready');
   });
 
   it('rejects a malformed fixture before a handler or UI test can consume it', () => {

@@ -9,6 +9,7 @@ import {
   opportunityListResponseSchema,
   opportunityMatchResponseSchema,
   pendingApprovalListResponseSchema,
+  portfolioResponseSchema,
   resumeModelSchema,
   resumeVariantSchema,
   type ApiError,
@@ -20,6 +21,7 @@ import {
   type OpportunityListResponse,
   type OpportunityMatchResponse,
   type PendingApprovalListResponse,
+  type PortfolioResponse,
   type ResumeModel,
   type ResumeVariant,
 } from '@careeros/contracts';
@@ -71,6 +73,20 @@ export const successFixtures = Object.freeze({
       state: 'proposed',
       createdAt: NOW,
     }],
+  }),
+  portfolio: (): PortfolioResponse => portfolioResponseSchema.parse({
+    content: {
+      status: 'ready',
+      headline: { text: 'Grounded portfolio headline', factRefs: ['experience:1'] },
+      summary: { text: 'Built only from recorded work.', factRefs: ['experience:1'] },
+      projects: [{ title: 'Recorded project', description: 'A real project.', skills: ['TypeScript'], factRefs: ['project:1'] }],
+      skills: [{ skill: 'TypeScript', factRefs: ['skill:1'] }],
+      modelVersion: 'portfolio@fake-grounded',
+    },
+    publishStatus: 'private',
+    slug: 'fixture-portfolio',
+    publishedAt: null,
+    hasPublishedSnapshot: false,
   }),
 });
 

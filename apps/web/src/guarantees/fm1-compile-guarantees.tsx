@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AiSurface } from '../trust';
 import type { ApiClient } from '../api/client';
+import { createPortfolioApi } from '../api/domains/portfolio';
 
 /**
  * Compile-fail sentinels are deliberately outside runtime tests. `tsc --noEmit`
@@ -21,4 +22,10 @@ export function fm1CompileFailSentinels(client: ApiClient): void {
 
   // @ts-expect-error FM1 guarantee 2: a plain string cannot forge the brand.
   void client.postYellow('draft.send', '/v1/drafts/1/send', {}, z.unknown(), 'plain-token');
+
+  const portfolio = createPortfolioApi(client);
+  // @ts-expect-error FM6.6 guarantee: Portfolio publish cannot be called without a branded ApprovalToken.
+  void portfolio.publish();
+  // @ts-expect-error FM6.6 guarantee: a plain string cannot forge the Portfolio publish token.
+  void portfolio.publish('plain-token');
 }

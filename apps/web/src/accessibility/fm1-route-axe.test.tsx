@@ -38,6 +38,8 @@ import { SkillsRoomClient } from '../../app/(app)/plan/skills/SkillsRoomClient';
 import { EMPTY_SKILL_GAPS, INSUFFICIENT_SKILL_GAPS, POPULATED_SKILL_GAPS, SCOPED_SKILL_GAPS, SKILLS_OPPORTUNITY, SKILLS_PIPELINE } from '../../app/(app)/plan/skills/skills-fixtures';
 import { DashboardsRoomClient } from '../../app/(app)/plan/dashboards/DashboardsRoomClient';
 import { CAREER_MOMENTUM_DETAIL, POPULATED_DASHBOARD, THIN_DASHBOARD, detailFor } from '../../app/(app)/plan/dashboards/dashboard-fixtures';
+import { PortfolioRoomClient } from '../../app/(app)/you/portfolio/PortfolioRoomClient';
+import { GROUNDED_PORTFOLIO, INSUFFICIENT_PORTFOLIO, PUBLIC_PORTFOLIO, PUBLISH_GRANT, PUBLISHED_PORTFOLIO, UPDATED_PORTFOLIO } from '../../app/(app)/you/portfolio/portfolio-fixtures';
 import { AppShell } from '../shell';
 import { RoutingRecovery } from '../auth';
 import { ApiError } from '../api/errors';
@@ -73,6 +75,7 @@ const routes: ReadonlyArray<{ name: string; path: string; renderRoute: () => Rea
   { name: 'Plan', path: '/plan', renderRoute: () => <AppShell><section aria-labelledby="plan-axe-heading"><h1 id="plan-axe-heading">Plan</h1><PlanRoomClient dependencies={{ getPlans: () => Promise.resolve(POPULATED_PLAN) }} /></section></AppShell> },
   { name: 'Skills', path: '/plan/skills', renderRoute: () => <AppShell><section aria-labelledby="skills-axe-heading"><h1 id="skills-axe-heading">Skills</h1><SkillsRoomClient dependencies={{ listApplications: () => Promise.resolve(SKILLS_PIPELINE), getOpportunity: () => Promise.resolve(SKILLS_OPPORTUNITY), getGaps: () => Promise.resolve(POPULATED_SKILL_GAPS) }} /></section></AppShell> },
   { name: 'You', path: '/you', renderRoute: () => <AppShell><section aria-labelledby="you-heading" className="flex flex-col gap-4"><h1 id="you-heading">You</h1><ResumeStudioClient dependencies={{ getBase: () => Promise.resolve(BASE_RESUME), listApplications: () => Promise.resolve(RESUME_PIPELINE), getOpportunity: () => Promise.resolve(RESUME_OPPORTUNITY), tailor: () => Promise.resolve(GROUNDED_VARIANT), getVariant: () => Promise.resolve(GROUNDED_VARIANT) }} /></section></AppShell> },
+  { name: 'Portfolio', path: '/you/portfolio', renderRoute: () => <AppShell><section aria-labelledby="portfolio-axe-heading"><h1 id="portfolio-axe-heading">Portfolio</h1><PortfolioRoomClient dependencies={{ getOwner: () => Promise.resolve(GROUNDED_PORTFOLIO), generate: () => Promise.resolve(UPDATED_PORTFOLIO), mintPublishToken: () => Promise.resolve(PUBLISH_GRANT), publish: () => Promise.resolve(PUBLISHED_PORTFOLIO), getPublic: () => Promise.resolve(PUBLIC_PORTFOLIO) }} /></section></AppShell> },
   { name: 'Approvals', path: '/approvals', renderRoute: () => <AppShell><section aria-labelledby="approvals-heading"><h1 id="approvals-heading">Approvals</h1><ApprovalsRoomClient dependencies={{ list: () => Promise.resolve(successFixtures.pendingApprovals()), mint: () => Promise.reject(new Error('not exercised by static axe')), edit: () => Promise.reject(new Error('not exercised by static axe')), execute: () => Promise.reject(new Error('not exercised by static axe')), deny: () => Promise.reject(new Error('not exercised by static axe')) }} /></section></AppShell> },
   { name: '/_dev/trust (development)', path: '/_dev/trust', renderRoute: () => <AppShell><TrustKitClient data={{ state: successFixtures.state(), opportunities: successFixtures.opportunities(), match: successFixtures.match(), audit: successFixtures.audit(), briefing: successFixtures.briefing() }} /></AppShell> },
 ];
@@ -500,6 +503,88 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
     await user.click(within(card).getByRole('button', { name: 'View resolved evidence for Career momentum' }));
     expect(await within(card).findByTestId('error-recovery')).toHaveAttribute('data-code', 'not_found');
     expect(screen.getByTestId('metric-card-skill_momentum')).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.6 grounded Portfolio and keyboard-opened exact public preview are axe-clean and explicit-confirmation gated', async () => {
+    pathname = '/you/portfolio';
+    const user = userEvent.setup();
+    const publish = vi.fn(() => Promise.resolve(PUBLISHED_PORTFOLIO));
+    const { container } = render(
+      <AppShell>
+        <section aria-labelledby="portfolio-grounded-axe-heading">
+          <h1 id="portfolio-grounded-axe-heading">Portfolio</h1>
+          <PortfolioRoomClient dependencies={{
+            getOwner: () => Promise.resolve(GROUNDED_PORTFOLIO),
+            generate: () => Promise.resolve(UPDATED_PORTFOLIO),
+            mintPublishToken: () => Promise.resolve(PUBLISH_GRANT),
+            publish,
+            getPublic: () => Promise.resolve(PUBLIC_PORTFOLIO),
+          }} />
+        </section>
+      </AppShell>,
+    );
+    const open = await screen.findByRole('button', { name: 'Publish' });
+    open.focus();
+    await user.keyboard('{Enter}');
+    const dialog = await screen.findByRole('dialog', { name: "Here's exactly what will become public" });
+    expect(within(dialog).getByRole('button', { name: 'Keep private' })).toHaveFocus();
+    expect(dialog).toHaveTextContent('project:deploy-safety');
+    expect(publish).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('ai-surface')).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.6 insufficient-data Portfolio is axe-clean and unpublishable', async () => {
+    pathname = '/you/portfolio';
+    const mintPublishToken = vi.fn(() => Promise.reject(new Error('must not mint')));
+    const { container } = render(
+      <AppShell>
+        <PortfolioRoomClient dependencies={{
+          getOwner: () => Promise.resolve(INSUFFICIENT_PORTFOLIO),
+          generate: () => Promise.resolve(INSUFFICIENT_PORTFOLIO),
+          mintPublishToken,
+          publish: () => Promise.reject(new Error('must not publish')),
+          getPublic: () => Promise.reject(new ApiError({ code: 'not_found', status: 404, message: 'Not published.' })),
+        }} />
+      </AppShell>,
+    );
+    expect(await screen.findByRole('heading', { name: 'Portfolio draft: not enough grounded data' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled();
+    expect(mintPublishToken).not.toHaveBeenCalled();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.6 publish mismatch and public-only boundary recoveries are axe-clean', async () => {
+    pathname = '/you/portfolio';
+    const user = userEvent.setup();
+    const getOwner = vi.fn().mockResolvedValueOnce(GROUNDED_PORTFOLIO).mockResolvedValue(UPDATED_PORTFOLIO);
+    const publish = vi.fn(() => Promise.reject(new ApiError({
+      code: 'capability_denied',
+      status: 403,
+      message: 'Portfolio content changed.',
+      details: { action: 'portfolio.publish', reason: 'approval_payload_mismatch' },
+    })));
+    const getPublic = vi.fn(() => Promise.reject(new ApiError({ code: 'not_found', status: 404, message: 'Not published.' })));
+    const { container } = render(
+      <AppShell>
+        <PortfolioRoomClient dependencies={{
+          getOwner,
+          generate: () => Promise.resolve(UPDATED_PORTFOLIO),
+          mintPublishToken: () => Promise.resolve(PUBLISH_GRANT),
+          publish,
+          getPublic,
+        }} />
+      </AppShell>,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Publish' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Confirm publish' }));
+    expect(await screen.findByRole('heading', { name: 'The draft changed — confirm it again' })).toBeVisible();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Check public view' }));
+    const publicBoundary = await screen.findByTestId('public-not-published');
+    expect(publicBoundary).toHaveTextContent('No owner draft or private profile data is shown here.');
+    expect(publicBoundary).not.toHaveTextContent('Updated platform engineer');
     expect(await axe(container)).toHaveNoViolations();
   });
 

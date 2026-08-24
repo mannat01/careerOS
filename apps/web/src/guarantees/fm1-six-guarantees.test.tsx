@@ -36,6 +36,7 @@ describe('FM1 CI-BLOCKING SIX-GUARANTEE SUITE', () => {
     // Compile-fail proof is adjacent; runtime surface has exactly one Yellow primitive.
     expect(typeof apiSurface.createApiClient).toBe('function');
     expect(typeof apiSurface.unsafe_brandApprovalToken).toBe('function');
+    expect(typeof domainsSurface.createPortfolioApi).toBe('function');
   });
 
   it('3/6 no Red-tier client execution function exists', () => {
@@ -77,6 +78,16 @@ describe('FM1 CI-BLOCKING SIX-GUARANTEE SUITE', () => {
     expect(dashboards).not.toHaveProperty('generate');
     expect(dashboards).not.toHaveProperty('approve');
     expect(dashboards).not.toHaveProperty('execute');
+    const portfolio = domainsSurface.createPortfolioApi({
+      get: <T,>(): Promise<T> => Promise.resolve({} as T),
+      postGreen: <T,>(): Promise<T> => Promise.resolve({} as T),
+      postYellow: <T,>(): Promise<T> => Promise.resolve({} as T),
+      patch: <T,>(): Promise<T> => Promise.reject(new Error('Portfolio cannot PATCH.')),
+      del: <T,>(): Promise<T> => Promise.reject(new Error('Portfolio cannot DELETE.')),
+    });
+    expect(Object.keys(portfolio)).toEqual(['getOwner', 'generate', 'mintPublishToken', 'publish', 'getPublic']);
+    expect(portfolio).not.toHaveProperty('unpublish');
+    expect(portfolio).not.toHaveProperty('saveContent');
   });
 
   it('4/6 approval_required halts Twin streaming—no later token, tool, or reconnect', async () => {
