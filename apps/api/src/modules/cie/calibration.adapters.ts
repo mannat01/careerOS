@@ -22,13 +22,12 @@
 import {
   CalibrationService,
   applyFeedback,
-  type CalibrationFeedback,
-  type CalibrationReport,
   type RealizedRecommendation,
   type RealizedRecommendationPort,
 } from '@careeros/cie-calibration';
 import type { ReasonerCalibrationPort } from '@careeros/cie-reasoning';
 import type {
+  CalibrationComputation,
   CalibrationComputePort,
 } from './calibration.handlers.js';
 
@@ -40,10 +39,7 @@ import type {
 export class CalibrationComputeAdapter implements CalibrationComputePort {
   constructor(private readonly service: CalibrationService) {}
 
-  async computeForUser(userId: string): Promise<{
-    report: CalibrationReport;
-    feedback: CalibrationFeedback;
-  }> {
+  async computeForUser(userId: string): Promise<CalibrationComputation> {
     return this.service.computeForUser(userId);
   }
 }
@@ -71,9 +67,9 @@ export class CalibrationReasonerFeedbackAdapter implements ReasonerCalibrationPo
 /**
  * STUB(M10) realized-recommendation port. A persisted Recommendation + outcome
  * store lands in a follow-up; until then this returns NO realized rows, so the
- * report honestly says `sampleSize: 0` (calibrationScore = 1 by the "no
- * evidence of miscalibration" convention) rather than inventing outcomes, and
- * the reasoner feedback is a no-op (adjustment 0). Wiring the Prisma-backed
+ * public endpoint honestly returns `insufficient_data` and omits calibration
+ * figures rather than exposing the analyzer's empty-set arithmetic convention;
+ * reasoner feedback remains a no-op (adjustment 0). Wiring the Prisma-backed
  * adapter replaces this without touching the service, handler, or reasoner.
  */
 export class EmptyRealizedRecommendationPort implements RealizedRecommendationPort {

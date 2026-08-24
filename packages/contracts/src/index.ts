@@ -184,6 +184,20 @@ export {
   type DashboardDetailResponse,
 } from './dashboard.js';
 export {
+  calibrationBucketSchema,
+  domainCalibrationSchema,
+  calibrationFeedbackSchema,
+  measuredCalibrationReportSchema,
+  insufficientCalibrationReportSchema,
+  calibrationResponseSchema,
+  type CalibrationBucket,
+  type DomainCalibration,
+  type CalibrationFeedback,
+  type MeasuredCalibrationReport,
+  type InsufficientCalibrationReport,
+  type CalibrationResponse,
+} from './calibration.js';
+export {
   planHorizonSchema,
   planActionKindSchema,
   planActionStatusSchema,
