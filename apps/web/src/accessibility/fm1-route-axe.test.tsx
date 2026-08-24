@@ -40,6 +40,8 @@ import { DashboardsRoomClient } from '../../app/(app)/plan/dashboards/Dashboards
 import { CAREER_MOMENTUM_DETAIL, POPULATED_DASHBOARD, THIN_DASHBOARD, detailFor } from '../../app/(app)/plan/dashboards/dashboard-fixtures';
 import { PortfolioRoomClient } from '../../app/(app)/you/portfolio/PortfolioRoomClient';
 import { GROUNDED_PORTFOLIO, INSUFFICIENT_PORTFOLIO, PUBLIC_PORTFOLIO, PUBLISH_GRANT, PUBLISHED_PORTFOLIO, UPDATED_PORTFOLIO } from '../../app/(app)/you/portfolio/portfolio-fixtures';
+import { CalibrationRoomClient } from '../../app/(app)/plan/calibration/CalibrationRoomClient';
+import { INSUFFICIENT_CALIBRATION, MEASURED_CALIBRATION } from '../../app/(app)/plan/calibration/calibration-fixtures';
 import { AppShell } from '../shell';
 import { RoutingRecovery } from '../auth';
 import { ApiError } from '../api/errors';
@@ -503,6 +505,48 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
     await user.click(within(card).getByRole('button', { name: 'View resolved evidence for Career momentum' }));
     expect(await within(card).findByTestId('error-recovery')).toHaveAttribute('data-code', 'not_found');
     expect(screen.getByTestId('metric-card-skill_momentum')).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.7 measured Calibration reliability tables and advisory links are axe-clean', async () => {
+    pathname = '/plan/calibration';
+    const { container } = render(
+      <AppShell>
+        <section aria-labelledby="calibration-measured-axe-heading">
+          <h1 id="calibration-measured-axe-heading">Calibration</h1>
+          <CalibrationRoomClient dependencies={{ getCalibration: () => Promise.resolve(MEASURED_CALIBRATION) }} />
+        </section>
+      </AppShell>,
+    );
+    expect(await screen.findByRole('table', { name: 'Overall reliability bins: parsed predicted-confidence and observed-accuracy values' })).toBeVisible();
+    expect(screen.getByRole('table', { name: 'apply reliability bins: parsed predicted-confidence and observed-accuracy values' })).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.7 insufficient-data Calibration is axe-clean without measured figures', async () => {
+    pathname = '/plan/calibration';
+    const { container } = render(
+      <AppShell>
+        <CalibrationRoomClient dependencies={{ getCalibration: () => Promise.resolve(INSUFFICIENT_CALIBRATION) }} />
+      </AppShell>,
+    );
+    expect(await screen.findByText('not enough outcomes yet to measure calibration')).toBeVisible();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByText('Expected calibration error')).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.7 typed Calibration recovery remains axe-clean with retry and navigation', async () => {
+    pathname = '/plan/calibration';
+    const { container } = render(
+      <AppShell>
+        <CalibrationRoomClient dependencies={{
+          getCalibration: () => Promise.reject(new ApiError({ code: 'internal', message: 'Calibration unavailable.', traceId: 'trace-calibration-axe' })),
+        }} />
+      </AppShell>,
+    );
+    expect(await screen.findByTestId('error-recovery')).toHaveAttribute('data-code', 'internal');
+    expect(screen.getByRole('link', { name: 'Open Plan' })).toBeVisible();
     expect(await axe(container)).toHaveNoViolations();
   });
 

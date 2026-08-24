@@ -3,6 +3,7 @@ import {
   apiErrorSchema,
   auditListResponseSchema,
   briefingRunDetailSchema,
+  calibrationResponseSchema,
   cieStateResponseSchema,
   makeApiError,
   meResponseSchema,
@@ -15,6 +16,7 @@ import {
   type ApiError,
   type AuditListResponse,
   type BriefingRunDetail,
+  type CalibrationResponse,
   type CieStateResponse,
   type ErrorCode,
   type MeResponse,
@@ -88,6 +90,30 @@ export const successFixtures = Object.freeze({
     publishedAt: null,
     hasPublishedSnapshot: false,
   }),
+  calibration: (): CalibrationResponse => calibrationResponseSchema.parse({
+    status: 'measured',
+    report: {
+      sampleSize: 10,
+      bins: [{ lower: 0.8, upper: 0.9, count: 10, meanConfidence: 0.85, observedAccuracy: 0.6 }],
+      expectedCalibrationError: 0.25,
+      calibrationScore: 0.75,
+      domains: [{
+        domain: 'apply',
+        sampleSize: 10,
+        bins: [{ lower: 0.8, upper: 0.9, count: 10, meanConfidence: 0.85, observedAccuracy: 0.6 }],
+        expectedCalibrationError: 0.25,
+        calibrationScore: 0.75,
+        feedbackAdjustment: -0.29411764705882354,
+      }],
+      modelVersion: 'calibration@fake-deterministic',
+      computedAt: NOW,
+    },
+    feedback: {
+      byDomain: { apply: -0.29411764705882354 },
+      overall: -0.29411764705882354,
+      modelVersion: 'calibration@fake-deterministic',
+    },
+  }),
 });
 
 export const stateFixtures = Object.freeze({
@@ -99,6 +125,11 @@ export const stateFixtures = Object.freeze({
     id: 'briefing-partial', userId: USER_ID, trigger: 'scheduled', status: 'partial', inputs: {}, costTotal: 0.01, startedAt: NOW, finishedAt: NOW,
     steps: [{ name: 'score', status: 'ok', costUsd: 0.01, traceId: 'trace-score', startedAt: NOW, finishedAt: NOW, itemsProduced: 1 }, { name: 'draft', status: 'failed', costUsd: 0, traceId: 'trace-draft', startedAt: NOW, finishedAt: NOW, itemsProduced: 0, error: 'temporary failure', retryable: true }],
     items: [{ id: 'item-composed', kind: 'opportunity', refId: 'opportunity-1', autonomyTier: 'green', state: 'proposed', payload: { title: 'Composed before failure' }, createdAt: NOW }],
+  }),
+  insufficientCalibration: (): CalibrationResponse => calibrationResponseSchema.parse({
+    status: 'insufficient_data',
+    report: { sampleSize: 0, modelVersion: 'calibration@fake-deterministic', computedAt: NOW },
+    feedback: { byDomain: {}, overall: 0, modelVersion: 'calibration@fake-deterministic' },
   }),
 });
 

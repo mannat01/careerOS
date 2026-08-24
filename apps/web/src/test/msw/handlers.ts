@@ -11,6 +11,11 @@ export function createContractHandlers(scenario: FixtureScenario = 'success'): H
     http.get('*/v1/opportunities', () => HttpResponse.json(successFixtures.opportunities())),
     http.get('*/v1/opportunities/:id/match', () => HttpResponse.json(successFixtures.match())),
     http.get('*/v1/portfolio', () => HttpResponse.json(successFixtures.portfolio())),
+    http.get('*/v1/cie/calibration', () => HttpResponse.json(
+      scenario === 'insufficient-data'
+        ? stateFixtures.insufficientCalibration()
+        : successFixtures.calibration(),
+    )),
   ];
 
   if (scenario === 'insufficient-data') handlers.push(http.get('*/v1/cie/state', () => HttpResponse.json(stateFixtures.insufficientData())));

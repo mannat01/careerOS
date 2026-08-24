@@ -78,6 +78,17 @@ describe('FM1 CI-BLOCKING SIX-GUARANTEE SUITE', () => {
     expect(dashboards).not.toHaveProperty('generate');
     expect(dashboards).not.toHaveProperty('approve');
     expect(dashboards).not.toHaveProperty('execute');
+    const calibration = domainsSurface.createCalibrationApi({
+      get: <T,>(): Promise<T> => Promise.resolve({} as T),
+      postGreen: <T,>(): Promise<T> => Promise.reject(new Error('Calibration cannot execute Green actions.')),
+      postYellow: <T,>(): Promise<T> => Promise.reject(new Error('Calibration cannot execute Yellow actions.')),
+      patch: <T,>(): Promise<T> => Promise.reject(new Error('Calibration cannot mutate.')),
+      del: <T,>(): Promise<T> => Promise.reject(new Error('Calibration cannot delete.')),
+    });
+    expect(Object.keys(calibration)).toEqual(['get']);
+    expect(calibration).not.toHaveProperty('generate');
+    expect(calibration).not.toHaveProperty('approve');
+    expect(calibration).not.toHaveProperty('execute');
     const portfolio = domainsSurface.createPortfolioApi({
       get: <T,>(): Promise<T> => Promise.resolve({} as T),
       postGreen: <T,>(): Promise<T> => Promise.resolve({} as T),

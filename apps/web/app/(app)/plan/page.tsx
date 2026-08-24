@@ -11,6 +11,7 @@ export default function PlanPage(): JSX.Element {
         <nav aria-label="Plan analysis rooms" className="mt-3 flex flex-wrap gap-4 text-sm font-semibold">
           <Link href="/plan/skills" className="text-brand-base underline focus-visible:ring-2 focus-visible:ring-brand-base">Open Skills analysis</Link>
           <Link href="/plan/dashboards" className="text-brand-base underline focus-visible:ring-2 focus-visible:ring-brand-base">Open Dashboards</Link>
+          <Link href="/plan/calibration" className="text-brand-base underline focus-visible:ring-2 focus-visible:ring-brand-base">Open Calibration</Link>
         </nav>
       </header>
       <PlanRoomClient />
