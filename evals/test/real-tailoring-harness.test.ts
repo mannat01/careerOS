@@ -25,7 +25,33 @@ describe('real tailoring measurement harness', () => {
     });
     expect(sample.structuralCatches).toBe(1);
     expect(sample.lexicalCatches).toBe(1);
+    expect(sample.survivedRephrasingCount).toBe(0);
+    expect(sample.fallbackProposalCount).toBe(1);
+    expect(sample.rephrasingSurvivalRate).toBe(0);
+    expect(sample.fallbackRate).toBe(1);
     expect(sample.fabricationLeaks).toEqual([]);
+  });
+
+  it('distinguishes a surviving extractive rephrasing from verbatim and fallback proposals', () => {
+    const c = loadTailoringCases().find((item) => item.id === 'tl-11-adv-demands-kubernetes');
+    expect(c).toBeDefined();
+    if (!c) return;
+    const fact = c.profile.find((item) => item.id === 'f2')!;
+    const bullet = { factId: 'f2', text: 'Docker — containerized 6 services' };
+    const rendered = renderVariant([bullet]);
+    const sample = scoreRealTailoringSample({
+      c, run: 1, response, latencyMs: 100,
+      rawText: JSON.stringify({ bullets: [bullet] }),
+      produced: {
+        bullets: [bullet], rendered, diff: { selected: ['f2'], dropped: [], rephrased: [{ factId: 'f2', from: fact.summary, to: bullet.text }] },
+        rationale: 'grounded', atsCheck: atsCheck(rendered), modelVersion: 'test',
+      },
+    });
+    expect(sample.survivedRephrasingCount).toBe(1);
+    expect(sample.verbatimProposalCount).toBe(0);
+    expect(sample.fallbackProposalCount).toBe(0);
+    expect(sample.rephrasingSurvivalRate).toBe(1);
+    expect(sample.fallbackRate).toBe(0);
   });
 
   it('reports an unfaithful surviving rephrasing as a fabrication leak', () => {
@@ -52,6 +78,8 @@ describe('real tailoring measurement harness', () => {
     const base = {
       run: 1, relevance: 1, matchedRelevantCount: 4, expectedRelevantCount: 4,
       producedCount: 4, rephrasedCount: 1, faithfulRephrasedCount: 1, rephrasingFaithfulness: 1,
+      rawEligibleProposalCount: 4, survivedRephrasingCount: 1, verbatimProposalCount: 3,
+      fallbackProposalCount: 0, rephrasingSurvivalRate: 1, fallbackRate: 0,
       structuralCatches: 0, lexicalCatches: 0, guardrailCaught: 0, fabricationLeaks: [],
       atsPresent: true, atsValid: true, latencyMs: 100, inputTokens: 10, outputTokens: 5,
       costUsd: 0.001, outputSignature: 'a', parseValid: true,

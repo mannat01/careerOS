@@ -16,7 +16,8 @@
 import { describe, expect, it } from 'vitest';
 import { FakeLlmProvider, createLlmGateway } from '@careeros/llm-gateway';
 import { LlmMatchScorerAgent, LlmTailorAgent } from './agent.js';
-import { REQUIRED_SUBSCORE_KEYS, atsCheck } from './io.js';
+import { REQUIRED_SUBSCORE_KEYS, atsCheck, isTextGrounded } from './io.js';
+import { TAILOR_PROMPT_VERSION, TAILOR_SYSTEM_PROMPT } from './prompt.js';
 import type { JobDescription, TailorProfileFact } from './model.js';
 
 /** Build the real agent whose fake frontier LLM returns exactly `proposal`. */
@@ -45,6 +46,41 @@ const DOCKER_PROFILE: TailorProfileFact[] = [
   { id: 'f2', kind: 'skill', summary: 'Docker — demonstrated (containerized 6 services)' },
   { id: 'f3', kind: 'skill', summary: 'GitHub Actions — demonstrated (CI pipelines)' },
 ];
+
+describe('tailor prompt — extractive rephrasing contract', () => {
+  it('versions and demonstrates allowed compression/reordering versus disallowed abstraction', () => {
+    expect(TAILOR_PROMPT_VERSION).toBe('1.1.0');
+    expect(TAILOR_SYSTEM_PROMPT).toContain('REPHRASING IS EXTRACTIVE, NOT GENERATIVE');
+    expect(TAILOR_SYSTEM_PROMPT).toContain('ALLOWED compression');
+    expect(TAILOR_SYSTEM_PROMPT).toContain('ALLOWED reordering');
+    expect(TAILOR_SYSTEM_PROMPT).toContain('DISALLOWED abstraction');
+    expect(TAILOR_SYSTEM_PROMPT).toContain('DISALLOWED embellishment');
+  });
+
+  it('uses examples whose allowed text passes unchanged guardrail semantics and disallowed text fails', () => {
+    const examples = [
+      {
+        fact: { id: 'a', kind: 'experience' as const, summary: 'Product Manager at Helio Apps, 2021-08 to present; grew activation +23% via onboarding redesign; ran A/B program' },
+        allowed: 'grew activation +23%; ran A/B program',
+        disallowed: 'increased user conversion 23% through experimentation',
+      },
+      {
+        fact: { id: 'b', kind: 'experience' as const, summary: 'DevOps Engineer at Vantage Cloud, 2020-05 to present; 200+ node Kubernetes clusters; Terraform modules adopted by 9 teams' },
+        allowed: 'Terraform modules adopted by 9 teams; 200+ node Kubernetes clusters',
+        disallowed: 'Scaled cloud infrastructure with Kubernetes and Terraform',
+      },
+      {
+        fact: { id: 'c', kind: 'skill' as const, summary: 'Docker — demonstrated (containerized 6 services)' },
+        allowed: 'Docker — containerized 6 services',
+        disallowed: 'Docker and production Kubernetes orchestration',
+      },
+    ];
+    for (const example of examples) {
+      expect(isTextGrounded(example.allowed, example.fact)).toBe(true);
+      expect(isTextGrounded(example.disallowed, example.fact)).toBe(false);
+    }
+  });
+});
 
 describe('tailor agent — deterministic grounding guardrail', () => {
   it('keeps a faithful rephrasing that stays within its cited fact', async () => {

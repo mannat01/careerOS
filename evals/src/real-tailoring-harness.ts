@@ -19,6 +19,12 @@ export interface RealTailoringSample {
   rephrasedCount: number;
   faithfulRephrasedCount: number;
   rephrasingFaithfulness: number;
+  rawEligibleProposalCount: number;
+  survivedRephrasingCount: number;
+  verbatimProposalCount: number;
+  fallbackProposalCount: number;
+  rephrasingSurvivalRate: number;
+  fallbackRate: number;
   structuralCatches: number;
   lexicalCatches: number;
   guardrailCaught: number;
@@ -41,6 +47,13 @@ export interface RealTailoringCaseResult {
   relevanceStdDev: number;
   relevanceRange: number;
   rephrasingFaithfulness: number;
+  rawEligibleProposalCount: number;
+  survivedRephrasingCount: number;
+  verbatimProposalCount: number;
+  fallbackProposalCount: number;
+  rephrasingSurvivalRate: number;
+  fallbackRate: number;
+  samplesWithFallback: number;
   guardrailCaught: number;
   samplesWithGuardrailCaught: number;
   fabricationLeaks: number;
@@ -70,6 +83,13 @@ export interface RealTailoringCampaignResult {
   rephrasingFaithfulness: number;
   rephrasedCount: number;
   faithfulRephrasedCount: number;
+  rawEligibleProposalCount: number;
+  survivedRephrasingCount: number;
+  verbatimProposalCount: number;
+  fallbackProposalCount: number;
+  rephrasingSurvivalRate: number;
+  fallbackRate: number;
+  samplesWithFallback: number;
   guardrailCaught: number;
   structuralCatches: number;
   lexicalCatches: number;
@@ -159,6 +179,17 @@ export function scoreRealTailoringSample(input: {
     const fact = byId.get(bullet.factId);
     return fact !== undefined && !isTextGrounded(bullet.text, fact);
   }).length;
+  const eligibleRawBullets = rawBullets.filter((bullet) => byId.has(bullet.factId));
+  const groundedRawBullets = eligibleRawBullets.filter((bullet) => {
+    const fact = byId.get(bullet.factId);
+    return fact !== undefined && isTextGrounded(bullet.text, fact);
+  });
+  const survivedRephrasingCount = groundedRawBullets.filter((bullet) => {
+    const fact = byId.get(bullet.factId);
+    return fact !== undefined && bullet.text.trim() !== fact.summary;
+  }).length;
+  const verbatimProposalCount = groundedRawBullets.length - survivedRephrasingCount;
+  const rephrasingDecisionCount = survivedRephrasingCount + lexicalCatches;
   const selected = new Set(input.produced.bullets.map((bullet) => bullet.factId));
   const matchedRelevantCount = input.c.expectedRelevantFactIds.filter((id) => selected.has(id)).length;
   const rephrased = input.produced.bullets.filter((bullet) => {
@@ -184,6 +215,12 @@ export function scoreRealTailoringSample(input: {
     rephrasedCount: rephrased.length,
     faithfulRephrasedCount,
     rephrasingFaithfulness: rephrased.length === 0 ? 1 : faithfulRephrasedCount / rephrased.length,
+    rawEligibleProposalCount: eligibleRawBullets.length,
+    survivedRephrasingCount,
+    verbatimProposalCount,
+    fallbackProposalCount: lexicalCatches,
+    rephrasingSurvivalRate: rephrasingDecisionCount === 0 ? 1 : survivedRephrasingCount / rephrasingDecisionCount,
+    fallbackRate: eligibleRawBullets.length === 0 ? 0 : lexicalCatches / eligibleRawBullets.length,
     structuralCatches,
     lexicalCatches,
     guardrailCaught: structuralCatches + lexicalCatches,
@@ -207,6 +244,11 @@ export function aggregateRealTailoringCampaign(
     const relevance = samples.map((sample) => sample.relevance);
     const rephrasedCount = samples.reduce((sum, sample) => sum + sample.rephrasedCount, 0);
     const faithfulRephrasedCount = samples.reduce((sum, sample) => sum + sample.faithfulRephrasedCount, 0);
+    const rawEligibleProposalCount = samples.reduce((sum, sample) => sum + sample.rawEligibleProposalCount, 0);
+    const survivedRephrasingCount = samples.reduce((sum, sample) => sum + sample.survivedRephrasingCount, 0);
+    const verbatimProposalCount = samples.reduce((sum, sample) => sum + sample.verbatimProposalCount, 0);
+    const fallbackProposalCount = samples.reduce((sum, sample) => sum + sample.fallbackProposalCount, 0);
+    const rephrasingDecisionCount = survivedRephrasingCount + fallbackProposalCount;
     const latencies = samples.map((sample) => sample.latencyMs);
     const costs = samples.map((sample) => sample.costUsd);
     return {
@@ -217,6 +259,13 @@ export function aggregateRealTailoringCampaign(
       relevanceStdDev: standardDeviation(relevance),
       relevanceRange: Math.max(...relevance) - Math.min(...relevance),
       rephrasingFaithfulness: rephrasedCount === 0 ? 1 : faithfulRephrasedCount / rephrasedCount,
+      rawEligibleProposalCount,
+      survivedRephrasingCount,
+      verbatimProposalCount,
+      fallbackProposalCount,
+      rephrasingSurvivalRate: rephrasingDecisionCount === 0 ? 1 : survivedRephrasingCount / rephrasingDecisionCount,
+      fallbackRate: rawEligibleProposalCount === 0 ? 0 : fallbackProposalCount / rawEligibleProposalCount,
+      samplesWithFallback: samples.filter((sample) => sample.fallbackProposalCount > 0).length,
       guardrailCaught: samples.reduce((sum, sample) => sum + sample.guardrailCaught, 0),
       samplesWithGuardrailCaught: samples.filter((sample) => sample.guardrailCaught > 0).length,
       fabricationLeaks: samples.reduce((sum, sample) => sum + sample.fabricationLeaks.length, 0),
@@ -241,6 +290,11 @@ export function aggregateRealTailoringCampaign(
   const expected = samples.reduce((sum, sample) => sum + sample.expectedRelevantCount, 0);
   const rephrasedCount = samples.reduce((sum, sample) => sum + sample.rephrasedCount, 0);
   const faithfulRephrasedCount = samples.reduce((sum, sample) => sum + sample.faithfulRephrasedCount, 0);
+  const rawEligibleProposalCount = samples.reduce((sum, sample) => sum + sample.rawEligibleProposalCount, 0);
+  const survivedRephrasingCount = samples.reduce((sum, sample) => sum + sample.survivedRephrasingCount, 0);
+  const verbatimProposalCount = samples.reduce((sum, sample) => sum + sample.verbatimProposalCount, 0);
+  const fallbackProposalCount = samples.reduce((sum, sample) => sum + sample.fallbackProposalCount, 0);
+  const rephrasingDecisionCount = survivedRephrasingCount + fallbackProposalCount;
   const latencies = samples.map((sample) => sample.latencyMs);
   const costs = samples.map((sample) => sample.costUsd);
 
@@ -254,6 +308,13 @@ export function aggregateRealTailoringCampaign(
     rephrasingFaithfulness: rephrasedCount === 0 ? 1 : faithfulRephrasedCount / rephrasedCount,
     rephrasedCount,
     faithfulRephrasedCount,
+    rawEligibleProposalCount,
+    survivedRephrasingCount,
+    verbatimProposalCount,
+    fallbackProposalCount,
+    rephrasingSurvivalRate: rephrasingDecisionCount === 0 ? 1 : survivedRephrasingCount / rephrasingDecisionCount,
+    fallbackRate: rawEligibleProposalCount === 0 ? 0 : fallbackProposalCount / rawEligibleProposalCount,
+    samplesWithFallback: samples.filter((sample) => sample.fallbackProposalCount > 0).length,
     guardrailCaught: samples.reduce((sum, sample) => sum + sample.guardrailCaught, 0),
     structuralCatches: samples.reduce((sum, sample) => sum + sample.structuralCatches, 0),
     lexicalCatches: samples.reduce((sum, sample) => sum + sample.lexicalCatches, 0),
@@ -284,13 +345,19 @@ export function formatRealTailoringCampaign(result: RealTailoringCampaignResult)
   const percent = (value: number): string => `${(value * 100).toFixed(1)}%`;
   const rows = result.cases.map((c) => {
     const relevance = c.samples.map((sample) => percent(sample.relevance)).join(' / ');
-    return `| ${c.caseId} | ${relevance} | ${percent(c.meanRelevance)} | ${percent(c.rephrasingFaithfulness)} | ${c.guardrailCaught} (${c.samplesWithGuardrailCaught}/3) | ${c.fabricationLeaks} | ${c.atsValidSamples}/3 | ${Math.round(c.meanLatencyMs)} ± ${Math.round(c.latencyStdDevMs)} | ${Math.round(c.meanInputTokens)} ± ${Math.round(c.inputTokensStdDev)} / ${Math.round(c.meanOutputTokens)} ± ${Math.round(c.outputTokensStdDev)} | $${c.totalCostUsd.toFixed(6)} | ${c.distinctOutputs}/3 |`;
+    const decisions = c.survivedRephrasingCount + c.fallbackProposalCount;
+    const survival = decisions === 0
+      ? 'n/a (0/0)'
+      : `${percent(c.rephrasingSurvivalRate)} (${c.survivedRephrasingCount}/${decisions})`;
+    return `| ${c.caseId} | ${relevance} | ${percent(c.meanRelevance)} | ${survival} | ${percent(c.fallbackRate)} (${c.samplesWithFallback}/3 samples) | ${c.guardrailCaught} | ${c.fabricationLeaks} | ${c.atsValidSamples}/3 | ${Math.round(c.meanLatencyMs)} ± ${Math.round(c.latencyStdDevMs)} | ${Math.round(c.meanInputTokens)} ± ${Math.round(c.inputTokensStdDev)} / ${Math.round(c.meanOutputTokens)} ± ${Math.round(c.outputTokensStdDev)} | $${c.totalCostUsd.toFixed(6)} | ${c.distinctOutputs}/3 |`;
   });
   return [
     `Model: ${result.model}`,
     `Samples: ${result.sampleCount} (${result.caseCount} cases × ${result.runsPerCase})`,
     `Selection relevance: ${percent(result.overallRelevance)}`,
     `Rephrasing faithfulness: ${percent(result.rephrasingFaithfulness)} (${result.faithfulRephrasedCount}/${result.rephrasedCount})`,
+    `Rephrasing survival: ${percent(result.rephrasingSurvivalRate)} (${result.survivedRephrasingCount}/${result.survivedRephrasingCount + result.fallbackProposalCount}); ${result.verbatimProposalCount} verbatim proposals excluded`,
+    `Guardrail fallback: ${percent(result.fallbackRate)} (${result.fallbackProposalCount}/${result.rawEligibleProposalCount}) across ${result.samplesWithFallback}/${result.sampleCount} samples`,
     `Guardrail caught: ${result.guardrailCaught} (${result.structuralCatches} structural; ${result.lexicalCatches} lexical) across ${result.samplesWithGuardrailCaught}/${result.sampleCount} samples`,
     `Fabrication leaks: ${result.fabricationLeaks}`,
     `ATS valid: ${result.atsValidSamples}/${result.sampleCount}`,
@@ -300,8 +367,8 @@ export function formatRealTailoringCampaign(result: RealTailoringCampaignResult)
     `Relevance variance: mean per-case σ ${percent(result.meanRelevanceStdDev)}; ${result.casesWithVariableRelevance}/${result.caseCount} cases varied`,
     `Output variance: ${result.casesWithVariableOutput}/${result.caseCount} cases varied`,
     '',
-    '| Case | Relevance runs 1/2/3 | Mean | Rephrasing faithful | Caught (samples) | Leaks | ATS | Mean ± σ ms | Mean ± σ tokens in/out | Cost | Distinct outputs |',
-    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+    '| Case | Relevance runs 1/2/3 | Mean | Rephrasing survived | Fallback (samples) | Caught | Leaks | ATS | Mean ± σ ms | Mean ± σ tokens in/out | Cost | Distinct outputs |',
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
     ...rows,
   ].join('\n');
 }
