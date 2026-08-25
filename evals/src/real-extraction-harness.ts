@@ -5,32 +5,11 @@ import {
   type NormalizedEntity,
   type RawEntity,
 } from '@careeros/agents';
-import type { LlmProvider, LlmResponse } from '@careeros/llm-gateway';
+import type { LlmResponse } from '@careeros/llm-gateway';
 import { expectedName, scoreExtractionCase } from './harness.js';
 import type { ExtractedEntity, ExtractionCase } from './types.js';
 
 export const REAL_RUNS_PER_CASE = 3;
-
-export interface RecordedCompletion {
-  text: string;
-  usage: { inputTokens: number; outputTokens: number };
-}
-
-/** Records raw model output without bypassing or changing the real provider. */
-export class RecordingLlmProvider implements LlmProvider {
-  readonly vendor: string;
-  readonly completions: RecordedCompletion[] = [];
-
-  constructor(private readonly inner: LlmProvider) {
-    this.vendor = inner.vendor;
-  }
-
-  async complete(req: Parameters<LlmProvider['complete']>[0]): Promise<RecordedCompletion> {
-    const completion = await this.inner.complete(req);
-    this.completions.push(completion);
-    return completion;
-  }
-}
 
 export interface RealExtractionSample {
   run: number;

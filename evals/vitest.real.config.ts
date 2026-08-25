@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['real/extraction.real.ts'],
+    include: ['real/extraction.real.ts', 'real/tailoring.real.ts'],
     testTimeout: 600_000,
     hookTimeout: 600_000,
     maxConcurrency: 1,
