@@ -1,9 +1,11 @@
 import {
   pkmCreateRequestSchema,
+  pkmDeleteResponseSchema,
   pkmEntrySchema,
   pkmListResponseSchema,
   pkmUpdateRequestSchema,
   type PkmEntry,
+  type PkmDeleteResponse,
   type PkmListResponse,
 } from '@careeros/contracts';
 import { z } from 'zod';
@@ -80,9 +82,9 @@ export async function deletePkmEntry(
   ctx: RequestContext,
   id: string,
   deps: PkmHandlerDeps,
-): Promise<HandlerResponse<{ id: string; deleted: true }>> {
+): Promise<HandlerResponse<PkmDeleteResponse>> {
   if (!pkmIdSchema.safeParse(id).success) return validationError(ctx, ['id: Invalid uuid']);
   const deleted = await deps.pkm.delete(ctx.userId, id);
   if (!deleted) return errorResponse('not_found', 'PKM entry not found.', { traceId: ctx.traceId });
-  return ok({ id, deleted: true });
+  return ok(pkmDeleteResponseSchema.parse({ id, deleted: true }));
 }

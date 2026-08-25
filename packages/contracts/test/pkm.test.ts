@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   pkmCreateRequestSchema,
+  pkmDeleteResponseSchema,
   pkmEntrySchema,
   pkmListResponseSchema,
   pkmUpdateRequestSchema,
@@ -42,5 +43,13 @@ describe('PKM contracts', () => {
     expect(pkmUpdateRequestSchema.safeParse({}).success).toBe(false);
     expect(pkmCreateRequestSchema.safeParse({ title: '', body: '' }).success).toBe(false);
     expect(pkmUpdateRequestSchema.safeParse({ tags: [''] }).success).toBe(false);
+  });
+
+  it('strictly parses the delete acknowledgement', () => {
+    const response = { id: ENTRY.id, deleted: true as const };
+    expect(pkmDeleteResponseSchema.parse(response)).toEqual(response);
+    expect(pkmDeleteResponseSchema.safeParse({ ...response, internal: true }).success).toBe(false);
+    expect(pkmDeleteResponseSchema.safeParse({ ...response, deleted: false }).success).toBe(false);
+    expect(pkmDeleteResponseSchema.safeParse({ ...response, id: 'not-a-uuid' }).success).toBe(false);
   });
 });

@@ -12,10 +12,12 @@ export {
   pkmCreateRequestSchema,
   pkmUpdateRequestSchema,
   pkmListResponseSchema,
+  pkmDeleteResponseSchema,
   type PkmEntry,
   type PkmCreateRequest,
   type PkmUpdateRequest,
   type PkmListResponse,
+  type PkmDeleteResponse,
 } from './pkm.js';
 export {
   approvalTokenSchema,

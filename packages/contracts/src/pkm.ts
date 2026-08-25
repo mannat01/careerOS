@@ -41,3 +41,12 @@ export const pkmListResponseSchema = z
   .object({ data: z.array(pkmEntrySchema) })
   .strict();
 export type PkmListResponse = z.infer<typeof pkmListResponseSchema>;
+
+/** DELETE /v1/pkm/:id acknowledgement for the caller-owned entry. */
+export const pkmDeleteResponseSchema = z
+  .object({
+    id: z.string().uuid(),
+    deleted: z.literal(true),
+  })
+  .strict();
+export type PkmDeleteResponse = z.infer<typeof pkmDeleteResponseSchema>;
