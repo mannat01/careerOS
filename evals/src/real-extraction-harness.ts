@@ -59,9 +59,20 @@ export interface RealExtractionCaseResult {
   recallRange: number;
   distinctOutputs: number;
   guardrailCaught: number;
+  samplesWithGuardrailCaught: number;
   fabricationLeaks: number;
   meanLatencyMs: number;
+  latencyStdDevMs: number;
+  latencyRangeMs: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  meanInputTokens: number;
+  inputTokensStdDev: number;
+  meanOutputTokens: number;
+  outputTokensStdDev: number;
   totalCostUsd: number;
+  meanCostUsd: number;
+  costStdDevUsd: number;
 }
 
 export interface RealExtractionCampaignResult {
@@ -75,13 +86,22 @@ export interface RealExtractionCampaignResult {
   guardrailCaught: number;
   fabricationLeaks: number;
   meanLatencyMs: number;
+  latencyStdDevMs: number;
+  latencyRangeMs: number;
   p95LatencyMs: number;
   totalInputTokens: number;
   totalOutputTokens: number;
+  meanInputTokens: number;
+  inputTokensStdDev: number;
+  meanOutputTokens: number;
+  outputTokensStdDev: number;
   totalCostUsd: number;
+  meanCostUsd: number;
+  costStdDevUsd: number;
   meanRecallStdDev: number;
   casesWithVariableRecall: number;
   casesWithVariableOutput: number;
+  samplesWithGuardrailCaught: number;
 }
 
 function mean(values: number[]): number {
@@ -196,9 +216,20 @@ export function aggregateRealExtractionCampaign(
       recallRange: recalls.length === 0 ? 0 : Math.max(...recalls) - Math.min(...recalls),
       distinctOutputs: new Set(samples.map((sample) => sample.outputSignature)).size,
       guardrailCaught: samples.reduce((sum, sample) => sum + sample.guardrailCaught, 0),
+      samplesWithGuardrailCaught: samples.filter((sample) => sample.guardrailCaught > 0).length,
       fabricationLeaks: samples.reduce((sum, sample) => sum + sample.fabricationLeaks.length, 0),
       meanLatencyMs: mean(samples.map((sample) => sample.latencyMs)),
+      latencyStdDevMs: standardDeviation(samples.map((sample) => sample.latencyMs)),
+      latencyRangeMs: Math.max(...samples.map((sample) => sample.latencyMs)) - Math.min(...samples.map((sample) => sample.latencyMs)),
+      totalInputTokens: samples.reduce((sum, sample) => sum + sample.inputTokens, 0),
+      totalOutputTokens: samples.reduce((sum, sample) => sum + sample.outputTokens, 0),
+      meanInputTokens: mean(samples.map((sample) => sample.inputTokens)),
+      inputTokensStdDev: standardDeviation(samples.map((sample) => sample.inputTokens)),
+      meanOutputTokens: mean(samples.map((sample) => sample.outputTokens)),
+      outputTokensStdDev: standardDeviation(samples.map((sample) => sample.outputTokens)),
       totalCostUsd: samples.reduce((sum, sample) => sum + sample.costUsd, 0),
+      meanCostUsd: mean(samples.map((sample) => sample.costUsd)),
+      costStdDevUsd: standardDeviation(samples.map((sample) => sample.costUsd)),
     };
   });
   const samples = cases.flatMap((result) => result.samples);
@@ -218,13 +249,22 @@ export function aggregateRealExtractionCampaign(
     guardrailCaught: samples.reduce((sum, sample) => sum + sample.guardrailCaught, 0),
     fabricationLeaks: samples.reduce((sum, sample) => sum + sample.fabricationLeaks.length, 0),
     meanLatencyMs: mean(samples.map((sample) => sample.latencyMs)),
+    latencyStdDevMs: standardDeviation(samples.map((sample) => sample.latencyMs)),
+    latencyRangeMs: Math.max(...samples.map((sample) => sample.latencyMs)) - Math.min(...samples.map((sample) => sample.latencyMs)),
     p95LatencyMs: percentile95(samples.map((sample) => sample.latencyMs)),
     totalInputTokens: samples.reduce((sum, sample) => sum + sample.inputTokens, 0),
     totalOutputTokens: samples.reduce((sum, sample) => sum + sample.outputTokens, 0),
+    meanInputTokens: mean(samples.map((sample) => sample.inputTokens)),
+    inputTokensStdDev: standardDeviation(samples.map((sample) => sample.inputTokens)),
+    meanOutputTokens: mean(samples.map((sample) => sample.outputTokens)),
+    outputTokensStdDev: standardDeviation(samples.map((sample) => sample.outputTokens)),
     totalCostUsd: samples.reduce((sum, sample) => sum + sample.costUsd, 0),
+    meanCostUsd: mean(samples.map((sample) => sample.costUsd)),
+    costStdDevUsd: standardDeviation(samples.map((sample) => sample.costUsd)),
     meanRecallStdDev: mean(cases.map((result) => result.recallStdDev)),
     casesWithVariableRecall: cases.filter((result) => result.recallRange > 0).length,
     casesWithVariableOutput: cases.filter((result) => result.distinctOutputs > 1).length,
+    samplesWithGuardrailCaught: samples.filter((sample) => sample.guardrailCaught > 0).length,
   };
 }
 
@@ -234,23 +274,23 @@ export function formatRealExtractionCampaign(result: RealExtractionCampaignResul
   const rows = result.cases.map((c) => {
     const recalls = c.samples.map((sample) => percent(sample.recall)).join(' / ');
     const provenance = c.samples.map((sample) => percent(sample.provenanceCorrectness)).join(' / ');
-    return `| ${c.caseId} | ${recalls} | ${percent(c.meanRecall)} | ${provenance} | ${c.guardrailCaught} | ${c.fabricationLeaks} | ${Math.round(c.meanLatencyMs)} | $${c.totalCostUsd.toFixed(6)} | ${c.distinctOutputs}/3 |`;
+    return `| ${c.caseId} | ${recalls} | ${percent(c.meanRecall)} | ${provenance} | ${c.guardrailCaught} (${c.samplesWithGuardrailCaught}/3) | ${c.fabricationLeaks} | ${Math.round(c.meanLatencyMs)} ± ${Math.round(c.latencyStdDevMs)} | ${Math.round(c.meanInputTokens)} ± ${Math.round(c.inputTokensStdDev)} / ${Math.round(c.meanOutputTokens)} ± ${Math.round(c.outputTokensStdDev)} | $${c.totalCostUsd.toFixed(6)} (σ $${c.costStdDevUsd.toFixed(6)}) | ${c.distinctOutputs}/3 |`;
   });
   return [
     `Model: ${result.model}`,
     `Samples: ${result.sampleCount} (${result.caseCount} cases × ${result.runsPerCase})`,
     `Overall recall: ${percent(result.overallRecall)}`,
     `Verbatim provenance: ${percent(result.provenanceCorrectness)}`,
-    `Guardrail caught: ${result.guardrailCaught}`,
+    `Guardrail caught: ${result.guardrailCaught} across ${result.samplesWithGuardrailCaught}/${result.sampleCount} samples`,
     `Fabrication leaks: ${result.fabricationLeaks}`,
-    `Latency: mean ${Math.round(result.meanLatencyMs)} ms; p95 ${Math.round(result.p95LatencyMs)} ms`,
-    `Tokens: ${result.totalInputTokens} input; ${result.totalOutputTokens} output`,
-    `Cost: $${result.totalCostUsd.toFixed(6)}`,
+    `Latency: mean ${Math.round(result.meanLatencyMs)} ms; σ ${Math.round(result.latencyStdDevMs)} ms; p95 ${Math.round(result.p95LatencyMs)} ms`,
+    `Tokens: ${result.totalInputTokens} input; ${result.totalOutputTokens} output; mean ± σ ${Math.round(result.meanInputTokens)} ± ${Math.round(result.inputTokensStdDev)} input / ${Math.round(result.meanOutputTokens)} ± ${Math.round(result.outputTokensStdDev)} output`,
+    `Cost: $${result.totalCostUsd.toFixed(6)}; mean $${result.meanCostUsd.toFixed(6)}; σ $${result.costStdDevUsd.toFixed(6)}`,
     `Recall variance: mean per-case σ ${percent(result.meanRecallStdDev)}; ${result.casesWithVariableRecall}/${result.caseCount} cases varied`,
     `Output variance: ${result.casesWithVariableOutput}/${result.caseCount} cases had >1 distinct final entity set`,
     '',
-    '| Case | Recall runs 1/2/3 | Mean | Verbatim provenance runs 1/2/3 | Caught | Leaks | Mean ms | Cost | Distinct outputs |',
-    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+    '| Case | Recall runs 1/2/3 | Mean | Verbatim provenance runs 1/2/3 | Caught (samples) | Leaks | Mean ± σ ms | Mean ± σ tokens in/out | Total cost (σ/sample) | Distinct outputs |',
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
     ...rows,
   ].join('\n');
 }

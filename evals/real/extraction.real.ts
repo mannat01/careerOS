@@ -5,6 +5,7 @@ import { LlmExtractionAgent } from '@careeros/agents';
 import {
   createLlmGateway,
   createLlmProviderFromEnv,
+  OmniRouteProvider,
   type CostMeter,
   type LlmProviderEnv,
   type LlmResponse,
@@ -30,50 +31,77 @@ function loadCampaignEnv(): LlmProviderEnv & { LLM_CHEAP_MODEL?: string } {
   const envPath = resolve(process.cwd(), '../.env');
   const text = readFileSync(envPath, 'utf8');
   const env: LlmProviderEnv & { LLM_CHEAP_MODEL?: string } = {};
-  const anthropicKeys: string[] = [];
   for (const line of text.split(/\r?\n/)) {
     const match = /^\s*([A-Z][A-Z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
     if (!match?.[1]) continue;
     const raw = match[2] ?? '';
     if (raw.startsWith('#')) continue;
     const value = raw.replace(/^(['"])(.*)\1$/, '$2').trim();
-    if (match[1] === 'ANTHROPIC_API_KEY' && value.length > 0) anthropicKeys.push(value);
-    if (match[1] === 'LLM_CHEAP_MODEL') env.LLM_CHEAP_MODEL = value;
+    const key = match[1];
+    if (
+      key === 'LLM_PROVIDER' ||
+      key === 'ANTHROPIC_API_KEY' ||
+      key === 'OMNIROUTE_BASE_URL' ||
+      key === 'OMNIROUTE_API_KEY' ||
+      key === 'OMNIROUTE_MODEL'
+    ) {
+      env[key] = value;
+    }
+    if (key === 'LLM_CHEAP_MODEL') env.LLM_CHEAP_MODEL = value;
   }
-  const fullFormKeys = anthropicKeys.filter((value) => value.startsWith('sk-ant-') && value.length >= 80);
-  if (fullFormKeys.length !== 1) {
-    throw new Error(
-      `Expected exactly one full-form ANTHROPIC_API_KEY in ${envPath}; found ${fullFormKeys.length} ` +
-        `across ${anthropicKeys.length} non-empty assignments`,
-    );
-  }
-  env.ANTHROPIC_API_KEY = fullFormKeys[0];
-  return { ...env, LLM_PROVIDER: 'anthropic' };
+  return env;
 }
 
 const campaignEnv = loadCampaignEnv();
+const selectedProvider = campaignEnv.LLM_PROVIDER?.trim();
+if (selectedProvider !== 'anthropic' && selectedProvider !== 'omniroute') {
+  throw new Error("eval:real requires LLM_PROVIDER='anthropic' or LLM_PROVIDER='omniroute' in the repository .env");
+}
 
-const modelFromEnv = campaignEnv.LLM_CHEAP_MODEL?.trim();
+const modelFromEnv = selectedProvider === 'omniroute'
+  ? campaignEnv.OMNIROUTE_MODEL?.trim()
+  : campaignEnv.LLM_CHEAP_MODEL?.trim();
 const model = modelFromEnv && !modelFromEnv.startsWith('#') ? modelFromEnv : 'claude-haiku-4-5';
-if (PRICING[model] === undefined) {
+if (selectedProvider === 'anthropic' && PRICING[model] === undefined) {
   throw new Error(`No real-eval pricing configured for LLM_CHEAP_MODEL='${model}'; refusing to report a false zero cost`);
 }
-const key = campaignEnv.ANTHROPIC_API_KEY?.trim();
-if (!key) throw new Error('ANTHROPIC_API_KEY must be set in the repository .env before eval:real');
 
-const provider = new RecordingLlmProvider(createLlmProviderFromEnv(campaignEnv));
+const omniRouteResponseCostsUsd: number[] = [];
+const originalFetch = globalThis.fetch;
+const recordingFetch: typeof globalThis.fetch = async (input, init): Promise<Response> => {
+    const response = await originalFetch(input, init);
+    const costHeader = response.headers.get('x-omniroute-response-cost');
+    const costUsd = costHeader === null ? Number.NaN : Number(costHeader);
+    if (!Number.isFinite(costUsd) || costUsd < 0) {
+      throw new Error('OmniRoute completion omitted a valid non-negative X-OmniRoute-Response-Cost header');
+    }
+    omniRouteResponseCostsUsd.push(costUsd);
+    return response;
+};
+const selectedLlmProvider = selectedProvider === 'omniroute'
+  ? new OmniRouteProvider({
+      baseUrl: campaignEnv.OMNIROUTE_BASE_URL ?? '',
+      apiKey: campaignEnv.OMNIROUTE_API_KEY ?? '',
+      model,
+    }, { fetch: recordingFetch, timeoutMs: 180_000 })
+  : createLlmProviderFromEnv(campaignEnv);
+const provider = new RecordingLlmProvider(selectedLlmProvider);
 const costEvents: Parameters<CostMeter>[0][] = [];
 const gateway = createLlmGateway({
   provider,
   modelsByTier: { cheap: model, frontier: model },
-  pricing: PRICING,
+  // OmniRoute reports authoritative routed cost on each response. A zero rate
+  // keeps the gateway event shape intact; the sample uses the captured header.
+  pricing: selectedProvider === 'omniroute'
+    ? { [model]: { inputUsdPerMTok: 0, outputUsdPerMTok: 0 } }
+    : PRICING,
   onCost: (event) => void costEvents.push(event),
 });
 const agent = new LlmExtractionAgent(gateway);
 const cases = loadExtractionCases();
 const byCase: Array<{ c: (typeof cases)[number]; samples: RealExtractionSample[] }> = [];
 
-describe.sequential('Track B Slice 1 — real Anthropic extraction campaign (non-CI)', () => {
+describe.sequential(`Track B Slice 1 — real ${selectedProvider} extraction campaign (non-CI)`, () => {
   let campaignFailure: Error | undefined;
   for (const c of cases) {
     it(`${c.id} ×${REAL_RUNS_PER_CASE}`, async () => {
@@ -83,6 +111,7 @@ describe.sequential('Track B Slice 1 — real Anthropic extraction campaign (non
         for (let run = 1; run <= REAL_RUNS_PER_CASE; run += 1) {
           const completionIndex = provider.completions.length;
           const costIndex = costEvents.length;
+          const omniRouteCostIndex = omniRouteResponseCostsUsd.length;
           const started = performance.now();
           const producedDetailed = await agent.extractDetailed(c.resumeText);
           const latencyMs = performance.now() - started;
@@ -98,7 +127,12 @@ describe.sequential('Track B Slice 1 — real Anthropic extraction campaign (non
             ...(entity.detail !== undefined ? { detail: entity.detail } : {}),
             provenance: entity.provenance,
           }));
-          const response: Pick<LlmResponse, 'usage' | 'costUsd'> = { usage: completion.usage, costUsd: cost.costUsd };
+          const costUsd = selectedProvider === 'omniroute'
+            ? omniRouteResponseCostsUsd[omniRouteCostIndex]
+            : cost.costUsd;
+          expect(costUsd, 'provider cost recording').toBeDefined();
+          if (costUsd === undefined) throw new Error('Missing provider cost telemetry');
+          const response: Pick<LlmResponse, 'usage' | 'costUsd'> = { usage: completion.usage, costUsd };
           samples.push(scoreRealExtractionSample({
             c, run, rawText: completion.text, produced, response, latencyMs,
           }));
@@ -108,6 +142,7 @@ describe.sequential('Track B Slice 1 — real Anthropic extraction campaign (non
         throw campaignFailure;
       }
       byCase.push({ c, samples });
+      console.log(`REAL_EXTRACTION_CASE_JSON=${JSON.stringify({ caseId: c.id, samples })}`);
     });
   }
 
