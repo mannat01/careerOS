@@ -24,6 +24,7 @@ import { createSkillsApi, type SkillsApi } from './skills';
 import { createDashboardsApi, type DashboardsApi } from './dashboards';
 import { createPortfolioApi, type PortfolioApi } from './portfolio';
 import { createCalibrationApi, type CalibrationApi } from './calibration';
+import { createPkmApi, type PkmApi } from './pkm';
 
 export * from './me';
 export * from './profile';
@@ -42,6 +43,7 @@ export * from './skills';
 export * from './dashboards';
 export * from './portfolio';
 export * from './calibration';
+export * from './pkm';
 
 export interface Api {
   me: MeApi;
@@ -61,6 +63,7 @@ export interface Api {
   dashboards: DashboardsApi;
   portfolio: PortfolioApi;
   calibration: CalibrationApi;
+  pkm: PkmApi;
 }
 
 export function createApi(client: ApiClient): Api {
@@ -82,5 +85,6 @@ export function createApi(client: ApiClient): Api {
     dashboards: createDashboardsApi(client),
     portfolio: createPortfolioApi(client),
     calibration: createCalibrationApi(client),
+    pkm: createPkmApi(client),
   };
 }

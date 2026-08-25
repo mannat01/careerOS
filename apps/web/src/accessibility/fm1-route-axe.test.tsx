@@ -42,6 +42,8 @@ import { PortfolioRoomClient } from '../../app/(app)/you/portfolio/PortfolioRoom
 import { GROUNDED_PORTFOLIO, INSUFFICIENT_PORTFOLIO, PUBLIC_PORTFOLIO, PUBLISH_GRANT, PUBLISHED_PORTFOLIO, UPDATED_PORTFOLIO } from '../../app/(app)/you/portfolio/portfolio-fixtures';
 import { CalibrationRoomClient } from '../../app/(app)/plan/calibration/CalibrationRoomClient';
 import { INSUFFICIENT_CALIBRATION, MEASURED_CALIBRATION } from '../../app/(app)/plan/calibration/calibration-fixtures';
+import { PkmRoomClient } from '../../app/(app)/you/pkm/PkmRoomClient';
+import { CREATED_PKM_ENTRY, DELETED_PKM_ENTRY, EMPTY_PKM, PKM_ENTRY, POPULATED_PKM, UPDATED_PKM_ENTRY } from '../../app/(app)/you/pkm/pkm-fixtures';
 import { AppShell } from '../shell';
 import { RoutingRecovery } from '../auth';
 import { ApiError } from '../api/errors';
@@ -78,6 +80,7 @@ const routes: ReadonlyArray<{ name: string; path: string; renderRoute: () => Rea
   { name: 'Skills', path: '/plan/skills', renderRoute: () => <AppShell><section aria-labelledby="skills-axe-heading"><h1 id="skills-axe-heading">Skills</h1><SkillsRoomClient dependencies={{ listApplications: () => Promise.resolve(SKILLS_PIPELINE), getOpportunity: () => Promise.resolve(SKILLS_OPPORTUNITY), getGaps: () => Promise.resolve(POPULATED_SKILL_GAPS) }} /></section></AppShell> },
   { name: 'You', path: '/you', renderRoute: () => <AppShell><section aria-labelledby="you-heading" className="flex flex-col gap-4"><h1 id="you-heading">You</h1><ResumeStudioClient dependencies={{ getBase: () => Promise.resolve(BASE_RESUME), listApplications: () => Promise.resolve(RESUME_PIPELINE), getOpportunity: () => Promise.resolve(RESUME_OPPORTUNITY), tailor: () => Promise.resolve(GROUNDED_VARIANT), getVariant: () => Promise.resolve(GROUNDED_VARIANT) }} /></section></AppShell> },
   { name: 'Portfolio', path: '/you/portfolio', renderRoute: () => <AppShell><section aria-labelledby="portfolio-axe-heading"><h1 id="portfolio-axe-heading">Portfolio</h1><PortfolioRoomClient dependencies={{ getOwner: () => Promise.resolve(GROUNDED_PORTFOLIO), generate: () => Promise.resolve(UPDATED_PORTFOLIO), mintPublishToken: () => Promise.resolve(PUBLISH_GRANT), publish: () => Promise.resolve(PUBLISHED_PORTFOLIO), getPublic: () => Promise.resolve(PUBLIC_PORTFOLIO) }} /></section></AppShell> },
+  { name: 'Personal knowledge', path: '/you/pkm', renderRoute: () => <AppShell><section aria-labelledby="pkm-axe-heading"><h1 id="pkm-axe-heading">Personal knowledge</h1><PkmRoomClient dependencies={{ list: () => Promise.resolve(POPULATED_PKM), create: () => Promise.resolve(CREATED_PKM_ENTRY), update: () => Promise.resolve(UPDATED_PKM_ENTRY), delete: () => Promise.resolve(DELETED_PKM_ENTRY) }} /></section></AppShell> },
   { name: 'Approvals', path: '/approvals', renderRoute: () => <AppShell><section aria-labelledby="approvals-heading"><h1 id="approvals-heading">Approvals</h1><ApprovalsRoomClient dependencies={{ list: () => Promise.resolve(successFixtures.pendingApprovals()), mint: () => Promise.reject(new Error('not exercised by static axe')), edit: () => Promise.reject(new Error('not exercised by static axe')), execute: () => Promise.reject(new Error('not exercised by static axe')), deny: () => Promise.reject(new Error('not exercised by static axe')) }} /></section></AppShell> },
   { name: '/_dev/trust (development)', path: '/_dev/trust', renderRoute: () => <AppShell><TrustKitClient data={{ state: successFixtures.state(), opportunities: successFixtures.opportunities(), match: successFixtures.match(), audit: successFixtures.audit(), briefing: successFixtures.briefing() }} /></AppShell> },
 ];
@@ -629,6 +632,81 @@ describe('FM1 CI-BLOCKING ROUTE AXE MATRIX', () => {
     const publicBoundary = await screen.findByTestId('public-not-published');
     expect(publicBoundary).toHaveTextContent('No owner draft or private profile data is shown here.');
     expect(publicBoundary).not.toHaveTextContent('Updated platform engineer');
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.8 populated PKM create/edit and explicit Green delete confirmation are axe-clean', async () => {
+    pathname = '/you/pkm';
+    const user = userEvent.setup();
+    const create = vi.fn(() => Promise.resolve(CREATED_PKM_ENTRY));
+    const update = vi.fn(() => Promise.resolve(UPDATED_PKM_ENTRY));
+    const del = vi.fn(() => Promise.resolve(DELETED_PKM_ENTRY));
+    const { container } = render(
+      <AppShell>
+        <section aria-labelledby="pkm-interactive-axe-heading">
+          <h1 id="pkm-interactive-axe-heading">Personal knowledge</h1>
+          <PkmRoomClient dependencies={{ list: () => Promise.resolve(POPULATED_PKM), create, update, delete: del }} />
+        </section>
+      </AppShell>,
+    );
+    const card = await screen.findByTestId(`pkm-entry-${PKM_ENTRY.id}`);
+    expect(await axe(container)).toHaveNoViolations();
+
+    await user.click(within(card).getByRole('button', { name: 'Edit' }));
+    expect(screen.getByTestId('pkm-edit-form')).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+    await user.click(screen.getByRole('button', { name: 'Cancel edit' }));
+
+    const createForm = screen.getByTestId('pkm-create-form');
+    await user.type(within(createForm).getByLabelText('Title'), 'Interview reflection');
+    await user.type(within(createForm).getByLabelText('Body'), 'Ask for concrete examples.');
+    await user.click(within(createForm).getByRole('button', { name: 'Create entry' }));
+    expect(await screen.findByTestId(`pkm-entry-${CREATED_PKM_ENTRY.id}`)).toBeVisible();
+    expect(create).toHaveBeenCalledWith({ title: 'Interview reflection', body: 'Ask for concrete examples.', tags: [] });
+
+    await user.click(within(screen.getByTestId(`pkm-entry-${PKM_ENTRY.id}`)).getByRole('button', { name: 'Delete' }));
+    const dialog = screen.getByRole('dialog', { name: "Delete this entry? This can't be undone." });
+    expect(within(dialog).getByRole('button', { name: 'Keep entry' })).toHaveFocus();
+    expect(del).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('approval-dialog')).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.8 empty PKM is axe-clean with an honest create path', async () => {
+    pathname = '/you/pkm';
+    const { container } = render(
+      <AppShell>
+        <PkmRoomClient dependencies={{
+          list: () => Promise.resolve(EMPTY_PKM),
+          create: () => Promise.resolve(CREATED_PKM_ENTRY),
+          update: () => Promise.resolve(UPDATED_PKM_ENTRY),
+          delete: () => Promise.resolve(DELETED_PKM_ENTRY),
+        }} />
+      </AppShell>,
+    );
+    expect(await screen.findByText('No entries yet')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Create entry' })).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('FM6.8 optimistic delete rollback and typed recovery are axe-clean', async () => {
+    pathname = '/you/pkm';
+    const user = userEvent.setup();
+    const { container } = render(
+      <AppShell>
+        <PkmRoomClient dependencies={{
+          list: () => Promise.resolve(POPULATED_PKM),
+          create: () => Promise.resolve(CREATED_PKM_ENTRY),
+          update: () => Promise.resolve(UPDATED_PKM_ENTRY),
+          delete: () => Promise.reject(new ApiError({ code: 'not_found', status: 404, message: 'PKM entry not found.' })),
+        }} />
+      </AppShell>,
+    );
+    await user.click(within(await screen.findByTestId(`pkm-entry-${PKM_ENTRY.id}`)).getByRole('button', { name: 'Delete' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete entry permanently' }));
+    expect(await screen.findByTestId('error-recovery')).toHaveAttribute('data-code', 'not_found');
+    expect(screen.getByTestId(`pkm-entry-${PKM_ENTRY.id}`)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Reload entries' })).toBeVisible();
     expect(await axe(container)).toHaveNoViolations();
   });
 
