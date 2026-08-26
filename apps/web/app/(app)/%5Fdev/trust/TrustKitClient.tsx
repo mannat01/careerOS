@@ -19,6 +19,7 @@ import {
   type Confidence,
   type Evidence,
 } from '@/trust';
+import { OpportunityMatchSurface } from '../../opportunities/OpportunityMatchSurface';
 
 export interface TrustKitData {
   readonly state: CieStateResponse;
@@ -64,8 +65,6 @@ function TrustKitContent({
   const yellowItem = briefing.items.find((item) => item.autonomyTier === 'yellow' && item.state === 'proposed');
   const noSignal = state.dimensions.filter((dimension) => dimension.provenance === 'no-signal');
   const populatedDimension = state.dimensions.find((dimension) => dimension.provenance !== 'no-signal');
-  const matchEvidence = evidenceFor(match.evidenceRefs, 'backend evidence ref');
-  const matchConfidence = confidence(match.overall / 100, match.modelVersion ?? 'match-score');
   const opportunity = opportunities.data.find((item) => item.id === match.opportunityId);
 
   return (
@@ -108,10 +107,7 @@ function TrustKitContent({
       <section aria-labelledby="opportunity-heading" className="space-y-4">
         <h2 id="opportunity-heading" className="text-xl font-semibold">Populated opportunity match</h2>
         <p className="text-sm text-text-secondary">{opportunity?.company ?? 'Unknown company'} · {opportunity?.role ?? 'Unknown role'}</p>
-        <AiSurface evidence={matchEvidence} confidence={matchConfidence} label="Populated opportunity match score">
-          <div className="flex flex-wrap items-center gap-2"><strong className="text-2xl">{match.overall}%</strong><ConfidenceChip confidence={matchConfidence} /><WhyPopover subject={{ kind: 'match', label: 'Opportunity match' }} evidence={matchEvidence} reasoning={match.explanation} /></div>
-          <ul className="mt-3 grid gap-2 text-sm text-text-secondary sm:grid-cols-2">{match.subscores.map((subscore) => <li key={subscore.key}>{subscore.key}: {subscore.value}%</li>)}</ul>
-        </AiSurface>
+        <OpportunityMatchSurface match={match} />
       </section>
 
       <section aria-labelledby="audit-heading" className="space-y-3">

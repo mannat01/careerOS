@@ -252,6 +252,9 @@ describe('match scorer — deterministic honest-gap guardrail', () => {
       evidenceRefs: ['f1', 'f-fabricated'],
     });
     const score = await agent.score(BARISTA_PROFILE, BACKEND_JOB);
+    // A barista/biology profile is a bad-but-ASSESSABLE fit → the honest `ok` arm,
+    // NOT a refusal (it names a real occupation).
+    if (score.status !== 'ok') throw new Error(`expected an ok score, got ${score.status}`);
     // Guardrail lands the score in the honest weak-match band.
     expect(score.overall).toBeLessThanOrEqual(25);
     // Fabricated ref is stripped.
@@ -291,6 +294,7 @@ describe('match scorer — deterministic honest-gap guardrail', () => {
     const agent = new LlmMatchScorerAgent(gateway);
     const score = await agent.score(BARISTA_PROFILE, BACKEND_JOB);
     // No throw; honest weak-match score; required subscores still present.
+    if (score.status !== 'ok') throw new Error(`expected an ok score, got ${score.status}`);
     expect(score.overall).toBeLessThanOrEqual(25);
     const keys = new Set(score.subscores.map((s) => s.key));
     for (const req of REQUIRED_SUBSCORE_KEYS) expect(keys.has(req)).toBe(true);

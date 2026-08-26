@@ -50,13 +50,27 @@ describe('FM3.1 opportunity detail and why-this-fit', () => {
     expect(screen.getByTestId('why-evidence-list')).toBeVisible();
   });
 
-  it('renders InsufficientData instead of a bare match number when the breakdown is thin', async () => {
+  it('renders InsufficientData instead of a bare match number when the ok arm breakdown is thin', async () => {
     const thin = opportunityMatchResponseSchema.parse({
-      opportunityId: 'opportunity-1', overall: 0, subscores: [], explanation: '', evidenceRefs: [], modelVersion: 'match-scorer@1.0.0',
+      status: 'ok', opportunityId: 'opportunity-1', overall: 0, subscores: [], explanation: '', evidenceRefs: [], modelVersion: 'match-scorer@1.0.0',
     });
     render(<OpportunityDetailClient opportunityId="opportunity-1" dependencies={{ ...dependencies(), match: () => Promise.resolve(thin) }} />);
-    expect(await screen.findByText(/does not have enough grounded match detail/i)).toBeVisible();
+    expect(await screen.findByText(/not enough of your profile to assess fit/i)).toBeVisible();
     expect(screen.queryByText('0% match')).not.toBeInTheDocument();
+  });
+
+  it('renders the insufficient_data arm as an honest fit state with no score or confidence chip', async () => {
+    const refusal = opportunityMatchResponseSchema.parse({
+      status: 'insufficient_data',
+      opportunityId: 'opportunity-1',
+      reason: 'Not enough profile evidence yet to assess fit for this role.',
+      modelVersion: 'match-scorer@1.0.0',
+    });
+    render(<OpportunityDetailClient opportunityId="opportunity-1" dependencies={{ ...dependencies(), match: () => Promise.resolve(refusal) }} />);
+    expect(await screen.findByText(/not enough of your profile to assess fit/i)).toBeVisible();
+    // No fabricated score and no confidence chip on this arm.
+    expect(screen.queryByText(/% match/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('confidence-chip')).not.toBeInTheDocument();
   });
 });
 

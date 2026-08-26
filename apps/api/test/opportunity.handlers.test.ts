@@ -19,6 +19,7 @@ import {
   groundMatchScore,
   type JobDescription,
   type MatchScore,
+  type MatchScoreOk,
   type ResumeFactPort,
   type ScoringAgent,
   type TailorProfileFact,
@@ -86,17 +87,24 @@ class FakeReadStore implements OpportunityReadPort {
 
 /** In-memory match store honoring the UNIQUE (profile, opportunity, modelVersion). */
 class FakeMatchStore implements MatchScoreStore {
-  readonly rows = new Map<string, MatchScore>();
+  readonly rows = new Map<string, MatchScoreOk>();
   private key(p: string, o: string, v: string): string {
     return `${p}\u0000${o}\u0000${v}`;
   }
-  findLatest(profileId: string, opportunityId: string, modelVersion: string): Promise<MatchScore | null> {
+  findLatest(profileId: string, opportunityId: string, modelVersion: string): Promise<MatchScoreOk | null> {
     return Promise.resolve(this.rows.get(this.key(profileId, opportunityId, modelVersion)) ?? null);
   }
-  upsert(profileId: string, opportunityId: string, score: MatchScore): Promise<MatchScore> {
+  upsert(profileId: string, opportunityId: string, score: MatchScoreOk): Promise<MatchScoreOk> {
     this.rows.set(this.key(profileId, opportunityId, score.modelVersion ?? 'unknown'), score);
     return Promise.resolve(score);
   }
+}
+
+/** Narrow a union response body to the assessable `ok` arm (fails loudly otherwise). */
+function expectOk(body: unknown): MatchScoreOk & { opportunityId: string } {
+  const score = body as MatchScore & { opportunityId: string };
+  if (score.status !== 'ok') throw new Error(`expected an ok match score, got ${score.status}`);
+  return score;
 }
 
 class FakeProfileResolver implements ProfileResolver {
@@ -262,7 +270,7 @@ describe('GET /v1/opportunities/:id/match', () => {
 
     const res = await getOpportunityMatch(ctx(USER_A), 'o1', deps);
     expect(res.status).toBe(200);
-    const score = res.body as MatchScore & { opportunityId: string };
+    const score = expectOk(res.body);
     expect(score.opportunityId).toBe('o1');
     // Honest weak band.
     expect(score.overall).toBeLessThanOrEqual(25);
@@ -297,8 +305,8 @@ describe('GET /v1/opportunities/:id/match', () => {
 
     const resA = await getOpportunityMatch(ctx(USER_A), 'o1', withReqs.deps);
     const resB = await getOpportunityMatch(ctx(USER_B), 'o1', withReqs.deps);
-    const a = resA.body as MatchScore;
-    const b = resB.body as MatchScore;
+    const a = expectOk(resA.body);
+    const b = expectOk(resB.body);
     expect(a.overall).toBeLessThanOrEqual(25);
     expect(b.overall).toBeGreaterThanOrEqual(70);
     expect(a.overall).not.toBe(b.overall);
@@ -317,7 +325,7 @@ describe('GET /v1/opportunities/:id/match', () => {
     expect(second.status).toBe(200);
     // Served from the persisted row — the scorer was NOT called again.
     expect(agent.calls).toBe(1);
-    expect((second.body as MatchScore).overall).toBe((first.body as MatchScore).overall);
+    expect(expectOk(second.body).overall).toBe(expectOk(first.body).overall);
   });
 
   it('404s the match when the opportunity does not exist', async () => {

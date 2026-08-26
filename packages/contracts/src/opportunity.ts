@@ -62,12 +62,25 @@ export const opportunityMatchSubscoreSchema = z
 /**
  * Strict public projection for GET /v1/opportunities/:id/match.
  *
+ * A DISCRIMINATED UNION on `status`:
+ *   - `ok`                — a grounded rubric fit (overall + subscores +
+ *                           explanation + evidenceRefs). This is the honest fit
+ *                           even when LOW; a clearly-bad but ASSESSABLE match is a
+ *                           low `ok`, never `insufficient_data`.
+ *   - `insufficient_data` — too little of the caller's profile evidences this
+ *                           role's requirements to assess fit; the API refuses to
+ *                           invent a number and returns a plain-language `reason`.
+ *
+ * There is deliberately NO continuous confidence field — a fit score is a grounded
+ * rubric, not a probability.
+ *
  * Persistence identifiers (`match_scores.id` and `profile_id`) are deliberately
  * not transported. Internal scorer/store models retain those concerns in their
  * own package-local types; this schema models only the API response.
  */
-export const opportunityMatchResponseSchema = z
+export const opportunityMatchOkSchema = z
   .object({
+    status: z.literal('ok'),
     opportunityId: z.string().min(1),
     overall: z.number().int().min(0).max(100),
     subscores: z.array(opportunityMatchSubscoreSchema),
@@ -76,6 +89,22 @@ export const opportunityMatchResponseSchema = z
     modelVersion: z.string().min(1).optional(),
   })
   .strict();
+export type OpportunityMatchOk = z.infer<typeof opportunityMatchOkSchema>;
+
+export const opportunityMatchInsufficientSchema = z
+  .object({
+    status: z.literal('insufficient_data'),
+    opportunityId: z.string().min(1),
+    reason: z.string().min(1),
+    modelVersion: z.string().min(1).optional(),
+  })
+  .strict();
+export type OpportunityMatchInsufficient = z.infer<typeof opportunityMatchInsufficientSchema>;
+
+export const opportunityMatchResponseSchema = z.discriminatedUnion('status', [
+  opportunityMatchOkSchema,
+  opportunityMatchInsufficientSchema,
+]);
 export type OpportunityMatchResponse = z.infer<typeof opportunityMatchResponseSchema>;
 
 /** SourceRegistry entry (global allow-list) — database-schema.md §2 (connectors). */

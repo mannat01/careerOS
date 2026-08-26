@@ -21,6 +21,7 @@
 import type {
   JobDescription,
   MatchScore,
+  MatchScoreOk,
   MatchScorerService,
 } from '@careeros/cie-resume';
 import { MATCH_SCORER_MODEL_VERSION } from '@careeros/cie-resume';
@@ -49,10 +50,11 @@ export interface OpportunityDetail extends OpportunityListItem {
   rawPayload: Record<string, unknown>;
 }
 
-/** A discovery-time MatchScore as returned over HTTP (score + its opportunity). */
-export interface OpportunityMatch extends MatchScore {
-  opportunityId: string;
-}
+/**
+ * A discovery-time MatchScore as returned over HTTP — the honest UNION (score or
+ * an insufficient_data refusal), always tagged with its opportunity.
+ */
+export type OpportunityMatch = MatchScore & { opportunityId: string };
 
 /** Parsed, validated list filters (api-spec.md: source, remote, comp, freshness). */
 export interface OpportunityFilters {
@@ -85,8 +87,8 @@ export interface OpportunityReadPort {
  * row on the UNIQUE (profileId, opportunityId, modelVersion) key.
  */
 export interface MatchScoreStore {
-  findLatest(profileId: string, opportunityId: string, modelVersion: string): Promise<MatchScore | null>;
-  upsert(profileId: string, opportunityId: string, score: MatchScore): Promise<MatchScore>;
+  findLatest(profileId: string, opportunityId: string, modelVersion: string): Promise<MatchScoreOk | null>;
+  upsert(profileId: string, opportunityId: string, score: MatchScoreOk): Promise<MatchScoreOk>;
 }
 
 /** Resolves a verified userId to their profile row id (null when no profile yet). */
@@ -174,6 +176,12 @@ export async function getOpportunityMatch(
 
   const job = opportunityToJob(detail);
   const score = await deps.scorer.scoreJob(ctx.userId, job);
+  // insufficient_data is an honest refusal, NOT a persisted score row (there is no
+  // number/subscore to store). It flows straight through — deterministic recompute
+  // is cheap, so we simply return the refusal tagged with its opportunity.
+  if (score.status === 'insufficient_data') {
+    return ok({ ...score, opportunityId: id });
+  }
   const persisted = await deps.matchStore.upsert(profileId, id, score);
   return ok({ ...persisted, opportunityId: id });
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import type { OpportunityMatchResponse } from '@careeros/contracts';
+import type { OpportunityMatchOk, OpportunityMatchResponse } from '@careeros/contracts';
 import { AiSurface, ConfidenceChip, InsufficientData, WhyPopover, bandFor, type Confidence, type Evidence } from '@/trust';
 
 function humanize(key: string): string {
@@ -11,7 +11,7 @@ function humanize(key: string): string {
     .join(' ');
 }
 
-function evidenceFor(match: OpportunityMatchResponse): Evidence[] {
+function evidenceFor(match: OpportunityMatchOk): Evidence[] {
   return match.evidenceRefs.map((ref) => ({
     id: ref,
     source: 'Your profile evidence',
@@ -19,7 +19,7 @@ function evidenceFor(match: OpportunityMatchResponse): Evidence[] {
   }));
 }
 
-function confidenceFor(match: OpportunityMatchResponse): Confidence {
+function confidenceFor(match: OpportunityMatchOk): Confidence {
   const value = match.overall / 100;
   return {
     value,
@@ -35,15 +35,21 @@ export function OpportunityMatchSurface({
   readonly match: OpportunityMatchResponse;
   readonly compact?: boolean;
 }): JSX.Element {
-  const evidence = evidenceFor(match);
-  const confidence = confidenceFor(match);
-  const hasExplanation = match.explanation.trim().length > 0;
-  const hasBreakdown = match.subscores.length > 0;
-
-  if (!hasExplanation || !hasBreakdown) {
+  // insufficient_data ARM — CareerOS could not assess fit for this role. Render the
+  // honest "not enough of your profile" state: NO score, NO confidence chip, NO band
+  // (a fit is a grounded rubric — we refuse to invent one, per the union contract).
+  if (
+    match.status === 'insufficient_data' ||
+    match.explanation.trim().length === 0 ||
+    match.subscores.length === 0
+  ) {
+    const reason =
+      match.status === 'insufficient_data'
+        ? match.reason
+        : 'CareerOS does not have enough grounded match detail to show a fit score for this role.';
     return (
       <InsufficientData
-        reason="CareerOS does not have enough grounded match detail to show a fit score for this role."
+        reason={`Not enough of your profile to assess fit for this role. ${reason}`}
         next={[
           { id: 'profile', label: 'Add more profile evidence', href: '/you' },
           { id: 'later', label: 'Check this role again after your profile changes' },
@@ -51,6 +57,9 @@ export function OpportunityMatchSurface({
       />
     );
   }
+
+  const evidence = evidenceFor(match);
+  const confidence = confidenceFor(match);
 
   return (
     <AiSurface

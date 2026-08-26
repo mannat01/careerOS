@@ -55,6 +55,7 @@ export const POPULATED_OPPORTUNITY_DETAIL: OpportunityDetail = opportunityDetail
 });
 
 export const POPULATED_MATCH: OpportunityMatchResponse = opportunityMatchResponseSchema.parse({
+  status: 'ok',
   opportunityId: 'opportunity-1',
   overall: 78,
   subscores: [
@@ -69,6 +70,7 @@ export const POPULATED_MATCH: OpportunityMatchResponse = opportunityMatchRespons
 });
 
 export const SECOND_MATCH: OpportunityMatchResponse = opportunityMatchResponseSchema.parse({
+  status: 'ok',
   opportunityId: 'opportunity-2',
   overall: 62,
   subscores: [
@@ -77,6 +79,18 @@ export const SECOND_MATCH: OpportunityMatchResponse = opportunityMatchResponseSc
   ],
   explanation: 'Platform evidence overlaps, but the returned location fit is lower.',
   evidenceRefs: ['experience:experience-1'],
+  modelVersion: 'match-scorer@1.0.0',
+});
+
+/**
+ * The insufficient_data ARM of the union: the scorer could not assess fit because
+ * too little of the caller's profile speaks to the role. The UI renders the honest
+ * "not enough of your profile" state — no score, no confidence chip.
+ */
+export const INSUFFICIENT_MATCH: OpportunityMatchResponse = opportunityMatchResponseSchema.parse({
+  status: 'insufficient_data',
+  opportunityId: 'opportunity-1',
+  reason: 'Not enough profile evidence yet to assess fit for this role.',
   modelVersion: 'match-scorer@1.0.0',
 });
 

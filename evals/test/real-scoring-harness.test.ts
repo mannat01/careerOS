@@ -41,6 +41,8 @@ describe('real scoring measurement harness', () => {
       c.profile,
       c.job,
     );
+    // cases[0] is a strong, assessable case → the `ok` arm.
+    if (honest.status !== 'ok') throw new Error('expected an ok score');
     const produced = { ...honest, evidenceRefs: [...honest.evidenceRefs, 'f-fabricated'] };
     const sample = scoreRealScoringSample({
       c, run: 1, produced, response, latencyMs: 100,

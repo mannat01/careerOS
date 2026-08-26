@@ -144,6 +144,7 @@ describe('scoring scorer — self-validation', () => {
   it('catches an out-of-band overall', () => {
     const c = scoring.find((x) => x.id === 'sc-02-weak-match')!; // band 0–25
     const produced: MatchScore = {
+      status: 'ok',
       overall: 95,
       subscores: c.requiredSubscores.map((key) => ({ key, value: 95 })),
       explanation: 'Cites education.',
@@ -157,6 +158,7 @@ describe('scoring scorer — self-validation', () => {
   it('catches a missing required subscore (a bare-ish number)', () => {
     const c = scoring.find((x) => x.id === 'sc-01-strong-match')!;
     const produced: MatchScore = {
+      status: 'ok',
       overall: 90,
       subscores: [{ key: 'skills_match', value: 90 }], // missing the other two
       explanation: 'Strong match.',
@@ -170,6 +172,7 @@ describe('scoring scorer — self-validation', () => {
   it('catches an ungrounded explanation (does not cite the required facts)', () => {
     const c = scoring.find((x) => x.id === 'sc-01-strong-match')!;
     const produced: MatchScore = {
+      status: 'ok',
       overall: 90,
       subscores: c.requiredSubscores.map((key) => ({ key, value: 90 })),
       explanation: 'Great candidate.',
@@ -183,6 +186,7 @@ describe('scoring scorer — self-validation', () => {
   it('catches a fabricated qualification in the explanation', () => {
     const c = scoring.find((x) => x.id === 'sc-04-seniority-mismatch')!;
     const produced: MatchScore = {
+      status: 'ok',
       overall: 50,
       subscores: c.requiredSubscores.map((key) => ({ key, value: 50 })),
       explanation: 'Candidate brings 8 years of staff-level experience.', // forbidden
@@ -196,6 +200,7 @@ describe('scoring scorer — self-validation', () => {
   it('catches non-reproducibility across identical inputs', () => {
     const c = scoring.find((x) => x.id === 'sc-01-strong-match')!;
     const base: MatchScore = {
+      status: 'ok',
       overall: 90,
       subscores: c.requiredSubscores.map((key) => ({ key, value: 90 })),
       explanation: 'Cites f2, f3, f4.',
@@ -204,6 +209,41 @@ describe('scoring scorer — self-validation', () => {
     const drifted: MatchScore = { ...base, overall: 88 };
     const scored = scoreScoringCase(c, base, drifted);
     expect(scored.reproducible).toBe(false);
+    expect(scored.passed).toBe(false);
+  });
+
+  it('passes an insufficient_data case when the scorer honestly REFUSES with a reason', () => {
+    const c = scoring.find((x) => x.id === 'sc-10-insufficient-data')!;
+    const produced: MatchScore = {
+      status: 'insufficient_data',
+      reason: 'Not enough relevant evidence to assess fit.',
+    };
+    const scored = scoreScoringCase(c, produced, produced);
+    expect(scored.status).toBe('insufficient_data');
+    expect(scored.statusOk).toBe(true);
+    expect(scored.overall).toBeNull();
+    expect(scored.passed).toBe(true);
+  });
+
+  it('FAILS an insufficient_data case if the scorer fabricates a number instead of refusing', () => {
+    const c = scoring.find((x) => x.id === 'sc-10-insufficient-data')!;
+    const fabricated: MatchScore = {
+      status: 'ok',
+      overall: 55,
+      subscores: c.requiredSubscores.map((key) => ({ key, value: 55 })),
+      explanation: 'Invented a fit.',
+      evidenceRefs: [],
+    };
+    const scored = scoreScoringCase(c, fabricated, fabricated);
+    expect(scored.statusOk).toBe(false);
+    expect(scored.passed).toBe(false);
+  });
+
+  it('FAILS an ok case if the scorer refuses (insufficient_data) when it should assess', () => {
+    const c = scoring.find((x) => x.id === 'sc-02-weak-match')!; // bad-but-assessable
+    const refused: MatchScore = { status: 'insufficient_data', reason: 'gave up' };
+    const scored = scoreScoringCase(c, refused, refused);
+    expect(scored.statusOk).toBe(false);
     expect(scored.passed).toBe(false);
   });
 });

@@ -75,6 +75,8 @@ export {
   opportunityListItemSchema,
   opportunityListResponseSchema,
   opportunityDetailSchema,
+  opportunityMatchOkSchema,
+  opportunityMatchInsufficientSchema,
   opportunityMatchResponseSchema,
   sourceRegistryEntrySchema,
   type Opportunity,
@@ -82,6 +84,8 @@ export {
   type OpportunityListResponse,
   type OpportunityDetail,
   type OpportunityMatchResponse,
+  type OpportunityMatchOk,
+  type OpportunityMatchInsufficient,
   type SourceRegistryEntry,
 } from './opportunity.js';
 export {

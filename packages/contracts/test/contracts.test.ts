@@ -330,8 +330,9 @@ describe('canonical Opportunity', () => {
     expect(opportunityDetailSchema.safeParse({ ...item, requirementsParsed: null, rawPayload: {} }).success).toBe(true);
   });
 
-  it('parses the exact public match projection without persistence identifiers', () => {
+  it('parses the exact public match projection (ok arm) without persistence identifiers', () => {
     const match = {
+      status: 'ok' as const,
       opportunityId: 'opportunity-1',
       overall: 97,
       subscores: [{ key: 'skills_match', value: 98 }, { key: 'seniority_fit', value: 96 }],
@@ -340,6 +341,27 @@ describe('canonical Opportunity', () => {
       modelVersion: 'match-scorer@1.0.0',
     };
     expect(opportunityMatchResponseSchema.parse(match)).toEqual(match);
+  });
+
+  it('parses the insufficient_data arm (no fabricated number/subscores/confidence)', () => {
+    const refusal = {
+      status: 'insufficient_data' as const,
+      opportunityId: 'opportunity-1',
+      reason: 'Not enough profile evidence to assess fit for this role.',
+      modelVersion: 'match-scorer@1.0.0',
+    };
+    expect(opportunityMatchResponseSchema.parse(refusal)).toEqual(refusal);
+    // The refusal arm carries NO overall/subscores/confidence — a strict union.
+    expect(opportunityMatchResponseSchema.safeParse({ ...refusal, overall: 0 }).success).toBe(false);
+    expect(opportunityMatchResponseSchema.safeParse({ ...refusal, confidence: 0.2 }).success).toBe(false);
+    // The ok arm requires overall+subscores+explanation+evidenceRefs; a bare status is rejected.
+    expect(opportunityMatchResponseSchema.safeParse({ status: 'ok', opportunityId: 'o1' }).success).toBe(false);
+    // No continuous confidence field on EITHER arm (a fit is a rubric, not a probability).
+    expect(
+      opportunityMatchResponseSchema.safeParse({
+        status: 'ok', opportunityId: 'o1', overall: 50, subscores: [], explanation: 'x', evidenceRefs: [], confidence: 0.5,
+      }).success,
+    ).toBe(false);
   });
 
   it('keeps persistence identifiers out of the public match type and rejects a profileId leak', () => {
@@ -351,6 +373,7 @@ describe('canonical Opportunity', () => {
     expect(publicHasProfileId).toBe(false);
 
     const publicProjection: OpportunityMatchResponse = {
+      status: 'ok',
       opportunityId: 'opportunity-1',
       overall: 97,
       subscores: [{ key: 'skills_match', value: 98 }],

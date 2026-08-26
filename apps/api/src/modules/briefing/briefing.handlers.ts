@@ -29,7 +29,7 @@ import type {
   StrategicReasonerService,
 } from '@careeros/cie-reasoning';
 import { STRATEGIC_REASONER_MODEL_VERSION } from '@careeros/cie-reasoning';
-import type { MatchScorerService, MatchScore } from '@careeros/cie-resume';
+import type { MatchScorerService, MatchScoreOk } from '@careeros/cie-resume';
 import { MATCH_SCORER_MODEL_VERSION } from '@careeros/cie-resume';
 import type { CareerStateService } from '@careeros/cie-state';
 import type { RequestContext } from '../../common/auth/request-context.js';
@@ -232,7 +232,9 @@ export async function runManualBriefing(
       const job = opportunityToJob(detail);
       const score = await deps.scorer.scoreJob(ctx.userId, job);
       cost += estimateScorerCost();
-      scored.push({ detail, score });
+      // A fit the scorer cannot assess (insufficient profile evidence) is not a
+      // ranked opportunity — skip it honestly rather than invent a top-N number.
+      if (score.status === 'ok') scored.push({ detail, score });
     }
     // Top-N by overall.
     scored.sort((a, b) => b.score.overall - a.score.overall);
@@ -447,7 +449,8 @@ export async function getLatestBriefing(
 
 interface ScoredOpportunity {
   detail: OpportunityDetail;
-  score: MatchScore;
+  /** Only ASSESSABLE (`ok`) scores are ranked; refusals are skipped upstream. */
+  score: MatchScoreOk;
 }
 
 interface StepResult<T> {

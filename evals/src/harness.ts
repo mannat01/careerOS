@@ -354,8 +354,14 @@ export async function runTailoringEval(
 
 export interface ScoringCaseResult {
   caseId: string;
+  /** The arm the scorer returned for this case ('ok' | 'insufficient_data'). */
+  status: 'ok' | 'insufficient_data';
+  /** The arm the case EXPECTS (defaults to 'ok'). */
+  expectedStatus: 'ok' | 'insufficient_data';
+  statusOk: boolean;
   bandOk: boolean;
-  overall: number;
+  /** null on the insufficient_data arm (no fabricated number). */
+  overall: number | null;
   missingSubscores: string[];
   explanationPresent: boolean;
   /** Required fact ids the explanation failed to cite. */
@@ -365,11 +371,46 @@ export interface ScoringCaseResult {
   passed: boolean;
 }
 
+function signature(m: MatchScore): string {
+  return m.status === 'ok'
+    ? JSON.stringify({ status: m.status, overall: m.overall, subscores: m.subscores })
+    : JSON.stringify({ status: m.status, reason: m.reason });
+}
+
 export function scoreScoringCase(
   c: ScoringCase,
   produced: MatchScore,
   reproduced?: MatchScore,
 ): ScoringCaseResult {
+  const expectedStatus = c.expectedStatus ?? 'ok';
+  const statusOk = produced.status === expectedStatus;
+
+  // Reproducibility: identical inputs → byte-identical output (both arms). When
+  // the caller supplies a second run, compare; otherwise treat as reproducible.
+  const reproducible = reproduced ? signature(reproduced) === signature(produced) : true;
+
+  // insufficient_data arm — the ONLY checks are: right arm + a non-empty reason
+  // (never a fabricated number/subscores) + reproducibility.
+  if (produced.status === 'insufficient_data') {
+    const reasonPresent = produced.reason.trim().length > 0;
+    const passed = statusOk && reasonPresent && reproducible;
+    return {
+      caseId: c.id,
+      status: 'insufficient_data',
+      expectedStatus,
+      statusOk,
+      bandOk: statusOk, // band is not applicable on this arm
+      overall: null,
+      missingSubscores: [],
+      explanationPresent: reasonPresent,
+      ungroundedExplanation: [],
+      fabrications: [],
+      reproducible,
+      passed,
+    };
+  }
+
+  // ok arm — the full calibration + grounding checks.
   const bandOk = produced.overall >= c.expectedBand.min && produced.overall <= c.expectedBand.max;
 
   const presentKeys = new Set(produced.subscores.map((s) => s.key));
@@ -383,14 +424,8 @@ export function scoreScoringCase(
   const hay = norm(`${produced.explanation}\n${produced.subscores.map((s) => s.key).join(' ')}`);
   const fabrications = (c.forbidden ?? []).filter((f) => hay.includes(norm(f)));
 
-  // Reproducibility: identical inputs → identical overall + subscores. When the
-  // caller supplies a second run, compare; otherwise treat as reproducible.
-  const reproducible = reproduced
-    ? reproduced.overall === produced.overall &&
-      JSON.stringify(reproduced.subscores) === JSON.stringify(produced.subscores)
-    : true;
-
   const passed =
+    statusOk &&
     bandOk &&
     missingSubscores.length === 0 &&
     explanationPresent &&
@@ -400,6 +435,9 @@ export function scoreScoringCase(
 
   return {
     caseId: c.id,
+    status: 'ok',
+    expectedStatus,
+    statusOk,
     bandOk,
     overall: produced.overall,
     missingSubscores,

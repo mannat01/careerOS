@@ -199,6 +199,7 @@ const profiles: ProfileResolver = {
 // ---------------- fake scorer / reasoner / state ----------------
 
 const makeScore = (overall: number, weakDim = 'python'): MatchScore => ({
+  status: 'ok',
   overall,
   subscores: [
     { key: 'skills', value: 40 }, // weak → triggers a per-opportunity gap

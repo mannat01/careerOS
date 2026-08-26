@@ -46,7 +46,7 @@ export const successFixtures = Object.freeze({
     data: [{ id: 'opportunity-1', source: 'greenhouse', sourceRef: 'gh-1', company: 'Helios Labs', role: 'Staff Backend Engineer', comp: null, location: 'Remote', remote: true, ingestedAt: NOW }], nextCursor: null,
   }),
   match: (): OpportunityMatchResponse => opportunityMatchResponseSchema.parse({
-    opportunityId: 'opportunity-1', overall: 87, subscores: [{ key: 'skills', value: 90 }], explanation: 'Strong grounded overlap.', evidenceRefs: ['experience:1'], modelVersion: 'match-v1',
+    status: 'ok', opportunityId: 'opportunity-1', overall: 87, subscores: [{ key: 'skills', value: 90 }], explanation: 'Strong grounded overlap.', evidenceRefs: ['experience:1'], modelVersion: 'match-v1',
   }),
   audit: (): AuditListResponse => auditListResponseSchema.parse({
     data: [{ id: 'audit-1', userId: USER_ID, actor: 'twin', action: 'opportunity.score', target: 'opportunity-1', reason: 'Grounded score.', modelVersion: 'match-v1', traceId: 'fixture-trace', at: NOW }], nextBefore: null,
@@ -130,6 +130,10 @@ export const stateFixtures = Object.freeze({
     status: 'insufficient_data',
     report: { sampleSize: 0, modelVersion: 'calibration@fake-deterministic', computedAt: NOW },
     feedback: { byDomain: {}, overall: 0, modelVersion: 'calibration@fake-deterministic' },
+  }),
+  // The insufficient_data ARM of the opportunity match union — no score/subscores.
+  insufficientMatch: (): OpportunityMatchResponse => opportunityMatchResponseSchema.parse({
+    status: 'insufficient_data', opportunityId: 'opportunity-1', reason: 'Not enough profile evidence yet to assess fit.', modelVersion: 'match-v1',
   }),
 });
 

@@ -224,7 +224,15 @@ export interface MatchSubscore {
   value: number;
 }
 
-export interface MatchScore {
+/**
+ * MatchScore is a DISCRIMINATED UNION on `status` (mirrors @careeros/cie-resume):
+ *   - `ok`                — a grounded rubric fit (overall + subscores + …);
+ *   - `insufficient_data` — too little relevant evidence to assess; a `reason`,
+ *                           never a fabricated number.
+ * No confidence field — a fit score is a grounded rubric, not a probability.
+ */
+export interface MatchScoreOk {
+  status: 'ok';
   /** 0–100 overall match. */
   overall: number;
   subscores: MatchSubscore[];
@@ -233,6 +241,14 @@ export interface MatchScore {
   /** Profile fact ids the explanation grounds itself in (provenance). */
   evidenceRefs: string[];
 }
+
+export interface MatchScoreInsufficient {
+  status: 'insufficient_data';
+  /** Plain-language reason the fit could not be assessed (never a bare status). */
+  reason: string;
+}
+
+export type MatchScore = MatchScoreOk | MatchScoreInsufficient;
 
 export interface ScoringAgent {
   score(profile: ProfileFact[], job: JobDescription): Promise<MatchScore>;
@@ -243,6 +259,11 @@ export interface ScoringCase {
   description: string;
   profile: ProfileFact[];
   job: JobDescription;
+  /**
+   * Expected outcome ARM. `'ok'` (default) = a grounded rubric score inside the
+   * band; `'insufficient_data'` = the scorer must REFUSE (truly-thin profile).
+   */
+  expectedStatus?: 'ok' | 'insufficient_data';
   /** Acceptable band for the overall score (calibration, not an exact value). */
   expectedBand: { min: number; max: number };
   /** Subscore keys that MUST be present (an explained score, never bare). */

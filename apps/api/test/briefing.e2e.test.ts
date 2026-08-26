@@ -184,6 +184,7 @@ const profiles: ProfileResolver = {
 };
 
 const makeScore = (): MatchScore => ({
+  status: 'ok',
   overall: 78,
   subscores: [
     { key: 'skills', value: 40 },

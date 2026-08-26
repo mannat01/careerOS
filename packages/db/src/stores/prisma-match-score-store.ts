@@ -25,7 +25,15 @@ export interface MatchSubscoreLike {
   value: number;
 }
 
+/**
+ * Structural mirror of @careeros/cie-resume `MatchScoreOk` (the `ok` arm of the
+ * MatchScore union). ONLY assessable scores are persisted — an `insufficient_data`
+ * refusal carries no number/subscores/evidence to store, so it never reaches this
+ * store (the handler returns it straight through). `status: 'ok'` is carried so
+ * the shape stays assignable to the resume package's discriminated union.
+ */
 export interface MatchScoreLike {
+  status: 'ok';
   overall: number;
   subscores: MatchSubscoreLike[];
   explanation: string;
@@ -86,6 +94,7 @@ export class PrismaMatchScoreStore implements MatchScoreStorePort {
     modelVersion: string;
   }): MatchScoreLike {
     return {
+      status: 'ok',
       overall: row.overall,
       subscores: row.subscores as unknown as MatchSubscoreLike[],
       explanation: row.explanation,

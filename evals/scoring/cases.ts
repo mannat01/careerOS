@@ -194,4 +194,27 @@ export const scoringCases: ScoringCase[] = [
     // Adjacent ≠ identical: must not claim demonstrated React.
     forbidden: ['React — demonstrated', 'production React', 'React expert'],
   },
+  {
+    id: 'sc-10-insufficient-data',
+    description:
+      'Near-empty profile (a single scheduling note, no experience/skills/domain signal) vs a backend JD → the scorer must REFUSE (status=insufficient_data), not invent a number. Contrast sc-02: a full barista/biology profile is a bad-but-ASSESSABLE low score, NOT insufficient_data.',
+    profile: [
+      { id: 'f1', kind: 'experience', summary: 'Available weekends only; seeking work' },
+    ],
+    job: {
+      title: 'Senior Backend Engineer',
+      seniority: 'senior',
+      requirements: ['Python', 'distributed systems', '5+ years backend'],
+      text: 'Senior Backend Engineer with 5+ years and distributed-systems depth.',
+    },
+    // The profile evidences none of the requirements and carries no domain signal:
+    // there is nothing to weigh, so a fabricated number would be dishonest.
+    expectedStatus: 'insufficient_data',
+    // Band is not applicable on the insufficient_data arm; kept sane for integrity.
+    expectedBand: { min: 0, max: 0 },
+    // A score is never a bare number, so we still require the rubric keys be named
+    // on the ok arm; on this refusal arm the harness ignores them.
+    requiredSubscores: REQUIRED_SUBSCORES,
+    explanationMustCiteFactIds: [],
+  },
 ];

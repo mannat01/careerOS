@@ -231,6 +231,43 @@ const SENIORITY_GAP_CAP = 60; // a real seniority gap prevents a "strong match" 
 const DOMAIN_MISMATCH_CAP = 25; // wrong domain caps the overall low regardless of stray skills
 const PRIMARY_REQ_WEIGHT = 3; // the headline (first) requirement dominates skill coverage
 
+// Calibration: HIGH (>=75) is RESERVED for strong matches. A partial match (some
+// demanded hard requirements met, some not) or a career-changer with only thin
+// relevant experience must land MODERATE, never high — 84/"high" was the
+// over-scoring these caps correct.
+const MODERATE_MATCH_CAP = 74; // ceiling for partial-match / thin-experience fits
+const THIN_EXPERIENCE_THRESHOLD = 60; // experience_relevance below this ⇒ "thin" relevant history
+
+// INSUFFICIENT-DATA threshold (explicit, content-based — NOT a fact count). A fit is
+// UNASSESSABLE — not merely a bad fit — only when the profile carries essentially
+// nothing to weigh against the JD, i.e. ALL of:
+//   (1) no hard requirement even partially covered,
+//   (2) no tech/domain signal, AND
+//   (3) NO CAREER SIGNAL at all — no skill/project/education fact, and no
+//       experience naming a real role/employer/tenure (only availability/filler).
+// This strict conjunction keeps a clearly-bad-but-ASSESSABLE fit `ok` no matter how
+// thin: a lone "Barista at Ridge Coffee, 2023" names a real occupation, so it is a
+// low `ok` (wrong-domain), never a refusal. Only a contentless profile (e.g.
+// "Available weekends only; seeking work") — with nothing describing a career —
+// crosses into insufficient_data.
+
+/** 4-digit year or an "<role> at <employer>" marker → a real, describable job. */
+const JOB_MARKER = /\b(?:19|20)\d\d\b|\bat\b/;
+
+/**
+ * True when the profile evidences ANYTHING assessable about the candidate's career:
+ *  - any skill / project / education fact (these ARE career evidence by kind), OR
+ *  - any experience fact that names a real role/employer/tenure (a job marker),
+ *    as opposed to a pure availability/filler note.
+ */
+function hasCareerSignal(profile: TailorProfileFact[]): boolean {
+  return profile.some((f) => {
+    if (significantTokens(f.summary).length === 0) return false;
+    if (f.kind === 'skill' || f.kind === 'project' || f.kind === 'education') return true;
+    return JOB_MARKER.test(f.summary.toLowerCase());
+  });
+}
+
 function clampScore(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
@@ -323,7 +360,14 @@ function collectEvidence(profile: TailorProfileFact[], reqs: string[]): string[]
 /**
  * THE GUARDRAIL. Recompute an honest, grounded MatchScore from the REAL profile
  * facts vs the job's REAL requirements. Deterministic ⇒ reproducible. The
- * untrusted `_proposal` is intentionally ignored — that discard IS the grounding.
+ * untrusted `_proposal` is intentionally ignored — that discard IS the grounding
+ * (unchanged 0-leak behavior).
+ *
+ * Two honest outcomes:
+ *   - a thin/unassessable profile ⇒ `{ status: 'insufficient_data', reason }`
+ *     (we refuse to invent a number);
+ *   - otherwise ⇒ `{ status: 'ok', overall, subscores, explanation, evidenceRefs }`
+ *     — a grounded rubric fit, low but honest for a clearly-bad ASSESSABLE match.
  */
 export function groundMatchScore(
   _proposal: RawMatchScoreProposal,
@@ -354,6 +398,11 @@ export function groundMatchScore(
       gaps.push(r);
     }
   });
+  // Snapshot HARD coverage before soft/seniority gaps are folded in — a PARTIAL
+  // match (some demanded hard reqs met, some not) is the "moderate, not high" case.
+  const hasHardCoverage = covWeighted > 0;
+  const hasHardGap = gaps.length > 0;
+
   // Soft requirements that ARE evidenced count as supported (never fabricated when absent).
   for (const r of reqs) {
     if (!isSoftReq(r)) continue;
@@ -370,6 +419,26 @@ export function groundMatchScore(
   const domainFit = tech ? 85 : 10;
   const trajectoryFit = clampScore((senFit + experienceRelevance) / 2);
 
+  // ---- INSUFFICIENT-DATA gate (explicit, strict conjunction) ----
+  // Refuse to score ONLY when there is essentially nothing to weigh: no hard req
+  // even partially covered, no tech/domain signal, AND no career signal at all. A
+  // clearly-bad but ASSESSABLE fit (a barista/biology profile vs a backend JD)
+  // fails this AND-chain on the career-signal arm and is scored as an honest LOW
+  // `ok`, never refused.
+  if (
+    supported.length === 0 &&
+    !tech &&
+    !hasCareerSignal(profile)
+  ) {
+    return {
+      status: 'insufficient_data',
+      reason:
+        `Not enough of the profile evidences this role's requirements to assess fit for ${job.title}. ` +
+        `Add more relevant experience, projects, or skills and re-check.`,
+      modelVersion: MATCH_SCORER_MODEL_VERSION_STAMP,
+    };
+  }
+
   // Name the seniority gap explicitly when the candidate is below the target level.
   if (rank < targetRank) {
     for (const r of reqs) if (isSeniorityReq(r)) gaps.push(r);
@@ -379,6 +448,13 @@ export function groundMatchScore(
   let overall = W_SKILLS * skillsMatch + W_EXPERIENCE * experienceRelevance + W_SENIORITY * senFit;
   if (senFit < 40) overall = Math.min(overall, SENIORITY_GAP_CAP);
   if (!tech) overall = Math.min(overall, DOMAIN_MISMATCH_CAP);
+  // CALIBRATION: reserve HIGH (>=75) for strong matches. A partial hard-req match
+  // or a thin relevant history caps the fit at MODERATE — this is what pulls the
+  // borderline career-changer / partial-match cases down off an inflated "high".
+  if (hasHardCoverage && hasHardGap) overall = Math.min(overall, MODERATE_MATCH_CAP);
+  if (tech && experienceRelevance < THIN_EXPERIENCE_THRESHOLD) {
+    overall = Math.min(overall, MODERATE_MATCH_CAP);
+  }
   overall = clampScore(overall);
 
   const evidenceRefs = collectEvidence(profile, reqs);
@@ -397,7 +473,7 @@ export function groundMatchScore(
     { key: 'trajectory_fit', value: trajectoryFit },
   ];
 
-  return { overall, subscores, explanation, evidenceRefs, modelVersion: MATCH_SCORER_MODEL_VERSION_STAMP };
+  return { status: 'ok', overall, subscores, explanation, evidenceRefs, modelVersion: MATCH_SCORER_MODEL_VERSION_STAMP };
 }
 
 function buildMatchExplanation(args: {
@@ -430,6 +506,7 @@ function buildMatchExplanation(args: {
  */
 export function rawProposalToScore(proposal: RawMatchScoreProposal): MatchScore {
   return {
+    status: 'ok',
     overall: proposal.overall,
     subscores: proposal.subscores,
     explanation: proposal.explanation,

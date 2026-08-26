@@ -20,7 +20,8 @@ describe('contract-backed MSW fixtures', () => {
     expect(apiErrorSchema.parse(errorFixtures.rateLimit().body).error.code).toBe('rate_limited');
     expect(briefingRunDetailSchema.parse(stateFixtures.partialResult()).status).toBe('partial');
     expect(opportunityListResponseSchema.parse(successFixtures.opportunities())).toBeDefined();
-    expect(opportunityMatchResponseSchema.parse(successFixtures.match())).toBeDefined();
+    expect(opportunityMatchResponseSchema.parse(successFixtures.match()).status).toBe('ok');
+    expect(opportunityMatchResponseSchema.parse(stateFixtures.insufficientMatch()).status).toBe('insufficient_data');
     expect(resumeModelSchema.parse(successFixtures.resumeModel())).toBeDefined();
     expect(resumeVariantSchema.parse(successFixtures.resumeVariant()).bullets).toEqual([]);
     expect(pendingApprovalListResponseSchema.parse(successFixtures.pendingApprovals()).data[0]?.why).toContain('exact contents');

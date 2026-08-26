@@ -292,6 +292,7 @@ describe('POST /v1/cie/match', () => {
 
     expect(res.status).toBe(200);
     const score = res.body as MatchScore;
+    if (score.status !== 'ok') throw new Error(`expected an ok score, got ${score.status}`);
     // Guardrail lands the score in the honest weak band.
     expect(score.overall).toBeLessThanOrEqual(25);
     // The fabricated evidenceRef the "LLM" proposed is stripped.
@@ -326,8 +327,11 @@ describe('POST /v1/cie/match', () => {
     const resA = await scoreMatch(ctx(USER_A), job, deps);
     const resB = await scoreMatch(ctx(USER_B), job, deps);
 
-    expect((resA.body as MatchScore).overall).toBeLessThanOrEqual(25);
-    expect((resB.body as MatchScore).overall).toBeGreaterThanOrEqual(70);
+    const a = resA.body as MatchScore;
+    const b = resB.body as MatchScore;
+    if (a.status !== 'ok' || b.status !== 'ok') throw new Error('expected ok scores for both users');
+    expect(a.overall).toBeLessThanOrEqual(25);
+    expect(b.overall).toBeGreaterThanOrEqual(70);
   });
 
   it('returns validation_failed when the payload has no job text', async () => {

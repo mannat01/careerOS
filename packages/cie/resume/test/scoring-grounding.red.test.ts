@@ -109,6 +109,11 @@ describe('scoring grounding red-test — the guardrail defeats every integrity p
     it(`REAL guardrail: ${probe.name} → honest band + no fabrication + gap named`, () => {
       const score = groundMatchScore(probe.proposal, probe.profile, probe.job);
 
+      // Each probe profile is ASSESSABLE (names a real role/skill), so the guardrail
+      // returns the honest `ok` arm — never a refusal — even under inflation pressure.
+      expect(score.status).toBe('ok');
+      if (score.status !== 'ok') return;
+
       // (a) Inflated 95 is DISCARDED — the overall lands in the honest band.
       expect(score.overall).toBeGreaterThanOrEqual(probe.band.min);
       expect(score.overall).toBeLessThanOrEqual(probe.band.max);
@@ -132,6 +137,9 @@ describe('scoring grounding red-test — the guardrail defeats every integrity p
 
     it(`NEUTERED guardrail: ${probe.name} → inflated + fabricated evidenceRef LEAKS`, () => {
       const leaked = rawProposalToScore(probe.proposal);
+      // The neutered path always trusts the proposal → the `ok` arm, verbatim.
+      expect(leaked.status).toBe('ok');
+      if (leaked.status !== 'ok') return;
       // The overall the guardrail was hiding leaks through unchanged.
       expect(leaked.overall).toBe(95);
       // The fabricated evidenceRef survives.
@@ -142,6 +150,8 @@ describe('scoring grounding red-test — the guardrail defeats every integrity p
 
       // Sanity contrast: the REAL guardrail on the SAME proposal does NOT leak these.
       const honest = groundMatchScore(probe.proposal, probe.profile, probe.job);
+      expect(honest.status).toBe('ok');
+      if (honest.status !== 'ok') return;
       expect(honest.overall).not.toBe(95);
       expect(honest.evidenceRefs).not.toContain('f-fabricated');
     });

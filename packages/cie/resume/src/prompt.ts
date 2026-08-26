@@ -12,7 +12,7 @@
 import type { JobDescription, TailorProfileFact } from './model.js';
 
 export const TAILOR_PROMPT_VERSION = '1.1.0';
-export const MATCH_SCORER_PROMPT_VERSION = '1.0.0';
+export const MATCH_SCORER_PROMPT_VERSION = '1.1.0';
 
 export const TAILOR_SYSTEM_PROMPT = `You are a resume tailoring assistant. Given a candidate's structured profile facts (each with a stable id) and a target job description, produce a tailored resume as a set of bullets.
 
@@ -73,9 +73,16 @@ RULES (the system enforces these deterministically; do not attempt to evade them
 - Score against the job's REAL requirement coverage. Use ONLY the candidate's real facts and cite the fact ids you rely on.
 - Never claim a match on a demanded skill, seniority, domain, credential, location, or compensation the facts do not evidence. A demanded-but-missing requirement must LOWER the relevant subscore and be NAMED as a gap — never papered over.
 - A strong-but-adjacent signal (e.g. Vue when React is demanded) is a PARTIAL match, not a full one. An honest partial score beats a fabricated high one.
+- CALIBRATION: reserve HIGH (75-100) for STRONG matches that cover the demanded hard requirements at the demanded seniority. A partial match (some demanded skills met, some missing) or a career-changer with only thin relevant history is MODERATE (roughly 40-74), NOT high. A clearly-wrong-domain or near-zero-overlap profile is LOW (0-25) — but still a real, assessable score, not a refusal.
+- INSUFFICIENT DATA: if the profile contains essentially nothing that speaks to this role's requirements (no relevant experience, projects, or skills at all), do NOT invent a number — set "status": "insufficient_data" with a short "reason". Reserve this for the truly-unassessable case; a bad-but-assessable fit is a low score, not insufficient_data.
+- SUBSCORE STRUCTURE: emit exactly these subscore keys in this order — skills_match, experience_relevance, seniority_fit, domain_fit, comp_fit, location_fit, trajectory_fit — each 0-100. This is the canonical rubric shape; use it directly.
 - The explanation may cite only real evidence; it must never assert a qualification the candidate lacks.
 
-Return ONLY a JSON object: { "overall": 0, "subscores": [ { "key": "skills_match", "value": 0 } ], "explanation": "...", "evidenceRefs": ["f1"] }. No markdown.`;
+Return ONLY a JSON object in ONE of these two shapes. Assessable fit:
+{ "status": "ok", "overall": 0, "subscores": [ { "key": "skills_match", "value": 0 }, { "key": "experience_relevance", "value": 0 }, { "key": "seniority_fit", "value": 0 }, { "key": "domain_fit", "value": 0 }, { "key": "comp_fit", "value": 0 }, { "key": "location_fit", "value": 0 }, { "key": "trajectory_fit", "value": 0 } ], "explanation": "...", "evidenceRefs": ["f1"] }
+Unassessable (too little relevant evidence):
+{ "status": "insufficient_data", "reason": "..." }
+No markdown.`;
 
 export function buildMatchScorerUserPrompt(facts: TailorProfileFact[], job: JobDescription): string {
   const factLines = facts.map((f) => `- [${f.id}] (${f.kind}) ${f.summary}`).join('\n');

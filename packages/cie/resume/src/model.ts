@@ -83,8 +83,21 @@ export interface MatchSubscore {
 }
 
 /**
- * The Scorer/Explainer's OUTPUT for a (profile, job) pair. Structurally matches
- * `evals/src/types.ts` `MatchScore` so the golden gate consumes it directly.
+ * The Scorer/Explainer's OUTPUT for a (profile, job) pair is a DISCRIMINATED
+ * UNION on `status` (structurally matches `evals/src/types.ts` `MatchScore` so
+ * the golden gate consumes it directly):
+ *
+ *   - `status: 'ok'`               — a grounded rubric score (overall + subscores
+ *                                    + explanation + evidenceRefs). This is the
+ *                                    honest fit even when it is LOW: a clearly-bad
+ *                                    but ASSESSABLE fit (barista → backend) is a
+ *                                    low `ok`, never `insufficient_data`.
+ *   - `status: 'insufficient_data'`— the profile carries too little relevant
+ *                                    evidence to assess the JD's requirements AT
+ *                                    ALL. We refuse to invent a number and say so.
+ *
+ * There is deliberately NO continuous confidence field: a fit score is a grounded
+ * rubric, not a probability.
  *
  * INTEGRITY INVARIANTS (enforced deterministically in io.ts, not by the prompt):
  *  - `overall` reflects REAL requirement coverage — a demanded-but-missing skill
@@ -93,9 +106,15 @@ export interface MatchSubscore {
  *  - `explanation` is plain-language and GROUNDED — it may cite only real
  *    evidence (`evidenceRefs` are real profile fact ids), never a claimed match
  *    on a skill the candidate lacks;
- *  - a score NEVER travels without its explanation (never a bare number).
+ *  - a score NEVER travels without its explanation (never a bare number);
+ *  - a thin/unassessable profile yields `insufficient_data`, never a fabricated
+ *    score.
  */
-export interface MatchScore {
+export type MatchScoreStatus = 'ok' | 'insufficient_data';
+
+/** The grounded-rubric arm: a real, explained fit (possibly a low but honest one). */
+export interface MatchScoreOk {
+  status: 'ok';
   /** 0–100 overall match. */
   overall: number;
   /** Always includes the demanded facets — a score is never a bare number. */
@@ -107,3 +126,14 @@ export interface MatchScore {
   /** Version stamp — identical inputs + version → identical score. */
   modelVersion?: string;
 }
+
+/** The honest-refusal arm: not enough profile evidence to assess this role's fit. */
+export interface MatchScoreInsufficient {
+  status: 'insufficient_data';
+  /** Plain-language reason the fit could not be assessed (never a bare status). */
+  reason: string;
+  /** Version stamp — identical inputs + version → identical verdict. */
+  modelVersion?: string;
+}
+
+export type MatchScore = MatchScoreOk | MatchScoreInsufficient;

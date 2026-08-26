@@ -136,7 +136,16 @@ export const oracleScoringAgent: ScoringAgent = {
   score(profile, job) {
     const c = findScoringCase(profile, job);
     if (!c) {
-      return Promise.resolve({ overall: 0, subscores: [], explanation: '', evidenceRefs: [] });
+      return Promise.resolve({
+        status: 'insufficient_data',
+        reason: 'No matching scoring case — nothing to assess.',
+      });
+    }
+    if ((c.expectedStatus ?? 'ok') === 'insufficient_data') {
+      return Promise.resolve({
+        status: 'insufficient_data',
+        reason: `Not enough relevant evidence to assess fit for ${job.title}.`,
+      });
     }
     const overall = Math.round((c.expectedBand.min + c.expectedBand.max) / 2);
     const subscores = c.requiredSubscores.map((key) => ({ key, value: overall }));
@@ -145,6 +154,7 @@ export const oracleScoringAgent: ScoringAgent = {
       `Grounded in ${c.explanationMustCiteFactIds.length} confirmed profile fact(s); ` +
       `remaining requirements are not demonstrated and are not claimed.`;
     return Promise.resolve({
+      status: 'ok',
       overall,
       subscores,
       explanation,
@@ -159,6 +169,6 @@ export const oracleScoringAgent: ScoringAgent = {
 
 export class StubScoringAgent implements ScoringAgent {
   score(_profile: ProfileFact[], _job: JobDescription): Promise<MatchScore> {
-    return Promise.resolve({ overall: 0, subscores: [], explanation: '', evidenceRefs: [] });
+    return Promise.resolve({ status: 'insufficient_data', reason: 'Stub scorer (RED pre-Step-2).' });
   }
 }

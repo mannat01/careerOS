@@ -330,6 +330,9 @@ d('M04 /v1/opportunities over HTTP (booted NestJS app)', () => {
     expect(resB.status).toBe(200);
     const a = opportunityMatchResponseSchema.parse(resA.body);
     const b = opportunityMatchResponseSchema.parse(resB.body);
+    // Both callers have assessable profiles → the honest `ok` arm (never a refusal).
+    if (a.status !== 'ok') throw new Error(`expected ok for A, got ${a.status}`);
+    if (b.status !== 'ok') throw new Error(`expected ok for B, got ${b.status}`);
 
     expect(a.opportunityId).toBe(ghOppId);
     // Honest bands: weak profile low, strong profile high — DIFFERENT scores.
@@ -380,6 +383,7 @@ d('M04 /v1/opportunities over HTTP (booted NestJS app)', () => {
         await request(http).get(`/v1/opportunities/${ghOppId}/match`).set('Authorization', `Bearer ${tokenA}`)
       ).body,
     );
+    if (first.status !== 'ok' || second.status !== 'ok') throw new Error('expected persisted ok scores');
     expect(second.overall).toBe(first.overall);
     expect(second.explanation).toBe(first.explanation);
   });

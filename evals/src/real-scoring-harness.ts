@@ -22,7 +22,8 @@ export interface ReliabilityBin {
 
 export interface RealScoringSample {
   run: number;
-  overall: number;
+  /** null on the insufficient_data arm (no fabricated number). */
+  overall: number | null;
   rawOverall: number | null;
   bandCorrect: boolean;
   expectedLabel: FitLabel;
@@ -159,23 +160,30 @@ function parseRaw(text: string): ReturnType<typeof rawMatchScoreProposalSchema.s
 }
 
 function finalSignature(score: MatchScore): string {
-  return JSON.stringify({
-    overall: score.overall,
-    subscores: score.subscores,
-    explanation: score.explanation,
-    evidenceRefs: score.evidenceRefs,
-  });
+  return score.status === 'ok'
+    ? JSON.stringify({
+        status: score.status,
+        overall: score.overall,
+        subscores: score.subscores,
+        explanation: score.explanation,
+        evidenceRefs: score.evidenceRefs,
+      })
+    : JSON.stringify({ status: score.status, reason: score.reason });
 }
 
 function independentLeaks(c: ScoringCase, produced: MatchScore): string[] {
   const leaks = new Set<string>();
-  const realIds = new Set(c.profile.map((fact) => fact.id));
-  for (const ref of produced.evidenceRefs) {
-    if (!realIds.has(ref)) leaks.add(`ungrounded-evidence:${ref}`);
-  }
-  const explanation = produced.explanation.toLowerCase();
-  for (const forbidden of c.forbidden ?? []) {
-    if (explanation.includes(forbidden.toLowerCase())) leaks.add(`forbidden:${forbidden}`);
+  // Fabrication checks only apply to the `ok` arm; the insufficient_data arm
+  // carries no number/subscores/evidence to leak (that refusal IS the honesty).
+  if (produced.status === 'ok') {
+    const realIds = new Set(c.profile.map((fact) => fact.id));
+    for (const ref of produced.evidenceRefs) {
+      if (!realIds.has(ref)) leaks.add(`ungrounded-evidence:${ref}`);
+    }
+    const explanation = produced.explanation.toLowerCase();
+    for (const forbidden of c.forbidden ?? []) {
+      if (explanation.includes(forbidden.toLowerCase())) leaks.add(`forbidden:${forbidden}`);
+    }
   }
   const oracle = groundMatchScore(
     { overall: 0, subscores: [], explanation: '', evidenceRefs: [] },
@@ -196,9 +204,17 @@ export function scoreRealScoringSample(input: {
 }): RealScoringSample {
   const parsed = parseRaw(input.rawText);
   const raw = parsed.success ? parsed.data : null;
-  const bandCorrect = input.produced.overall >= input.c.expectedBand.min && input.produced.overall <= input.c.expectedBand.max;
+  // The final grounded output is a union. On the insufficient_data arm there is no
+  // number to band-check — the honest refusal is itself the correct outcome for a
+  // truly-thin profile (never a fabricated score).
+  const producedOk = input.produced.status === 'ok' ? input.produced : null;
+  const producedOverall = producedOk ? producedOk.overall : null;
+  const producedInsufficient = input.produced.status === 'insufficient_data';
+  const bandCorrect = producedOk
+    ? producedOk.overall >= input.c.expectedBand.min && producedOk.overall <= input.c.expectedBand.max
+    : (input.c.expectedStatus ?? 'ok') === 'insufficient_data';
   const expectedLabel = expectedFitLabel(input.c);
-  const predictedLabel = scoreFitLabel(input.produced.overall);
+  const predictedLabel = producedOk ? scoreFitLabel(producedOk.overall) : 'low';
   const realIds = new Set(input.c.profile.map((fact) => fact.id));
   const rawUngroundedEvidenceRefs = raw?.evidenceRefs.filter((ref) => !realIds.has(ref)).length ?? 0;
   const rawExplanation = raw?.explanation.toLowerCase() ?? '';
@@ -208,18 +224,20 @@ export function scoreRealScoringSample(input: {
   const rawMissingSubscores = input.c.requiredSubscores.filter((key) => !rawKeys.has(key)).length;
   const rawScoreOutsideBand = raw !== null &&
     (raw.overall < input.c.expectedBand.min || raw.overall > input.c.expectedBand.max);
-  const rawScoreCorrected = raw !== null && raw.overall !== input.produced.overall;
+  const rawScoreCorrected = raw !== null && producedOk !== null && raw.overall !== producedOk.overall;
   const thinEvidenceCase = THIN_EVIDENCE_CASE_IDS.has(input.c.id);
   const thinFitHandled = !thinEvidenceCase || (
-    input.produced.overall <= input.c.expectedBand.max &&
-    input.produced.explanation.toLowerCase().includes('gaps named')
+    producedOk !== null &&
+    producedOk.overall <= input.c.expectedBand.max &&
+    producedOk.explanation.toLowerCase().includes('gaps named')
   );
-  // The production MatchScore contract has no confidence/status field.
-  const thinUncertaintyHandled = false;
+  // The MatchScore union now carries an explicit insufficient_data arm: an
+  // unassessable profile is handled honestly (a refusal, never a fabricated score).
+  const thinUncertaintyHandled = producedInsufficient;
 
   return {
     run: input.run,
-    overall: input.produced.overall,
+    overall: producedOverall,
     rawOverall: raw?.overall ?? null,
     bandCorrect,
     expectedLabel,
@@ -253,7 +271,11 @@ export function aggregateRealScoringCampaign(
   byCase: Array<{ c: ScoringCase; samples: RealScoringSample[] }>,
 ): RealScoringCampaignResult {
   const cases = byCase.map(({ c, samples }) => {
-    const overall = samples.map((sample) => sample.overall);
+    // Only `ok`-arm samples carry a number; insufficient_data samples contribute
+    // no overall to the numeric aggregates (they are counted via thin-uncertainty).
+    const overall = samples
+      .map((sample) => sample.overall)
+      .filter((value): value is number => value !== null);
     const latencies = samples.map((sample) => sample.latencyMs);
     const costs = samples.map((sample) => sample.costUsd);
     return {
@@ -265,7 +287,7 @@ export function aggregateRealScoringCampaign(
       labelAccuracy: mean(samples.map((sample) => Number(sample.labelCorrect))),
       meanOverall: mean(overall),
       overallStdDev: standardDeviation(overall),
-      overallRange: Math.max(...overall) - Math.min(...overall),
+      overallRange: overall.length === 0 ? 0 : Math.max(...overall) - Math.min(...overall),
       guardrailCaught: samples.reduce((sum, sample) => sum + sample.guardrailCaught, 0),
       samplesWithGuardrailCaught: samples.filter((sample) => sample.guardrailCaught > 0).length,
       fabricationLeaks: samples.reduce((sum, sample) => sum + sample.fabricationLeaks.length, 0),
