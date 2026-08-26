@@ -104,7 +104,11 @@ export function createRealCampaignRuntime(): RealCampaignRuntime {
         baseUrl: campaignEnv.OMNIROUTE_BASE_URL ?? '',
         apiKey: campaignEnv.OMNIROUTE_API_KEY ?? '',
         model,
-      }, { fetch: recordingFetch, timeoutMs: 180_000 })
+        // Frontier strategic-reasoning completions (apply/wait/negotiate) on a
+        // reasoning model can run for several minutes. This is a paid, non-CI
+        // measurement path; allow a slow-but-valid call to finish rather than
+        // mis-reporting model latency as a provider failure.
+      }, { fetch: recordingFetch, timeoutMs: 600_000 })
     : createLlmProviderFromEnv(campaignEnv);
   const provider = new RecordingLlmProvider(selectedProvider);
   const costEvents: Parameters<CostMeter>[0][] = [];
