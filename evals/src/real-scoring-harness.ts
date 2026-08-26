@@ -9,7 +9,38 @@ import type { ScoringCase } from './types.js';
 export const REAL_SCORING_RUNS_PER_CASE = 3;
 export const THIN_EVIDENCE_CASE_IDS = new Set(['sc-02-weak-match']);
 
+/**
+ * The canonical rubric subscore keys the calibrated prompt now asks the raw model
+ * to emit directly (post-remediation). Used ONLY for measurement — the production
+ * `groundMatchScore` guardrail still recomputes the final subscores regardless.
+ */
+export const CANONICAL_SUBSCORE_KEYS = [
+  'skills_match', 'experience_relevance', 'seniority_fit',
+  'domain_fit', 'comp_fit', 'location_fit', 'trajectory_fit',
+] as const;
+
+export type MatchStatus = 'ok' | 'insufficient_data';
+
 export type FitLabel = 'low' | 'moderate' | 'high';
+
+/**
+ * The raw model's declared `status` (post-remediation the prompt asks for it).
+ * `absent` = the raw JSON carried no status field (older/ambiguous output). This is
+ * measurement-only; the production raw schema ignores the field and the guardrail
+ * is authoritative.
+ */
+function rawStatusOf(rawText: string): MatchStatus | 'absent' {
+  try {
+    const parsed = JSON.parse(rawText) as { status?: unknown };
+    if (parsed && typeof parsed === 'object') {
+      if (parsed.status === 'insufficient_data') return 'insufficient_data';
+      if (parsed.status === 'ok') return 'ok';
+    }
+  } catch {
+    /* fall through to absent */
+  }
+  return 'absent';
+}
 
 export interface ReliabilityBin {
   label: string;
@@ -29,6 +60,14 @@ export interface RealScoringSample {
   expectedLabel: FitLabel;
   predictedLabel: FitLabel;
   labelCorrect: boolean;
+  /** Final grounded arm the production guardrail returned for this sample. */
+  producedStatus: MatchStatus;
+  /** The case's expected arm ('ok' unless the case declares insufficient_data). */
+  expectedStatus: MatchStatus;
+  /** Final arm matched the expected arm (insufficient_data correctness). */
+  statusCorrect: boolean;
+  /** What the RAW model declared before grounding ('absent' = no status field). */
+  rawStatus: MatchStatus | 'absent';
   confidenceAvailable: false;
   confidence: null;
   rawScoreOutsideBand: boolean;
@@ -36,6 +75,8 @@ export interface RealScoringSample {
   rawUngroundedEvidenceRefs: number;
   rawForbiddenClaims: number;
   rawMissingSubscores: number;
+  /** Raw subscore keys outside the canonical rubric set (structural noncanonical). */
+  rawNoncanonicalSubscores: number;
   guardrailCaught: number;
   fabricationLeaks: string[];
   thinEvidenceCase: boolean;
@@ -96,12 +137,21 @@ export interface RealScoringCampaignResult {
   thinEvidenceSampleCount: number;
   thinFitHandledSamples: number;
   thinUncertaintyHandledSamples: number;
+  /** insufficient_data ARM correctness across all samples. */
+  statusAccuracy: number;
+  statusCorrectSamples: number;
+  /** Samples whose FINAL grounded arm was a refusal. */
+  insufficientDataSamples: number;
+  /** Samples the RAW model already declared status=insufficient_data. */
+  rawInsufficientDataSamples: number;
   guardrailCaught: number;
   rawScoreOutsideBand: number;
   rawScoreCorrections: number;
   rawUngroundedEvidenceRefs: number;
   rawForbiddenClaims: number;
   rawMissingSubscores: number;
+  /** Raw noncanonical subscore keys — the shape defect the calibration targets. */
+  rawNoncanonicalSubscores: number;
   samplesWithGuardrailCaught: number;
   fabricationLeaks: number;
   parseValidSamples: number;
@@ -220,9 +270,23 @@ export function scoreRealScoringSample(input: {
   const rawExplanation = raw?.explanation.toLowerCase() ?? '';
   const rawForbiddenClaims = (input.c.forbidden ?? [])
     .filter((forbidden) => rawExplanation.includes(forbidden.toLowerCase())).length;
+  const rawStatus = rawStatusOf(input.rawText);
+  const expectedStatus: MatchStatus = (input.c.expectedStatus ?? 'ok');
+  const producedStatus: MatchStatus = producedInsufficient ? 'insufficient_data' : 'ok';
+  const statusCorrect = producedStatus === expectedStatus;
+
   const rawKeys = new Set(raw?.subscores.map((subscore) => subscore.key) ?? []);
-  const rawMissingSubscores = input.c.requiredSubscores.filter((key) => !rawKeys.has(key)).length;
-  const rawScoreOutsideBand = raw !== null &&
+  const canonicalKeys = new Set<string>(CANONICAL_SUBSCORE_KEYS);
+  // A legitimate raw REFUSAL (status=insufficient_data on a truly-thin case) carries
+  // no subscores by design — that is NOT a structural "missing subscore" defect.
+  const rawIsLegitRefusal = rawStatus === 'insufficient_data' && expectedStatus === 'insufficient_data';
+  const rawMissingSubscores = rawIsLegitRefusal
+    ? 0
+    : input.c.requiredSubscores.filter((key) => !rawKeys.has(key)).length;
+  // Raw subscore keys the model emitted that are OUTSIDE the canonical rubric set
+  // (the "noncanonical shape" the calibrated prompt now steers the model away from).
+  const rawNoncanonicalSubscores = (raw?.subscores ?? []).filter((s) => !canonicalKeys.has(s.key)).length;
+  const rawScoreOutsideBand = raw !== null && !rawIsLegitRefusal &&
     (raw.overall < input.c.expectedBand.min || raw.overall > input.c.expectedBand.max);
   const rawScoreCorrected = raw !== null && producedOk !== null && raw.overall !== producedOk.overall;
   const thinEvidenceCase = THIN_EVIDENCE_CASE_IDS.has(input.c.id);
@@ -243,6 +307,10 @@ export function scoreRealScoringSample(input: {
     expectedLabel,
     predictedLabel,
     labelCorrect: expectedLabel === predictedLabel,
+    producedStatus,
+    expectedStatus,
+    statusCorrect,
+    rawStatus,
     confidenceAvailable: false,
     confidence: null,
     rawScoreOutsideBand,
@@ -250,6 +318,7 @@ export function scoreRealScoringSample(input: {
     rawUngroundedEvidenceRefs,
     rawForbiddenClaims,
     rawMissingSubscores,
+    rawNoncanonicalSubscores,
     guardrailCaught:
       Number(rawScoreOutsideBand) + rawUngroundedEvidenceRefs + rawForbiddenClaims + rawMissingSubscores,
     fabricationLeaks: independentLeaks(input.c, input.produced),
@@ -333,12 +402,17 @@ export function aggregateRealScoringCampaign(
     thinEvidenceSampleCount: samples.filter((sample) => sample.thinEvidenceCase).length,
     thinFitHandledSamples: samples.filter((sample) => sample.thinEvidenceCase && sample.thinFitHandled).length,
     thinUncertaintyHandledSamples: samples.filter((sample) => sample.thinEvidenceCase && sample.thinUncertaintyHandled).length,
+    statusAccuracy: mean(samples.map((sample) => Number(sample.statusCorrect))),
+    statusCorrectSamples: samples.filter((sample) => sample.statusCorrect).length,
+    insufficientDataSamples: samples.filter((sample) => sample.producedStatus === 'insufficient_data').length,
+    rawInsufficientDataSamples: samples.filter((sample) => sample.rawStatus === 'insufficient_data').length,
     guardrailCaught: samples.reduce((sum, sample) => sum + sample.guardrailCaught, 0),
     rawScoreOutsideBand: samples.filter((sample) => sample.rawScoreOutsideBand).length,
     rawScoreCorrections: samples.filter((sample) => sample.rawScoreCorrected).length,
     rawUngroundedEvidenceRefs: samples.reduce((sum, sample) => sum + sample.rawUngroundedEvidenceRefs, 0),
     rawForbiddenClaims: samples.reduce((sum, sample) => sum + sample.rawForbiddenClaims, 0),
     rawMissingSubscores: samples.reduce((sum, sample) => sum + sample.rawMissingSubscores, 0),
+    rawNoncanonicalSubscores: samples.reduce((sum, sample) => sum + sample.rawNoncanonicalSubscores, 0),
     samplesWithGuardrailCaught: samples.filter((sample) => sample.guardrailCaught > 0).length,
     fabricationLeaks: samples.reduce((sum, sample) => sum + sample.fabricationLeaks.length, 0),
     parseValidSamples: samples.filter((sample) => sample.parseValid).length,
@@ -365,17 +439,24 @@ export function aggregateRealScoringCampaign(
 export function formatRealScoringCampaign(result: RealScoringCampaignResult): string {
   const percent = (value: number): string => `${(value * 100).toFixed(1)}%`;
   const rows = result.cases.map((c) => {
-    const raw = c.samples.map((sample) => sample.rawOverall ?? 'invalid').join(' / ');
-    return `| ${c.caseId} | ${c.expectedBand.min}–${c.expectedBand.max} (${c.expectedLabel}) | ${c.samples.map((sample) => sample.overall).join(' / ')} | ${percent(c.bandAccuracy)} | ${percent(c.labelAccuracy)} | ${raw} | ${c.guardrailCaught} (${c.samplesWithGuardrailCaught}/3) | ${c.fabricationLeaks} | ${Math.round(c.meanLatencyMs)} ± ${Math.round(c.latencyStdDevMs)} | ${Math.round(c.meanInputTokens)} ± ${Math.round(c.inputTokensStdDev)} / ${Math.round(c.meanOutputTokens)} ± ${Math.round(c.outputTokensStdDev)} | $${c.totalCostUsd.toFixed(6)} | ${c.distinctRawOutputs}/3 |`;
+    const raw = c.samples.map((sample) => sample.rawOverall ?? 'refuse').join(' / ');
+    const finals = c.samples
+      .map((sample) => (sample.producedStatus === 'insufficient_data' ? 'insuf' : String(sample.overall)))
+      .join(' / ');
+    return `| ${c.caseId} | ${c.expectedBand.min}–${c.expectedBand.max} (${c.expectedLabel}) | ${finals} | ${percent(c.bandAccuracy)} | ${percent(c.labelAccuracy)} | ${raw} | ${c.guardrailCaught} (${c.samplesWithGuardrailCaught}/3) | ${c.fabricationLeaks} | ${Math.round(c.meanLatencyMs)} ± ${Math.round(c.latencyStdDevMs)} | ${Math.round(c.meanInputTokens)} ± ${Math.round(c.inputTokensStdDev)} / ${Math.round(c.meanOutputTokens)} ± ${Math.round(c.outputTokensStdDev)} | $${c.totalCostUsd.toFixed(6)} | ${c.distinctRawOutputs}/3 |`;
   });
   return [
     `Model: ${result.model}`,
     `Samples: ${result.sampleCount} (${result.caseCount} cases × ${result.runsPerCase})`,
     `Band accuracy: ${percent(result.bandAccuracy)}`,
     `Fit-label accuracy: ${percent(result.labelAccuracy)}`,
-    `Confidence/ECE: unavailable (${result.confidenceAvailableSamples}/${result.sampleCount} outputs expose confidence)`,
+    `insufficient_data arm accuracy: ${percent(result.statusAccuracy)} (${result.statusCorrectSamples}/${result.sampleCount})`,
+    `insufficient_data refusals: final ${result.insufficientDataSamples}; raw-declared ${result.rawInsufficientDataSamples}`,
+    `Confidence/ECE: N/A by design (fit is a grounded rubric, not a probability)`,
     `Thin evidence: fit ${result.thinFitHandledSamples}/${result.thinEvidenceSampleCount}; uncertainty ${result.thinUncertaintyHandledSamples}/${result.thinEvidenceSampleCount}`,
     `Guardrail caught: ${result.guardrailCaught} across ${result.samplesWithGuardrailCaught}/${result.sampleCount} samples`,
+    `  by type — out-of-band: ${result.rawScoreOutsideBand}; ungrounded-evidence: ${result.rawUngroundedEvidenceRefs}; forbidden-claims: ${result.rawForbiddenClaims}; missing-subscore: ${result.rawMissingSubscores}`,
+    `Raw noncanonical subscore keys: ${result.rawNoncanonicalSubscores}`,
     `Fabrication leaks: ${result.fabricationLeaks}`,
     `Latency: mean ${Math.round(result.meanLatencyMs)} ms; σ ${Math.round(result.latencyStdDevMs)} ms; p95 ${Math.round(result.p95LatencyMs)} ms`,
     `Tokens: ${result.totalInputTokens} input; ${result.totalOutputTokens} output`,
