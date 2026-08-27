@@ -2,19 +2,21 @@
 
 **Track:** B, Slice 5
 
-**Campaign date:** 2026-08-26
+**Campaign dates:** 2026-08-26 (pre-fix) · 2026-08-27 (post-fix re-validation)
 
-**Baseline:** clean pushed `main` at `fa1c455`; deterministic `eval:ci` green (217/217) before the campaign
+**Pre-fix baseline:** pushed `main` at `fb35e38` (`test(evals): validate real strategy planner`)
+
+**Post-fix baseline:** clean pushed `main` at `6a7dd48` (`fix(planner): accept null gapId as omitted in raw proposal`); full `make verify`, deterministic `eval:ci` (217/217), and GitHub CI green
 
 **Provider/model:** OmniRoute `http://localhost:20128/v1` → `openai/gpt-5.6-sol`
 
 **Prompt:** strategic-planner prompt v1.0.0
 
-**Verdict:** **GREEN for the production grounded-planner contract**, with raw-schema conformance and latency retained as explicit operational follow-ups
+**Verdict:** **GREEN (post-fix re-validation)** — raw schema conformance rose to **42/42** with **0** fail-closed proposals while final relevance stayed 42/42 and leaks stayed 0
 
 ## Executive summary
 
-The complete frozen planner golden set plus two real-only state-coverage cases ran through the unchanged production path three times each: **14 cases × 3 runs = 42 successful real-model samples**. Every sample called `LlmStrategicPlannerAgent.plan()`, recorded the real model response and provider telemetry, and scored the final `StrategyPlanSet` returned after `rawPlanProposalSchema` and the deterministic `groundPlanSet()` guardrail.
+The complete frozen planner golden set plus two real-only state-coverage cases ran through the production path three times per case before and after the narrow raw-schema fix: **14 cases × 3 runs = 42 successful real-model samples per campaign**. Every sample called `LlmStrategicPlannerAgent.plan()`, recorded the real model response and provider telemetry, and scored both the raw proposal and the final `StrategyPlanSet` returned after the deterministic `groundPlanSet()` guardrail.
 
 The production contract passed its load-bearing gates:
 
@@ -24,11 +26,49 @@ The production contract passed its load-bearing gates:
 - final output variance: **0/14 cases varied** across ×3;
 - the guarded output matched a fresh `groundPlanSet()` recomputation in **42/42** samples.
 
-The raw model behavior requires a precise qualification. All **17/17 schema-valid raw proposals** independently passed the planner golden property gate and produced **zero** counted grounding violations: no invented goals, ungrounded nodes, ungrounded gaps, out-of-plan today's moves, or forbidden claims. The other **25/42** responses were valid, complete JSON but failed the strict production Zod schema because the model emitted JSON `null` for optional `gapId`; the schema accepts an omitted field or a string, not `null`. There were **178 null `gapId` values across those 25 samples**. Production correctly failed closed to an empty advisory proposal and then recomputed the same grounded final plan from real inputs.
+Pre-fix, only **17/42** raw proposals passed the schema; **25/42** complete JSON responses used `gapId: null` and failed closed to `EMPTY_PROPOSAL`. The fix accepts null only at the internal untrusted-proposal boundary and normalizes it to the existing omitted/`undefined` representation. It does not change a public contract, final output shape, prompt, frontend, or `groundPlanSet()` behavior.
 
-This is GREEN because the measured production contract is deliberately grounded generation: the proposal is advisory and discarded, while `groundPlanSet()` is authoritative. The model-format issue caused no user-visible plan degradation, no exception, no leak, and no final variance. It nevertheless means the raw proposal is **not independently reliable** and the guardrail must not be weakened or bypassed. Prompt/schema alignment and the observed **30.77 s mean / 40.55 s p95** latency should be improved and re-measured before treating the raw model plan as useful in its own right.
+Post-fix, raw schema validity reached **42/42**, fail-closed fallback fell to **0/42**, and all **42/42** raw model plans independently passed the golden property scorer with zero counted grounding violations. Thus the model's own plans now survive the parse boundary rather than being replaced by the empty fallback. They are still advisory and are not shipped verbatim: `groundPlanSet()` remains byte-identical, authoritative, and intentionally recomputes the final plan. Final relevance remained **42/42**, leaks remained **0**, thin-state honesty remained **3/3**, and final variance remained **0/14 cases**.
 
-## Contract and verdict bar
+## Post-fix re-validation (2026-08-27 · `6a7dd48`)
+
+### Before/after comparison
+
+| Measurement | Pre-fix (`fb35e38`) | Post-fix (`6a7dd48`) | Change |
+| --- | ---: | ---: | ---: |
+| Successful samples | 42/42 | 42/42 | held |
+| Raw schema-valid proposals | 17/42 (40.48%) | **42/42 (100%)** | **+25 samples / +59.52 pp** |
+| Fail-closed `EMPTY_PROPOSAL` fallbacks | 25/42 (59.52%) | **0/42 (0%)** | **−25 samples / −59.52 pp** |
+| Raw proposals passing golden scorer | 17/42 | **42/42** | +25 |
+| Final relevance/quality | 42/42 | **42/42** | held |
+| Final fabrication leaks | 0 | **0** | held |
+| Guardrail recompute mismatches | 0 | **0** | held |
+| Thin-state honesty | 3/3 | **3/3** | held |
+| Actionable raw grounding catches | 0 | **0** | held |
+| Cases with variable final output | 0/14 | **0/14** | held |
+| Cases with variable raw output | 14/14 | 14/14 | held |
+| Mean latency | 30.77 s | **26.60 s** | −4.16 s |
+| p95 latency | 40.55 s | **35.19 s** | −5.36 s |
+| Tokens (input / output) | 115,890 / 79,583 | **115,890 / 83,539** | 0 / +3,956 |
+| OmniRoute-reported cost | $0.000000 | $0.000000 | held |
+
+The post-fix campaign recorded zero invented goals, ungrounded nodes, ungrounded gaps, out-of-plan today's moves, and forbidden claims in all 42 accepted raw proposals. The four adversarial pressure cases passed ×3, and the thin-state case remained honest ×3. ECE remains N/A by design because action confidence is a fixed grounded weight, not a probability.
+
+Post-fix latency was **26.60 s mean, σ 5.92 s, 35.19 s p95**, with a 33.87 s observed range. Token usage was **115,890 input / 83,539 output**, averaging **2,759 ± 30 input / 1,989 ± 433 output tokens** per sample. OmniRoute again reported `$0.000000`; this is a free/unpriced sentinel, not proof of zero upstream economic cost.
+
+### Remediation integrity
+
+The only production change was `rawPlanActionSchema.gapId`: `null`, omitted, and `undefined` now normalize to omitted/`undefined` inside the raw-proposal parser; strings remain strings. The `groundPlanSet()` function body remained byte-identical before and after the fix (SHA-256 `5f0120df7326fdf8e6c520f30b87fa00108fa07e7fde92062c6e5e8148ad61fb`). The planner test suite proves null normalization and then reruns the real grounded path; all four neutered-path red-tests still leak loudly when the guardrail is bypassed.
+
+Part A validation passed: planner tests **17/17**, real-planner harness self-tests **4/4**, deterministic `eval:ci` **217/217**, and full `make verify` including **4/4** real-stack E2E. GitHub CI for `6a7dd48` completed green: <https://github.com/mannat01/careerOS/actions/runs/33121308223>.
+
+The supplied precheck described `fb35e38` CI as green, but the observed workflow was red on five unnecessary type assertions in the newly added real-planner eval files: <https://github.com/mannat01/careerOS/actions/runs/33026227506>. Those type-neutral lint defects were corrected in Part A; no planner behavior outside the raw schema changed.
+
+---
+
+## Pre-fix campaign record (`fb35e38`)
+
+### Contract and verdict bar
 
 The planner does not return a probabilistic prediction. Actions carry real `goalId`, `targetNodeId`, and optional `gapId` grounding references. Their final `confidence` values are deterministic guardrail weights (**0.8 concrete / 0.55 directional**), not estimates of `P(action is correct)`.
 
@@ -44,7 +84,7 @@ The GREEN bar for this slice is:
 
 All production safety/quality criteria passed. Raw-schema conformance and latency remain non-blocking operational follow-ups under this guarded contract.
 
-## Headline measurements
+### Headline measurements
 
 | Measurement | Result |
 | --- | ---: |
@@ -67,7 +107,7 @@ All production safety/quality criteria passed. Raw-schema conformance and latenc
 | OmniRoute-reported cost | $0.000000 total |
 | ECE | **N/A by design** |
 
-## Final relevance, fabrication, and thin-state handling
+### Final relevance, fabrication, and thin-state handling
 
 Every final plan passed the existing planner property scorer. The scorer checks the five-horizon shape, action grounding in stated goals and real graph nodes/gaps, early targeting of real gaps, horizon-appropriate action kinds, justified actions, and a today's move drawn from the real 30-day plan.
 
@@ -77,9 +117,9 @@ The dedicated integrity check also compared every returned plan against a fresh 
 
 `pl-r2-borderline-partial-state` added a real-only partial-state check and passed **3/3**, confirming that assessable but incomplete state is still planned against real nodes and the identified gap rather than treated as permission to fabricate.
 
-## Raw proposal and guardrail accounting
+### Raw proposal and guardrail accounting
 
-### Schema-valid proposals
+#### Schema-valid proposals
 
 The 17 schema-valid raw proposals had:
 
@@ -92,7 +132,7 @@ The 17 schema-valid raw proposals had:
 
 Thus there were no actionable grounding over-reaches for `groundPlanSet()` to neutralize by those categories in this campaign. The four adversarial pressure cases also had zero raw grounding violations whenever their proposals were schema-valid.
 
-### Fail-closed proposals
+#### Fail-closed proposals
 
 The strict raw schema accepted **17/42** responses. The remaining **25/42** were complete JSON objects but used `gapId: null` on actions without a gap. This was the sole observed schema mismatch: **178 null `gapId` values**, affecting exactly those 25 responses. The production parser intentionally converted each schema-invalid response to `EMPTY_PROPOSAL`; `groundPlanSet()` then recomputed the final plan from real goals, graph nodes, and gaps.
 
@@ -104,9 +144,9 @@ These 25 events are reported separately from grounding catches. Counting them as
 - final grounded plan quality after fallback: 25/25;
 - final leaks after fallback: 0.
 
-This fallback is load-bearing. Do not broaden or bypass the schema merely to improve the parse rate. A future prompt/schema remediation may explicitly instruct omission rather than `null`, or intentionally normalize `null` only after a separate contract review and deterministic tests.
+At the time, this fallback was load-bearing. The subsequent remediation intentionally normalized `null` only at the internal raw-proposal boundary, with deterministic tests and byte-identical `groundPlanSet()` behavior; it did not broaden the final grounded contract.
 
-## Per-case results
+### Per-case results
 
 `Raw valid` is strict production-schema validity. `Raw pass` is an independent golden-property pass and is only possible for schema-valid proposals. Every case had one distinct final signature and three distinct raw texts.
 
@@ -127,7 +167,7 @@ This fallback is load-bearing. Do not broaden or bypass the schema merely to imp
 | `pl-r1-thin-sparse-state` | thin | 3/3 | 0 | 1/3 | 1/3 | 29.31 ± 4.83 s | 1,824 |
 | `pl-r2-borderline-partial-state` | borderline | 3/3 | 0 | 1/3 | 1/3 | 28.76 ± 0.58 s | 1,759 |
 
-## Variance, latency, tokens, and cost
+### Variance, latency, tokens, and cost
 
 Final output was deterministic: **0/14 cases varied** across three runs. Raw text varied in **14/14 cases**, showing that the stable result comes from deterministic recomputation, not stable model generation.
 
@@ -137,7 +177,7 @@ The campaign consumed **115,890 input tokens and 79,583 output tokens**, averagi
 
 OmniRoute returned `$0.000000` in `X-OmniRoute-Response-Cost` for every completion. This is a valid free/unpriced sentinel, not proof of zero upstream economic cost. Token totals are the auditable reconciliation basis.
 
-## Harness, guardrail integrity, and CI isolation
+### Harness, guardrail integrity, and CI isolation
 
 The dedicated paid command is:
 
@@ -157,8 +197,8 @@ f64b202a423ef9d6d9eb4db0d784fe6aefe225c1c36fb613ab3f14b011d428fb  packages/cie/p
 
 The deterministic harness self-test proves that the integrity check is load-bearing: substituting the exported neutered `rawProposalToPlanSet()` path produces fabrication leaks including `guardrail-recompute-mismatch`; the real `groundPlanSet()` path defeats the same over-reaching proposal.
 
-## Verdict
+## Final post-fix verdict
 
-**GREEN for the production grounded-planner contract.** Final relevance is **42/42**, thin-state honesty is **3/3**, final fabrication leaks are **0**, recompute mismatches are **0**, and final variance is **0/14 cases**. ECE is N/A because this is grounded generation, not probability estimation.
+**GREEN (post-fix re-validation at `6a7dd48`).** Raw schema validity improved from **17/42 (40.48%) to 42/42 (100%)**, and fail-closed `EMPTY_PROPOSAL` fallback fell from **25/42 to 0/42**. All 42 model proposals now survive the parser and independently pass the golden property scorer with zero counted grounding violations.
 
-Keep `groundPlanSet()` fully authoritative. The raw model is promising when schema-valid (**17/17 proposals passed independently with zero grounding catches**) but is not independently dependable: **25/42** proposals failed closed solely because optional `gapId` was emitted as `null`. Track prompt/schema alignment and faster routing as explicit follow-ups; do not bypass deterministic recomputation to address either issue.
+Final production quality held: relevance **42/42**, thin-state honesty **3/3**, fabrication leaks **0**, recompute mismatches **0**, and final variance **0/14 cases**. ECE remains N/A because this is grounded generation, not probability estimation. Keep byte-identical `groundPlanSet()` fully authoritative: accepted raw plans remain advisory and the shipped plan is still deterministically recomputed. Faster routing remains the operational follow-up; the null-schema mismatch is resolved.
