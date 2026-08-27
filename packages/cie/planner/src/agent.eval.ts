@@ -198,6 +198,33 @@ describe('strategy planner — deterministic grounding guardrail', () => {
     expect(plan30.actions.some((a) => a.id === set.todaysMove.actionId)).toBe(true);
   });
 
+  it('accepts null gapId as omitted while the guardrail still emits a leak-free grounded plan', async () => {
+    const proposalWithNullGap = {
+      ...FABRICATED_PROPOSAL,
+      plans: FABRICATED_PROPOSAL.plans.map((plan, index) => ({
+        ...plan,
+        actions: plan.actions.map((action) => ({
+          ...action,
+          gapId: index === 0 ? null : action.gapId,
+        })),
+      })),
+    };
+    const parsed = rawPlanProposalSchema.parse(proposalWithNullGap);
+    expect(parsed.plans[0]?.actions[0]?.gapId).toBeUndefined();
+
+    const { agent } = agentReturning(proposalWithNullGap);
+    const set = await agent.plan(INVENTED_GOAL_INPUT);
+    const goalIds = new Set(INVENTED_GOAL_INPUT.goals.map((goal) => goal.id));
+    const nodeIds = new Set(INVENTED_GOAL_INPUT.graph.map((node) => node.id));
+    const gapIds = new Set(INVENTED_GOAL_INPUT.gaps.map((gap) => gap.id));
+    const actions = set.plans.flatMap((plan) => plan.actions);
+    expect(actions.every((action) => goalIds.has(action.goalId))).toBe(true);
+    expect(actions.every((action) => nodeIds.has(action.targetNodeId))).toBe(true);
+    expect(actions.every((action) => action.gapId === undefined || gapIds.has(action.gapId))).toBe(true);
+    expect(actions.some((action) => action.goalId === 'goal-invented')).toBe(false);
+    expect(actions.some((action) => action.targetNodeId === 'n-nonexistent-hype')).toBe(false);
+  });
+
   it('uses the FRONTIER tier for planning (strategic planning per CLAUDE.md §3.6)', async () => {
     const { agent, provider } = agentReturning(FABRICATED_PROPOSAL);
     await agent.plan(INVENTED_GOAL_INPUT);

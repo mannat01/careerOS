@@ -12,7 +12,7 @@
  * (thin/sparse + borderline) runs ×3 for a variance read.
  */
 import { performance } from 'node:perf_hooks';
-import { LlmStrategicPlannerAgent, type PlannerInput } from '@careeros/cie-planner';
+import { LlmStrategicPlannerAgent } from '@careeros/cie-planner';
 import { describe, expect, it } from 'vitest';
 import { loadPlannerCases } from '../src/datasets.js';
 import { createRealCampaignRuntime } from '../src/real-campaign-runtime.js';
@@ -42,7 +42,7 @@ describe.sequential(`Track B Slice 5 — real ${selectedProvider} planner campai
         for (let run = 1; run <= REAL_PLANNER_RUNS_PER_CASE; run += 1) {
           const completionIndex = provider.completions.length;
           const started = performance.now();
-          const produced = await agent.plan(c.input as PlannerInput);
+          const produced = await agent.plan(c.input);
           const latencyMs = performance.now() - started;
           const completion = provider.completions[completionIndex];
           expect(completion, 'provider completion recording').toBeDefined();

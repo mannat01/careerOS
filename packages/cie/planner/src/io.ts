@@ -56,7 +56,10 @@ export const rawPlanActionSchema = z.object({
   title: z.string().default(''),
   goalId: z.string().default(''),
   targetNodeId: z.string().default(''),
-  gapId: z.string().optional(),
+  // Models commonly encode an absent optional JSON field as null. Keep that
+  // tolerance inside the untrusted proposal boundary and normalize it to the
+  // existing internal representation: no gapId means undefined/omitted.
+  gapId: z.string().nullish().transform((value) => value ?? undefined),
   metric: z.string().default(''),
   rationale: z.string().default(''),
   expectedImpact: z.string().default(''),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groundPlanSet, rawPlanProposalSchema, rawProposalToPlanSet, type PlannerInput } from '@careeros/cie-planner';
+import { groundPlanSet, rawPlanProposalSchema, rawProposalToPlanSet } from '@careeros/cie-planner';
 import { loadPlannerCases } from '../src/datasets.js';
 import {
   REAL_ONLY_PLANNER_CASES,
@@ -58,7 +58,7 @@ describe('real planner measurement harness', () => {
   it('counts every raw over-reach as a guardrail catch while the FINAL grounded plan leaks nothing', () => {
     const c = findCase('pl-09-adv-invented-goal');
     const raw = adversarialRaw(c);
-    const produced = groundPlanSet(rawPlanProposalSchema.parse(JSON.parse(raw)), c.input as PlannerInput);
+    const produced = groundPlanSet(rawPlanProposalSchema.parse(JSON.parse(raw)), c.input);
     const sample = scoreRealPlannerSample({ c, run: 1, rawText: raw, produced, response, latencyMs: 120 });
 
     // Final grounded plan: zero leaks, passes the golden relevance gate.
@@ -91,7 +91,7 @@ describe('real planner measurement harness', () => {
   it('scores thin/sparse state as a minimal, grounded, milestone-free plan', () => {
     const c = findCase('pl-r1-thin-sparse-state');
     const empty = { plans: [], todaysMove: { actionId: '', justification: '' } };
-    const produced = groundPlanSet(rawPlanProposalSchema.parse(empty), c.input as PlannerInput);
+    const produced = groundPlanSet(rawPlanProposalSchema.parse(empty), c.input);
     const sample = scoreRealPlannerSample({
       c, run: 1, rawText: JSON.stringify(empty), produced, response, latencyMs: 90,
     });
@@ -107,7 +107,7 @@ describe('real planner measurement harness', () => {
   it('aggregates ×3 with N/A calibration and honest variance', () => {
     const c = findCase('pl-01-single-goal-backend');
     const empty = { plans: [], todaysMove: { actionId: '', justification: '' } };
-    const produced = groundPlanSet(rawPlanProposalSchema.parse(empty), c.input as PlannerInput);
+    const produced = groundPlanSet(rawPlanProposalSchema.parse(empty), c.input);
     // Identical inputs → identical grounded plan; signature is stable across runs.
     const sig = planSetSignature(produced);
     const rawA = JSON.stringify({ plans: [{ horizon: '30d', objective: 'a', actions: [] }], todaysMove: { actionId: '', justification: '' } });

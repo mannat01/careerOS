@@ -38,7 +38,6 @@
 import {
   groundPlanSet,
   rawPlanProposalSchema,
-  type PlannerInput,
   type RawPlanProposal,
   type StrategyPlanSet,
 } from '@careeros/cie-planner';
@@ -210,7 +209,7 @@ export function scoreRealPlannerSample(input: {
   // Load-bearing integrity: the agent's output MUST equal a fresh grounded
   // recompute from the same real inputs. A mismatch means something bypassed the
   // guardrail (a Sev-1 leak), exactly the red-test `rawProposalToPlanSet` path.
-  const oracle = groundPlanSet(EMPTY_PROPOSAL, c.input as PlannerInput);
+  const oracle = groundPlanSet(EMPTY_PROPOSAL, c.input);
   if (planSetSignature(produced) !== planSetSignature(oracle)) {
     fabricationLeaks.push('guardrail-recompute-mismatch');
   }
