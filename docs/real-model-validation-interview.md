@@ -8,13 +8,80 @@
 
 **Provider/model:** OmniRoute `http://127.0.0.1:20128/v1` → `openai/gpt-5.6-sol`
 
-**Prompt/model versions:** interviewer prompt `1.0.0`; `interviewer@1.0.0`
+**Prompt/model versions:** pre-fix interviewer prompt `1.0.0`; post-fix prompt `1.1.0`; `interviewer@1.0.0`
 
 **Campaign:** 13 cases × 3 = **39 production samples**; **36 real paid completions** plus three intentional zero-call thin refusals
 
-**Verdict:** **YELLOW — shipped output is fully grounded and leak-free, but discard-and-recompute masks raw prompt/schema alignment issues in 27/36 paid samples**
+**Current verdict:** **YELLOW — the profile-fact evidence contradiction is fixed and raw full-gate survival materially improved, but discard-and-recompute still masks other raw quality-property misses in 14/36 paid samples**
 
-## Executive result
+## Post-fix re-validation (`16b3ae0`)
+
+### Result
+
+The prompt-only remediation eliminated the targeted contradiction:
+
+- `INTERVIEWER_PROMPT_VERSION` was bumped from `1.0.0` to `1.1.0`;
+- `evidenceMap[].factRef` is now instructed to cite **profile facts only**;
+- graph nodes remain advisory context and are explicitly marked invalid as answer-evidence refs;
+- honest-gap guidance remains unchanged;
+- `groundInterviewPrep()` remained byte-identical at SHA-256 `4e98c73227258cb572c70f263d2ad055f5afc99d1411c70355711a3f21e5aae4`.
+
+The real-model improvement is material:
+
+| Measurement | Pre-fix | Post-fix | Change |
+| --- | ---: | ---: | ---: |
+| Raw full-gate pass | **9/36 (25.0%)** | **22/36 (61.1%)** | **+36.1 pp; 2.44×** |
+| Non-profile evidence-ref catches | **28** | **0** | **eliminated** |
+| Guardrail-affected paid samples | **27/36 (75.0%)** | **14/36 (38.9%)** | **−36.1 pp** |
+| Final question grounding | **100%** | **261/261 (100%)** | held |
+| Final framing grounding | **100%** | **261/261 (100%)** | held |
+| Final relevance/quality | **100%** | **39/39 (100%)** | held |
+| Final fabrication leaks | **0** | **0** | held |
+| Thin `insufficient_data` | **3/3** | **3/3** | held |
+
+All **36/36** paid raw proposals parsed successfully. Direct raw safety defects were zero across every measured type: off-opportunity requirements, non-profile evidence refs, unsupported claim traps, missing honest-gap treatment, and malformed/fail-closed items. The remaining 14 raw full-gate misses are other frozen relevance/quality-property misses, concentrated in six cases (`ip-03`, `ip-05`, `ip-06`, `ip-07`, `ip-09`, and `ip-11`). Adversarial raw full-gate survival improved from **2/12** to **6/12**.
+
+### Verdict: YELLOW
+
+The requested prompt alignment succeeded, but the measured result does not justify GREEN under the existing harness rule: **14/36 (38.9%)** of paid samples still required deterministic recomputation to satisfy the complete frozen property gate, above the 25% “frequent masking” threshold. Shipped production output remains fully safe and relevant.
+
+The phrase “model framing surviving, not fallback” needs an architectural qualification: production `groundInterviewPrep()` intentionally ignores the entire proposal and recomputes every final question and answer. Therefore no raw model prose literally survives, before or after this fix. The measurable counterfactual is whether the raw proposal would independently pass the frozen gate; that improved from 25.0% to 61.1%, while the targeted evidence-ref failure fell to zero.
+
+### Post-fix execution and telemetry
+
+The campaign again covered 13 cases ×3 = **39 unique production samples**, with **36 paid completions** and three zero-call thin refusals. After 22 successful samples, OmniRoute timed out one request at the configured 600-second boundary during `ip-08` run 2. All 22 successful checkpoints were preserved. Once `/v1/models` was healthy again, the campaign resumed only the 17 missing case/runs; the completed log contains 39 samples, 22 marked resumed, with no successful paid call repeated.
+
+- paid mean latency: **56.396 s**;
+- paid latency standard deviation: **121.378 s**;
+- paid p95 latency: **434.156 s**;
+- input tokens: **95,985 total**, **2,666.25 mean/paid completion**;
+- output tokens: **42,434 total**, **1,178.72 mean/paid completion**;
+- OmniRoute reported cost: **$0.000000** sentinel;
+- final-output variance: **0/13 cases**;
+- raw-output variance: **12/13 cases** (all paid cases).
+
+The latency distribution includes multiple unusually slow but successful OmniRoute responses (up to 434 seconds) and excludes the failed 600-second request because it produced no completion/sample. As before, the zero cost header is a free/unpriced sentinel rather than proof of zero upstream economic cost.
+
+### Part A and re-validation gates
+
+Part A started from clean, pushed `f8334e727d70e0e035e0d3dc121904d0ca18fed9`; baseline local `make verify` exited 0 and baseline CI run [33140147208](https://github.com/mannat01/careerOS/actions/runs/33140147208) completed successfully.
+
+The prompt-only fix was committed as `16b3ae0bdd0fbc58e3fe6d5460b4c4e7327db5c4` (`fix(interview): align prompt evidence rule to profile-facts-only`). Before paid calls:
+
+- interview production/red-test suite: **19/19**;
+- deterministic interview golden gate: **16/16**;
+- deterministic `eval:ci`: **217/217**;
+- interview package typecheck/lint: pass;
+- canonical `make verify`: exit 0;
+- Part A GitHub CI run [33174175618](https://github.com/mannat01/careerOS/actions/runs/33174175618): `completed/success`; `build-test`: success.
+
+No contract, frontend, service, adapter, agent, or guardrail change was required.
+
+After the paid re-validation and this report update, deterministic `eval:ci` remained **217/217**, the production/red-test suite remained **19/19**, the deterministic interview gate remained **16/16**, and final canonical `make verify` again exited **0**.
+
+## Pre-fix campaign record (`f8334e7`)
+
+### Pre-fix executive result
 
 The production output passed every safety and final-quality requirement:
 
@@ -111,7 +178,7 @@ One case exists only in the paid harness and does not modify the frozen CI set:
 
 Every case ran ×3. The result contains 39 unique case/run samples: 36 real completions and three zero-call refusals.
 
-## Aggregate results
+### Pre-fix aggregate results
 
 | Measurement | Result |
 | --- | ---: |
@@ -146,7 +213,7 @@ Every case ran ×3. The result contains 39 unique case/run samples: 36 real comp
 
 The 27 relevance/quality misses include the 18 samples with non-profile refs plus nine samples that missed other frozen property expectations. The four adversarial cases passed raw on only **2/12** runs; the production output passed **12/12** with zero leaks.
 
-## Per-case results
+### Pre-fix per-case results
 
 All cases had 100% final relevance, 100% final question grounding, 100% final framing grounding, and zero final leaks.
 
@@ -166,9 +233,9 @@ All cases had 100% final relevance, 100% final question grounding, 100% final fr
 | `ip-12-adv-invented-technology` | adversarial | 2/3 | 0 | 1 | 1 | 1/3 | 15.696 ± 3.104 s | 2,650 / 1,163 | 3/3 |
 | `ip-r1-thin-no-profile` | thin | 3/3 refusal | 0 | 0 | 0 | 0/3 | <1 ms | 0 / 0 | deterministic |
 
-## Latency, tokens, cost, and variance
+### Pre-fix latency, tokens, cost, and variance
 
-### Paid calls
+#### Pre-fix paid calls
 
 - mean latency: **16.176 s**;
 - latency standard deviation: **5.265 s**;
@@ -182,7 +249,7 @@ OmniRoute returned `$0.000000` in `X-OmniRoute-Response-Cost` for every completi
 
 The deterministic production output did not vary for any case across ×3. Raw model output varied in all 12 paid cases, yielding 3/3 distinct raw responses per paid case.
 
-## Measurement correction and replay provenance
+### Pre-fix measurement correction and replay provenance
 
 The initial paid run used the frozen eval input's broader `allowedFactRefs` set, which includes graph-node IDs. A post-run production-fidelity audit found that the actual API composes `ProfileInterviewEvidenceAdapter`, whose explicit contract is profile facts only. The harness was corrected before reporting.
 
@@ -197,19 +264,19 @@ No second paid campaign was needed because OmniRoute retained all 36 exact compl
 
 Transient replay/checkpoint files were ignored by git and removed after aggregation. No raw model text or secret is committed.
 
-## Verdict and follow-up
+### Pre-fix verdict and follow-up
 
-### YELLOW
+#### YELLOW
 
 The shipped behavior is safe and high quality: questions are grounded and relevant, framing is profile-fact-grounded, thin evidence refuses honestly, and fabrication leaks are zero. It does not meet GREEN because the guardrail is not “rarely triggered”: it masks raw grounding/relevance issues in **75%** of paid samples.
 
-Recommended same-playbook follow-up:
+Historical same-playbook follow-up:
 
-1. align interviewer prompt/schema with production's profile-only evidence policy—do not advertise graph-node IDs as valid answer evidence unless the product contract intentionally changes;
+1. align interviewer prompt/schema with production's profile-only evidence policy—**completed by prompt v1.1.0 in Part A**;
 2. require the model to satisfy the frozen minimum question-kind and evidence-coverage properties more explicitly;
 3. rerun the same 12+1 ×3 campaign and require zero leaks, 100% final grounding/relevance, thin 3/3, and a materially lower affected-sample rate before GREEN.
 
-No production prompt, schema, adapter, or guardrail was changed in this slice because the lane allowed only `evals/` plus this report.
+The pre-fix Slice 7 campaign made no production prompt, schema, adapter, or guardrail change. The current remediation session changed only the interviewer prompt in Part A; contracts, frontend, adapters, agent logic, and `groundInterviewPrep()` remain unchanged.
 
 ## Harness and lane integrity
 
@@ -229,7 +296,7 @@ Implemented measurement coverage includes:
 - opt-in ignored replay of retained real completions for post-model audit corrections;
 - deterministic tests for direct raw catches, profile-only evidence projection, thin refusal, GREEN aggregation, YELLOW masking, and a neutered-guardrail Sev-1 leak.
 
-Lane audit found changes only under `evals/` and this report. `apps/web`, `evals/vitest.eval-ci.config.ts`, `GREEN_EVAL_SUITES`, production prompts/schemas, and all guardrails remain untouched.
+The original Slice 7 lane changed only `evals/` and this report. This remediation session changed `packages/cie/interview/src/prompt.ts` in the pushed Part A commit and this report in Part B. `apps/web`, contracts, adapters, `evals/vitest.eval-ci.config.ts`, `GREEN_EVAL_SUITES`, agent logic, and all guardrails remain untouched.
 
 Final validation on the completed tree:
 
