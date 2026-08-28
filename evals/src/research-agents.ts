@@ -144,7 +144,7 @@ function oracleSynthesis(c: ResearchSynthesisCase): ResearchSynthesis {
       .filter((s): s is string => s !== undefined && allowed.has(s));
   }
 
-  return { insights, recommendations, citations };
+  return { status: 'ok', insights, recommendations, citations };
 }
 
 /** Oracle agent bound to a specific golden set (so it can honor per-case expectations). */
@@ -160,7 +160,12 @@ export function createOracleResearchSynthesisAgent(
         // Cases from the golden set always match by reference so this only
         // fires in ad-hoc unit tests.
         const first = input.findings[0];
-        if (!first) return Promise.resolve({ insights: [], recommendations: [], citations: {} });
+        if (!first) {
+          return Promise.resolve({
+            status: 'insufficient_data',
+            reason: 'No sanctioned research finding with non-empty source content was provided.',
+          });
+        }
         const refs = pickPersonalizationRefs(input);
         const insight: SynthesizedInsight = {
           id: 'ins-1',
@@ -172,6 +177,7 @@ export function createOracleResearchSynthesisAgent(
           confidence: 0.5,
         };
         return Promise.resolve({
+          status: 'ok',
           insights: [insight],
           recommendations: [],
           citations: { [insight.id]: [first.sourceId] },
@@ -273,7 +279,7 @@ export const fabricatorResearchSynthesisAgent: ResearchSynthesisAgent = {
       citations[i.id] = ['fake-jobs-report-2099'];
     }
 
-    return Promise.resolve({ insights, recommendations, citations });
+    return Promise.resolve({ status: 'ok', insights, recommendations, citations });
   },
 };
 
@@ -283,6 +289,6 @@ export const fabricatorResearchSynthesisAgent: ResearchSynthesisAgent = {
 
 export class StubResearchSynthesisAgent implements ResearchSynthesisAgent {
   synthesize(_input: ResearchSynthesisInput): Promise<ResearchSynthesis> {
-    return Promise.resolve({ insights: [], recommendations: [], citations: {} });
+    return Promise.resolve({ status: 'ok', insights: [], recommendations: [], citations: {} });
   }
 }

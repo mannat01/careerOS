@@ -120,7 +120,7 @@ describe('M07 red-test — neuter the guardrail → the sins leak into the harne
         citations: { 'ins-fab': ['fake-jobs-report-2099'] },
       });
 
-      const leaked = rawProposalToSynthesis(fabricatedProposal);
+      const leaked = { status: 'ok' as const, ...rawProposalToSynthesis(fabricatedProposal) };
       const scored = scoreResearchSynthesisCase(c, leaked);
       // The neutered path fails LOUDLY: at least one guardrail category flips.
       expect(

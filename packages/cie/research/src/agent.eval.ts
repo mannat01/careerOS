@@ -28,6 +28,11 @@ import { describe, expect, it } from 'vitest';
 import { FakeLlmProvider, createLlmGateway } from '@careeros/llm-gateway';
 import { LlmResearchSynthesizerAgent } from './agent.js';
 import { rawSynthesisProposalSchema, rawProposalToSynthesis } from './io.js';
+import {
+  RESEARCH_INSUFFICIENT_DATA_REASON,
+  type ResearchSynthesis,
+  type ResearchSynthesisOk,
+} from './contract.js';
 import { RESEARCH_SYNTHESIZER_MODEL_VERSION } from './model.js';
 import type { ResearchSynthesisInput } from './model.js';
 
@@ -134,12 +139,18 @@ function agentReturning(proposal: unknown): {
   return { agent: new LlmResearchSynthesizerAgent(gateway), provider };
 }
 
+function expectOk(result: ResearchSynthesis): asserts result is ResearchSynthesisOk {
+  expect(result.status).toBe('ok');
+  if (result.status !== 'ok') throw new Error(`Expected ok synthesis, got ${result.status}`);
+}
+
 // ============================================================================
 
 describe('research synthesizer — deterministic grounding guardrail', () => {
   it('GROUNDING (rs-09): every produced insight cites a REAL finding id from the input', async () => {
     const { agent } = agentReturning(FABRICATED_PROPOSAL);
     const out = await agent.synthesize(WEAK_SUPPORT_INPUT);
+    expectOk(out);
     const findingIds = new Set(WEAK_SUPPORT_INPUT.findings.map((f) => f.id));
     for (const i of out.insights) {
       expect(i.findingIds.length, `insight ${i.id} must ground in ≥1 finding`).toBeGreaterThan(0);
@@ -155,6 +166,7 @@ describe('research synthesizer — deterministic grounding guardrail', () => {
   it('SANCTIONED SOURCES (rs-10): every citation is on the allow-list', async () => {
     const { agent } = agentReturning(FABRICATED_PROPOSAL);
     const out = await agent.synthesize(WEAK_SUPPORT_INPUT);
+    expectOk(out);
     const allowed = new Set(WEAK_SUPPORT_INPUT.allowedSources);
     for (const [insightId, sources] of Object.entries(out.citations)) {
       for (const s of sources) {
@@ -169,6 +181,7 @@ describe('research synthesizer — deterministic grounding guardrail', () => {
   it('PERSONALIZATION: every surfaced insight carries ≥1 real goal/gap/plan-action ref', async () => {
     const { agent } = agentReturning(FABRICATED_PROPOSAL);
     const out = await agent.synthesize(WEAK_SUPPORT_INPUT);
+    expectOk(out);
     const goalIds = new Set(WEAK_SUPPORT_INPUT.goals.map((g) => g.id));
     const gapIds = new Set(WEAK_SUPPORT_INPUT.gaps.map((g) => g.id));
     const planActionIds = new Set(WEAK_SUPPORT_INPUT.activePlanActions.map((a) => a.id));
@@ -183,6 +196,7 @@ describe('research synthesizer — deterministic grounding guardrail', () => {
   it('ACTIONABILITY (rs-11): every recommendation resolves to a produced insight AND links to a real gap/goal/plan-action', async () => {
     const { agent } = agentReturning(FABRICATED_PROPOSAL);
     const out = await agent.synthesize(WEAK_SUPPORT_INPUT);
+    expectOk(out);
     const producedInsightIds = new Set(out.insights.map((i) => i.id));
     const goalIds = new Set(WEAK_SUPPORT_INPUT.goals.map((g) => g.id));
     const gapIds = new Set(WEAK_SUPPORT_INPUT.gaps.map((g) => g.id));
@@ -204,6 +218,7 @@ describe('research synthesizer — deterministic grounding guardrail', () => {
   it('CALIBRATION (rs-12): a single weak finding cannot yield confidence > weak cap', async () => {
     const { agent } = agentReturning(FABRICATED_PROPOSAL);
     const out = await agent.synthesize(WEAK_SUPPORT_INPUT);
+    expectOk(out);
     // Default cap: weak ≤ 0.5. The over-claim (0.99) must not survive.
     for (const i of out.insights) {
       expect(i.confidence, `insight ${i.id} confidence must be ≤ weak cap`).toBeLessThanOrEqual(0.5);
@@ -213,6 +228,7 @@ describe('research synthesizer — deterministic grounding guardrail', () => {
   it('NO FABRICATED-TREND STRING: the quantum-computing / decisively-shifting hype never renders', async () => {
     const { agent } = agentReturning(FABRICATED_PROPOSAL);
     const out = await agent.synthesize(WEAK_SUPPORT_INPUT);
+    expectOk(out);
     const text = [
       ...out.insights.map((i) => i.summary),
       ...out.recommendations.map((r) => r.action),
@@ -234,6 +250,7 @@ describe('research synthesizer — deterministic grounding guardrail', () => {
   it('MODEL STAMP: every synthesis is version-stamped for audit reproducibility', async () => {
     const { agent } = agentReturning(FABRICATED_PROPOSAL);
     const out = await agent.synthesize(WEAK_SUPPORT_INPUT);
+    expectOk(out);
     expect(out.modelVersion).toBe(RESEARCH_SYNTHESIZER_MODEL_VERSION);
   });
 
@@ -249,6 +266,7 @@ describe('research synthesizer — deterministic grounding guardrail', () => {
     const gateway = createLlmGateway({ provider, modelsByTier: { cheap: 'c', frontier: 'f' }, pricing: {} });
     const agent = new LlmResearchSynthesizerAgent(gateway);
     const out = await agent.synthesize(WEAK_SUPPORT_INPUT);
+    expectOk(out);
     expect(out.modelVersion).toBe(RESEARCH_SYNTHESIZER_MODEL_VERSION);
     // The one relevant weak finding still surfaces (grounded, calibrated).
     expect(out.insights).toHaveLength(1);
@@ -260,6 +278,60 @@ describe('research synthesizer — deterministic grounding guardrail', () => {
     const { agent, provider } = agentReturning(FABRICATED_PROPOSAL);
     await agent.synthesize(WEAK_SUPPORT_INPUT);
     expect(provider.calls[0]?.model).toBe('fixture-frontier');
+  });
+
+  it('returns insufficient_data before the model call when no sanctioned content exists', async () => {
+    const { agent, provider } = agentReturning(FABRICATED_PROPOSAL);
+    const out = await agent.synthesize({
+      ...WEAK_SUPPORT_INPUT,
+      findings: [],
+      allowedSources: [],
+    });
+    expect(out).toEqual({
+      status: 'insufficient_data',
+      reason: RESEARCH_INSUFFICIENT_DATA_REASON,
+    });
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  it('returns insufficient_data when findings exist but none has sanctioned source content', async () => {
+    const { agent, provider } = agentReturning(FABRICATED_PROPOSAL);
+    const out = await agent.synthesize({
+      ...WEAK_SUPPORT_INPUT,
+      allowedSources: ['different-sanctioned-source'],
+    });
+    expect(out.status).toBe('insufficient_data');
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  it('returns insufficient_data when an allow-listed finding has no source content', async () => {
+    const { agent, provider } = agentReturning(FABRICATED_PROPOSAL);
+    const out = await agent.synthesize({
+      ...WEAK_SUPPORT_INPUT,
+      findings: [{ ...WEAK_SUPPORT_INPUT.findings[0]!, claim: '   ' }],
+    });
+    expect(out.status).toBe('insufficient_data');
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  it('keeps a sanctioned-but-off-goal finding as an honest empty ok synthesis', async () => {
+    const { agent, provider } = agentReturning({ insights: [], recommendations: [], citations: {} });
+    const out = await agent.synthesize({
+      ...WEAK_SUPPORT_INPUT,
+      findings: [{
+        id: 'rf-off-goal',
+        domain: 'industry',
+        claim: 'Maritime freight volumes increased 2% year over year.',
+        sourceId: 'sanctioned-maritime-report',
+        strength: 'medium',
+      }],
+      allowedSources: ['sanctioned-maritime-report'],
+    });
+    expectOk(out);
+    expect(out.insights).toEqual([]);
+    expect(out.recommendations).toEqual([]);
+    expect(out.citations).toEqual({});
+    expect(provider.calls).toHaveLength(1);
   });
 });
 

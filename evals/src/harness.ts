@@ -932,6 +932,7 @@ export async function runPlannerEval(
 
 /** Text surface scanned for forbidden fabrications in a synthesis. */
 function synthesisText(s: ResearchSynthesis): string {
+  if (s.status === 'insufficient_data') return s.reason;
   const insightText = (i: SynthesizedInsight): string => i.summary;
   const recText = (r: SynthesizedRecommendation): string => r.action;
   const citationText = Object.values(s.citations).flat().join(' ');
@@ -993,6 +994,9 @@ export function scoreResearchSynthesisCase(
   c: ResearchSynthesisCase,
   produced: ResearchSynthesis,
 ): ResearchSynthesisCaseResult {
+  const output = produced.status === 'ok'
+    ? produced
+    : { status: 'ok' as const, insights: [], recommendations: [], citations: {} };
   const findingIds = new Set(c.input.findings.map((f) => f.id));
   const allowedSources = new Set(c.input.allowedSources);
   const goalIds = new Set(c.input.goals.map((g) => g.id));
@@ -1000,13 +1004,13 @@ export function scoreResearchSynthesisCase(
   const planActionIds = new Set(c.input.activePlanActions.map((a) => a.id));
 
   // (a) GROUNDING — every insight lists ≥1 real findingId.
-  const ungroundedInsights = produced.insights
+  const ungroundedInsights = output.insights
     .filter((i) => i.findingIds.length === 0 || i.findingIds.some((id) => !findingIds.has(id)))
     .map((i) => i.id);
 
   // (a) CITATION — every listed source must be on the allow-list.
   const unsanctionedCitations: string[] = [];
-  for (const [insightId, sources] of Object.entries(produced.citations)) {
+  for (const [insightId, sources] of Object.entries(output.citations)) {
     for (const sourceId of sources) {
       if (!allowedSources.has(sourceId)) {
         unsanctionedCitations.push(`${insightId}→source:${sourceId}`);
@@ -1015,7 +1019,7 @@ export function scoreResearchSynthesisCase(
   }
 
   // (b) PERSONALIZATION — every insight carries ≥1 REAL goal/gap/plan-action ref.
-  const genericInsights = produced.insights
+  const genericInsights = output.insights
     .filter((i) => {
       const goalOk = i.goalRefs.some((r) => goalIds.has(r));
       const gapOk = i.gapRefs.some((r) => gapIds.has(r));
@@ -1026,7 +1030,7 @@ export function scoreResearchSynthesisCase(
 
   // (b) Every must-surface finding must be represented by ≥1 insight (whose findingIds are all real).
   const validInsightFindings = new Set(
-    produced.insights
+    output.insights
       .filter((i) => i.findingIds.every((id) => findingIds.has(id)))
       .flatMap((i) => i.findingIds),
   );
@@ -1034,16 +1038,16 @@ export function scoreResearchSynthesisCase(
     (id) => !validInsightFindings.has(id),
   );
   const surfacedForbiddenFindings = c.expected.mustNotSurfaceFindingIds.filter((id) =>
-    produced.insights.some((i) => i.findingIds.includes(id)),
+    output.insights.some((i) => i.findingIds.includes(id)),
   );
 
   // (c) ACTIONABILITY — every recommendation must resolve to a produced insight
   // AND carry ≥1 real gap/goal/plan-action link.
-  const producedInsightIds = new Set(produced.insights.map((i) => i.id));
-  const orphanRecommendations = produced.recommendations
+  const producedInsightIds = new Set(output.insights.map((i) => i.id));
+  const orphanRecommendations = output.recommendations
     .filter((r) => !producedInsightIds.has(r.insightId))
     .map((r) => r.id);
-  const ungroundedRecommendations = produced.recommendations
+  const ungroundedRecommendations = output.recommendations
     .filter((r) => {
       const gapOk = r.gapId !== undefined && gapIds.has(r.gapId);
       const goalOk = r.goalId !== undefined && goalIds.has(r.goalId);
@@ -1054,13 +1058,13 @@ export function scoreResearchSynthesisCase(
 
   // (c) Every mustLink id must be linked by ≥1 recommendation.
   const linkedGapIds = new Set(
-    produced.recommendations.map((r) => r.gapId).filter((x): x is string => x !== undefined),
+    output.recommendations.map((r) => r.gapId).filter((x): x is string => x !== undefined),
   );
   const linkedGoalIds = new Set(
-    produced.recommendations.map((r) => r.goalId).filter((x): x is string => x !== undefined),
+    output.recommendations.map((r) => r.goalId).filter((x): x is string => x !== undefined),
   );
   const linkedPlanActionIds = new Set(
-    produced.recommendations.map((r) => r.planActionId).filter((x): x is string => x !== undefined),
+    output.recommendations.map((r) => r.planActionId).filter((x): x is string => x !== undefined),
   );
   const unlinkedRequirements = [
     ...c.expected.mustLinkGapIds.filter((id) => !linkedGapIds.has(id)).map((id) => `gap:${id}`),
@@ -1071,7 +1075,7 @@ export function scoreResearchSynthesisCase(
   ];
 
   // (d) CALIBRATION — confidence upper-bounded by strongest supporting finding's strength.
-  const overclaimedInsights = produced.insights
+  const overclaimedInsights = output.insights
     .filter((i) => {
       const support = strongestSupport(c.input.findings, i.findingIds);
       // An insight without any real support was already caught by grounding —

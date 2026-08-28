@@ -18,8 +18,15 @@ export {
   type ResearchSynthesisInput,
   type SynthesizedInsight,
   type SynthesizedRecommendation,
-  type ResearchSynthesis,
 } from './model.js';
+
+export {
+  RESEARCH_INSUFFICIENT_DATA_REASON,
+  hasSufficientSanctionedResearchContent,
+  type ResearchSynthesis,
+  type ResearchSynthesisOk,
+  type ResearchSynthesisInsufficientData,
+} from './contract.js';
 
 export {
   RESEARCH_SYNTHESIZER_SYSTEM_PROMPT,

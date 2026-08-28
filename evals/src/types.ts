@@ -722,8 +722,9 @@ export interface SynthesizedRecommendation {
   planActionId?: string;
 }
 
-/** The synthesizer's output — insights + recommendations + citations. */
-export interface ResearchSynthesis {
+/** Successful synthesizer output — grounded insights + recommendations + citations. */
+export interface ResearchSynthesisOk {
+  status: 'ok';
   insights: SynthesizedInsight[];
   recommendations: SynthesizedRecommendation[];
   /**
@@ -733,6 +734,16 @@ export interface ResearchSynthesis {
    */
   citations: Record<string, string[]>;
 }
+
+/** Honest refusal when no usable sanctioned-source content was provided. */
+export interface ResearchSynthesisInsufficientData {
+  status: 'insufficient_data';
+  reason: string;
+}
+
+export type ResearchSynthesis =
+  | ResearchSynthesisOk
+  | ResearchSynthesisInsufficientData;
 
 export interface ResearchSynthesisAgent {
   synthesize(input: ResearchSynthesisInput): Promise<ResearchSynthesis>;

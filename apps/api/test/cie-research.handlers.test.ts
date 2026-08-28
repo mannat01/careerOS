@@ -81,6 +81,12 @@ class FakeSynthesizer implements ResearchSynthesizerPort {
 }
 
 const registry = new InMemoryResearchSourceRegistry(M07_RESEARCH_SOURCE_SEED);
+const emptyOkSynthesis: ResearchSynthesis = {
+  status: 'ok',
+  insights: [],
+  recommendations: [],
+  citations: {},
+};
 
 // -------- 1. list --------
 
@@ -90,7 +96,7 @@ describe('listResearchFindings', () => {
     const res = await listResearchFindings(
       ctx(USER_A),
       { limit: '10' },
-      { findings: port, registry, synthesizer: new FakeSynthesizer({ recommendations: [], evidence: [], generatedAt: '' } as unknown as ResearchSynthesis) },
+      { findings: port, registry, synthesizer: new FakeSynthesizer(emptyOkSynthesis) },
     );
     expect(res.status).toBe(200);
     const body = (res as { body: { count: number; allowedSources: string[]; domain: unknown } }).body;
@@ -107,7 +113,7 @@ describe('listResearchFindings', () => {
     const res = await listResearchFindings(
       ctx(USER_A),
       { domain: 'salary', limit: '10' },
-      { findings: port, registry, synthesizer: new FakeSynthesizer({ recommendations: [], evidence: [], generatedAt: '' } as unknown as ResearchSynthesis) },
+      { findings: port, registry, synthesizer: new FakeSynthesizer(emptyOkSynthesis) },
     );
     const body = (res as { body: { count: number; findings: PersistedResearchFinding[] } }).body;
     expect(body.count).toBe(1);
@@ -119,7 +125,7 @@ describe('listResearchFindings', () => {
     const res = await listResearchFindings(
       ctx(USER_A),
       { domain: 'not-a-real-domain' },
-      { findings: port, registry, synthesizer: new FakeSynthesizer({ recommendations: [], evidence: [], generatedAt: '' } as unknown as ResearchSynthesis) },
+      { findings: port, registry, synthesizer: new FakeSynthesizer(emptyOkSynthesis) },
     );
     expect(res.status).toBe(422);
     expect((res as { body: { error: { code: string } } }).body.error.code).toBe('validation_failed');
@@ -136,7 +142,7 @@ describe('listResearchFindings', () => {
     const res = await listResearchFindings(
       ctx(USER_A),
       {},
-      { findings: port, registry, synthesizer: new FakeSynthesizer({ recommendations: [], evidence: [], generatedAt: '' } as unknown as ResearchSynthesis) },
+      { findings: port, registry, synthesizer: new FakeSynthesizer(emptyOkSynthesis) },
     );
     const body = (res as { body: { count: number; findings: PersistedResearchFinding[] } }).body;
     expect(body.count).toBe(1);
@@ -153,7 +159,7 @@ describe('researchFeed', () => {
     const forA = [mkFinding({ id: 'a1' }), mkFinding({ id: 'a2', sourceKey: 'onet-skills', domain: 'skills' })];
     const forB = [mkFinding({ id: 'b1', sourceKey: 'sec-edgar', domain: 'company' })];
     const port = new FakeReadPort([], new Map([[USER_A, forA], [USER_B, forB]]));
-    const deps = { findings: port, registry, synthesizer: new FakeSynthesizer({ recommendations: [], evidence: [], generatedAt: '' } as unknown as ResearchSynthesis) };
+    const deps = { findings: port, registry, synthesizer: new FakeSynthesizer(emptyOkSynthesis) };
 
     const resA = await researchFeed(ctx(USER_A), {}, deps);
     const resB = await researchFeed(ctx(USER_B), {}, deps);
@@ -172,7 +178,7 @@ describe('researchFeed', () => {
     const res = await researchFeed(
       ctx(USER_A),
       {},
-      { findings: port, registry, synthesizer: new FakeSynthesizer({ recommendations: [], evidence: [], generatedAt: '' } as unknown as ResearchSynthesis) },
+      { findings: port, registry, synthesizer: new FakeSynthesizer(emptyOkSynthesis) },
     );
     const body = (res as { body: { findings: PersistedResearchFinding[] } }).body;
     expect(body.findings.map((f) => f.id)).toEqual(['ok']);
@@ -183,11 +189,7 @@ describe('researchFeed', () => {
 
 describe('researchRecommendations', () => {
   it('passes the caller user + cap to the synthesizer and returns the sanctioned allow-list', async () => {
-    const synth: ResearchSynthesis = {
-      recommendations: [],
-      evidence: [],
-      generatedAt: '2026-07-01T00:00:00.000Z',
-    } as unknown as ResearchSynthesis;
+    const synth: ResearchSynthesis = emptyOkSynthesis;
     const synthesizer = new FakeSynthesizer(synth);
     const port = new FakeReadPort([], new Map());
     const res = await researchRecommendations(
@@ -203,12 +205,26 @@ describe('researchRecommendations', () => {
     expect(body.allowedSources).toEqual(registry.allowedSourceKeys());
   });
 
-  it('ignores out-of-range cap values (defaults inside the synthesizer apply)', async () => {
+  it('preserves the insufficient_data arm for API consumers', async () => {
     const synthesizer = new FakeSynthesizer({
-      recommendations: [],
-      evidence: [],
-      generatedAt: '2026-07-01T00:00:00.000Z',
-    } as unknown as ResearchSynthesis);
+      status: 'insufficient_data',
+      reason: 'No sanctioned research finding with non-empty source content was provided.',
+    });
+    const res = await researchRecommendations(
+      ctx(USER_A),
+      {},
+      { findings: new FakeReadPort([], new Map()), registry, synthesizer },
+    );
+    expect(res.status).toBe(200);
+    const body = (res as { body: { synthesis: ResearchSynthesis } }).body;
+    expect(body.synthesis).toEqual({
+      status: 'insufficient_data',
+      reason: 'No sanctioned research finding with non-empty source content was provided.',
+    });
+  });
+
+  it('ignores out-of-range cap values (defaults inside the synthesizer apply)', async () => {
+    const synthesizer = new FakeSynthesizer(emptyOkSynthesis);
     const port = new FakeReadPort([], new Map());
     await researchRecommendations(
       ctx(USER_A),

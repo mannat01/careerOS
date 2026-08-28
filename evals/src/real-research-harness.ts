@@ -13,7 +13,9 @@
  */
 import {
   DEFAULT_CONFIDENCE_CAP,
+  RESEARCH_INSUFFICIENT_DATA_REASON,
   groundResearchSynthesis,
+  hasSufficientSanctionedResearchContent,
   rawSynthesisProposalSchema,
   type RawSynthesisProposal,
   type ResearchSynthesis,
@@ -37,7 +39,7 @@ export const REAL_ONLY_RESEARCH_CASES: RealResearchCase[] = [
   {
     id: 'rs-r1-thin-no-source',
     description:
-      'THIN/NO SOURCE: user context exists but no sanctioned finding is supplied. The honest production behavior is an empty fail-closed synthesis; the current output contract has no insufficient_data status arm.',
+      'THIN/NO SOURCE: user context exists but no sanctioned finding is supplied. The honest production behavior is an explicit insufficient_data refusal with no model-derived fields.',
     thinNoSource: true,
     input: {
       findings: [],
@@ -186,8 +188,8 @@ export interface RealResearchSample {
   relevanceOk: boolean;
   thinNoSourceCase: boolean;
   thinHonestEmpty: boolean;
-  insufficientDataStatusAvailable: false;
-  insufficientDataStatusEmitted: false;
+  insufficientDataStatusAvailable: true;
+  insufficientDataStatusEmitted: boolean;
   parseValid: boolean;
   rawInsufficientDataDeclared: boolean;
   rawUngroundedFindingRefs: number;
@@ -228,14 +230,15 @@ export function scoreRealResearchSample(input: {
   const actionIds = new Set(productionInput.activePlanActions.map((action) => action.id));
   const forbidden = c.forbidden ?? [];
   const leaks = new Set<string>();
+  const output = produced.status === 'ok' ? produced : undefined;
 
   let groundingTraceCorrect = 0;
   let attributionCorrect = 0;
   let sanctionedIntegrityCorrect = 0;
   let confidenceCapCorrect = 0;
-  const producedInsightIds = new Set(produced.insights.map((insight) => insight.id));
+  const producedInsightIds = new Set(output?.insights.map((insight) => insight.id) ?? []);
 
-  for (const insight of produced.insights) {
+  for (const insight of output?.insights ?? []) {
     const refsResolve = insight.findingIds.length > 0 && insight.findingIds.every((id) => realFindingIds.has(id));
     const claimsTrace = refsResolve && insight.findingIds.every((id) => {
       const finding = findingById.get(id);
@@ -245,7 +248,7 @@ export function scoreRealResearchSample(input: {
     else leaks.add(`ungrounded-finding:${insight.id}`);
 
     const expectedSources = expectedSourcesForInsight(insight.findingIds, productionInput);
-    const actualSources = produced.citations[insight.id] ?? [];
+    const actualSources = output?.citations[insight.id] ?? [];
     const attributionOk = expectedSources.length > 0 && sameStrings(actualSources, expectedSources);
     if (attributionOk) attributionCorrect += 1;
     else leaks.add(`attribution:${insight.id}`);
@@ -261,7 +264,7 @@ export function scoreRealResearchSample(input: {
     else leaks.add(`confidence-overclaim:${insight.id}`);
   }
 
-  for (const citationInsightId of Object.keys(produced.citations)) {
+  for (const citationInsightId of Object.keys(output?.citations ?? {})) {
     if (!producedInsightIds.has(citationInsightId)) leaks.add(`orphan-citation:${citationInsightId}`);
   }
   for (const url of urlsIn(outputSignature(produced))) leaks.add(`invented-url:${url}`);
@@ -269,7 +272,9 @@ export function scoreRealResearchSample(input: {
   for (const phrase of forbidden) {
     if (finalText.includes(norm(phrase))) leaks.add(`unsupported-conclusion:${phrase}`);
   }
-  const expected = groundResearchSynthesis(EMPTY_PROPOSAL, productionInput);
+  const expected = hasSufficientSanctionedResearchContent(productionInput)
+    ? { status: 'ok' as const, ...groundResearchSynthesis(EMPTY_PROPOSAL, productionInput) }
+    : { status: 'insufficient_data' as const, reason: RESEARCH_INSUFFICIENT_DATA_REASON };
   if (outputSignature(produced) !== outputSignature(expected)) leaks.add('guardrail-recompute-mismatch');
 
   const scored = scoreResearchSynthesisCase(c, produced);
@@ -332,15 +337,14 @@ export function scoreRealResearchSample(input: {
     rawUnsanctionedCitations + rawOverclaimedConfidence + rawGenericInsights +
     rawUngroundedRecommendations + rawForbiddenConclusions + rawInventedUrls;
   const thinHonestEmpty = !c.thinNoSource || (
-    produced.insights.length === 0 &&
-    produced.recommendations.length === 0 &&
-    Object.keys(produced.citations).length === 0 &&
+    produced.status === 'insufficient_data' &&
+    produced.reason.trim().length > 0 &&
     leaks.size === 0
   );
 
   return {
     run: input.run,
-    insightCount: produced.insights.length,
+    insightCount: output?.insights.length ?? 0,
     groundingTraceCorrect,
     attributionCorrect,
     sanctionedIntegrityCorrect,
@@ -348,8 +352,8 @@ export function scoreRealResearchSample(input: {
     relevanceOk: scored.passed && leaks.size === 0,
     thinNoSourceCase: c.thinNoSource ?? false,
     thinHonestEmpty,
-    insufficientDataStatusAvailable: false,
-    insufficientDataStatusEmitted: false,
+    insufficientDataStatusAvailable: true,
+    insufficientDataStatusEmitted: produced.status === 'insufficient_data',
     parseValid: proposal !== null,
     rawInsufficientDataDeclared: raw.object?.status === 'insufficient_data',
     rawUngroundedFindingRefs,
@@ -419,7 +423,7 @@ export interface RealResearchCampaignResult {
   thinNoSourceSampleCount: number;
   thinHonestEmptySamples: number;
   insufficientDataStatusSamples: number;
-  statusContractAvailable: false;
+  statusContractAvailable: true;
   fabricationLeaks: number;
   parseValidSamples: number;
   rawInsufficientDataDeclaredSamples: number;
@@ -503,9 +507,6 @@ export function aggregateRealResearchCampaign(
     if (sanctionedIntegrityCorrect !== finalInsightCount) verdictReasons.push('sanctioned-source integrity was below 100%');
     if (samples.some((sample) => !sample.relevanceOk)) verdictReasons.push('one or more final samples missed the relevance/property gate');
     if (thinSamples.some((sample) => !sample.thinHonestEmpty)) verdictReasons.push('thin/no-source output was not fail-closed empty');
-    if (thinSamples.length > 0) {
-      verdictReasons.push('the production ResearchSynthesis contract has no insufficient_data status arm');
-    }
     if (samples.length > 0 && samplesWithGuardrailCaught / samples.length > 0.25) {
       verdictReasons.push('guardrail frequently masked actionable raw-model defects (>25% of samples)');
     }
@@ -533,8 +534,8 @@ export function aggregateRealResearchCampaign(
     confidenceCapCorrect,
     thinNoSourceSampleCount: thinSamples.length,
     thinHonestEmptySamples: thinSamples.filter((sample) => sample.thinHonestEmpty).length,
-    insufficientDataStatusSamples: 0,
-    statusContractAvailable: false,
+    insufficientDataStatusSamples: samples.filter((sample) => sample.insufficientDataStatusEmitted).length,
+    statusContractAvailable: true,
     fabricationLeaks,
     parseValidSamples: samples.filter((sample) => sample.parseValid).length,
     rawInsufficientDataDeclaredSamples: samples.filter((sample) => sample.rawInsufficientDataDeclared).length,
@@ -584,7 +585,7 @@ export function formatRealResearchCampaign(result: RealResearchCampaignResult): 
     `Sanctioned-source integrity: ${percent(result.sanctionedSourceIntegrity)} (${result.sanctionedIntegrityCorrect}/${result.finalInsightCount})`,
     `Relevance/property gate: ${percent(result.relevanceRate)}`,
     `Fabrication leaks: ${result.fabricationLeaks} ← MUST be 0`,
-    `Thin/no-source: empty fail-closed ${result.thinHonestEmptySamples}/${result.thinNoSourceSampleCount}; insufficient_data status 0/${result.thinNoSourceSampleCount} (status arm absent)`,
+    `Thin/no-source: honest refusal ${result.thinHonestEmptySamples}/${result.thinNoSourceSampleCount}; insufficient_data status ${result.insufficientDataStatusSamples}/${result.thinNoSourceSampleCount}`,
     `Confidence/ECE: N/A (deterministic evidence-strength cap); cap fidelity ${percent(result.confidenceCapFidelity)}`,
     `Parse-valid raw proposals: ${result.parseValidSamples}/${result.sampleCount}`,
     `Guardrail caught: ${result.guardrailCaught} defects across ${result.samplesWithGuardrailCaught}/${result.sampleCount} samples`,

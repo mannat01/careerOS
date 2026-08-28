@@ -68,14 +68,20 @@ describe.sequential(`Track B Slice 6 — real ${selectedProvider} research campa
           const produced = await agent.synthesize(c.input);
           const latencyMs = performance.now() - started;
           const completion = provider.completions[completionIndex];
-          expect(completion, 'provider completion recording').toBeDefined();
-          if (!completion) throw new Error('Missing provider telemetry');
+          if (produced.status === 'ok') {
+            expect(completion, 'provider completion recording').toBeDefined();
+            if (!completion) throw new Error('Missing provider telemetry');
+          } else {
+            expect(completion, 'insufficient_data must not call the model').toBeUndefined();
+          }
           const sample = scoreRealResearchSample({
             c,
             run,
-            rawText: completion.text,
+            rawText: completion?.text ?? JSON.stringify(produced),
             produced,
-            response: { usage: completion.usage, costUsd: costUsdAt(completionIndex) },
+            response: completion
+              ? { usage: completion.usage, costUsd: costUsdAt(completionIndex) }
+              : { usage: { inputTokens: 0, outputTokens: 0 }, costUsd: 0 },
             latencyMs,
           });
           samples.push(sample);

@@ -27,7 +27,12 @@ import {
   buildResearchSynthesizerUserPrompt,
 } from './prompt.js';
 import { groundResearchSynthesis, rawSynthesisProposalSchema } from './io.js';
-import type { ResearchSynthesis, ResearchSynthesisInput } from './model.js';
+import {
+  RESEARCH_INSUFFICIENT_DATA_REASON,
+  hasSufficientSanctionedResearchContent,
+  type ResearchSynthesis,
+} from './contract.js';
+import type { ResearchSynthesisInput } from './model.js';
 
 /** Structurally matches evals/src/types.ts `ResearchSynthesisAgent` (kept decoupled). */
 export interface ResearchSynthesisAgent {
@@ -40,9 +45,17 @@ export class LlmResearchSynthesizerAgent implements ResearchSynthesisAgent {
   constructor(private readonly gateway: LlmGateway) {}
 
   async synthesize(input: ResearchSynthesisInput): Promise<ResearchSynthesis> {
+    // Explicit pre-model threshold: no usable sanctioned source content means
+    // an honest refusal, not an empty object that callers must interpret.
+    if (!hasSufficientSanctionedResearchContent(input)) {
+      return {
+        status: 'insufficient_data',
+        reason: RESEARCH_INSUFFICIENT_DATA_REASON,
+      };
+    }
     const proposal = await this.propose(input);
     // The proposal is DISCARDED: the synthesis is recomputed from real inputs.
-    return groundResearchSynthesis(proposal, input);
+    return { status: 'ok', ...groundResearchSynthesis(proposal, input) };
   }
 
   /** Call the frontier LLM and parse (fail-closed). Proposal is advisory only. */

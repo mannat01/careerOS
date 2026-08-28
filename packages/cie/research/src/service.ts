@@ -20,13 +20,13 @@
  *   - `ResearchSynthesisAgent` — the synthesizer (LLM + deterministic guardrail).
  */
 import type { ResearchSynthesisAgent } from './agent.js';
+import type { ResearchSynthesis } from './contract.js';
 import type {
   ResearchActivePlanAction,
   ResearchFinding,
   ResearchSkillGap,
   ResearchStateDimension,
   ResearchStatedGoal,
-  ResearchSynthesis,
   StrengthConfidenceCap,
 } from './model.js';
 

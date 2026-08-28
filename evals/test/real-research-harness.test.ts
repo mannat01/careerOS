@@ -34,7 +34,7 @@ describe('real research measurement harness', () => {
       recommendations: [{ id: 'rec-1', action: 'Act now', insightId: 'raw-missing' }],
       citations: { 'raw-1': ['invented-source'] },
     });
-    const produced = groundResearchSynthesis(EMPTY, c.input);
+    const produced = { status: 'ok' as const, ...groundResearchSynthesis(EMPTY, c.input) };
     const sample = scoreRealResearchSample({ c, run: 1, rawText, produced, response, latencyMs: 100 });
 
     expect(sample.fabricationLeaks).toEqual([]);
@@ -57,7 +57,7 @@ describe('real research measurement harness', () => {
       recommendations: [],
       citations: { 'ins-fab': ['fake-jobs-report-2099'] },
     });
-    const leaked = rawProposalToSynthesis(raw);
+    const leaked = { status: 'ok' as const, ...rawProposalToSynthesis(raw) };
     const sample = scoreRealResearchSample({
       c, run: 1, rawText: JSON.stringify(raw), produced: leaked, response, latencyMs: 100,
     });
@@ -65,9 +65,12 @@ describe('real research measurement harness', () => {
     expect(sample.fabricationLeaks).toContain('guardrail-recompute-mismatch');
   });
 
-  it('records honest empty no-source handling and the absent insufficient_data status arm', () => {
+  it('records explicit insufficient_data handling for no-source input', () => {
     const c = findCase('rs-r1-thin-no-source');
-    const produced = groundResearchSynthesis(EMPTY, c.input);
+    const produced = {
+      status: 'insufficient_data' as const,
+      reason: 'No sanctioned research finding with non-empty source content was provided.',
+    };
     const sample = scoreRealResearchSample({
       c,
       run: 1,
@@ -78,19 +81,24 @@ describe('real research measurement harness', () => {
     });
     expect(sample.thinHonestEmpty).toBe(true);
     expect(sample.rawInsufficientDataDeclared).toBe(true);
-    expect(sample.insufficientDataStatusAvailable).toBe(false);
-    expect(sample.insufficientDataStatusEmitted).toBe(false);
+    expect(sample.insufficientDataStatusAvailable).toBe(true);
+    expect(sample.insufficientDataStatusEmitted).toBe(true);
     expect(sample.fabricationLeaks).toEqual([]);
   });
 
-  it('aggregates grounded confidence as N/A ECE and yields YELLOW for the missing status arm', () => {
+  it('aggregates grounded confidence as N/A ECE and yields GREEN with the status arm', () => {
     const rich = findCase('rs-01-hiring-shift-matches-gap');
     const thin = findCase('rs-r1-thin-no-source');
     const build = (c: RealResearchCase, run: number) => scoreRealResearchSample({
       c,
       run,
       rawText: JSON.stringify({ insights: [], recommendations: [], citations: {} }),
-      produced: groundResearchSynthesis(EMPTY, c.input),
+      produced: c.thinNoSource
+        ? {
+            status: 'insufficient_data' as const,
+            reason: 'No sanctioned research finding with non-empty source content was provided.',
+          }
+        : { status: 'ok' as const, ...groundResearchSynthesis(EMPTY, c.input) },
       response,
       latencyMs: 100 + run,
     });
@@ -103,7 +111,8 @@ describe('real research measurement harness', () => {
     expect(result.attributionCorrectness).toBe(1);
     expect(result.sanctionedSourceIntegrity).toBe(1);
     expect(result.ece).toBeNull();
-    expect(result.statusContractAvailable).toBe(false);
-    expect(result.verdict).toBe('YELLOW');
+    expect(result.statusContractAvailable).toBe(true);
+    expect(result.insufficientDataStatusSamples).toBe(3);
+    expect(result.verdict).toBe('GREEN');
   });
 });
