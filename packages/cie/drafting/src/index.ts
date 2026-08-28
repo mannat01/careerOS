@@ -28,4 +28,8 @@ export {
   type DraftStatePort,
   type GenerateDraftRequest,
 } from './service.js';
-export { DRAFTER_SYSTEM_PROMPT, buildDrafterUserPrompt } from './prompt.js';
+export {
+  DRAFTER_PROMPT_VERSION,
+  DRAFTER_SYSTEM_PROMPT,
+  buildDrafterUserPrompt,
+} from './prompt.js';

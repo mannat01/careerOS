@@ -19,6 +19,7 @@ import { FakeLlmProvider, createLlmGateway } from '@careeros/llm-gateway';
 import { LlmDrafterAgent } from './agent.js';
 import { parseDraftProposal, rawProposalToDraft } from './io.js';
 import { DRAFTER_MODEL_VERSION, type DraftInput } from './model.js';
+import { DRAFTER_PROMPT_VERSION, DRAFTER_SYSTEM_PROMPT } from './prompt.js';
 
 const FORBIDDEN = [
   'ran Kubernetes at 200+ node scale',
@@ -54,6 +55,27 @@ const FABRICATED_JSON = JSON.stringify({
     { claim: 'ran Kubernetes at 200+ node scale', factRef: 'fake-fact-999' },
     { claim: 'led the platform team at Google', factRef: 'fake-fact-998' },
   ],
+});
+
+describe('drafter prompt — extractive claim contract', () => {
+  it('versions and demonstrates allowed verbatim/compression/reordering versus disallowed generation', () => {
+    expect(DRAFTER_PROMPT_VERSION).toBe('1.1.0');
+    expect(DRAFTER_SYSTEM_PROMPT).toContain('CLAIM REPHRASING IS EXTRACTIVE, NOT GENERATIVE');
+    expect(DRAFTER_SYSTEM_PROMPT).toContain('ALLOWED verbatim claim');
+    expect(DRAFTER_SYSTEM_PROMPT).toContain('ALLOWED compression');
+    expect(DRAFTER_SYSTEM_PROMPT).toContain('ALLOWED reordering');
+    expect(DRAFTER_SYSTEM_PROMPT).toContain('DISALLOWED abstraction');
+    expect(DRAFTER_SYSTEM_PROMPT).toContain('DISALLOWED inferred outcome');
+    expect(DRAFTER_SYSTEM_PROMPT).toContain('DISALLOWED JD-derived embellishment');
+  });
+
+  it('requires the production claim label and source-only significant words after it', () => {
+    expect(DRAFTER_SYSTEM_PROMPT).toContain('For "<exact opportunity requirement>": <extractive profile-fact claim>');
+    expect(DRAFTER_SYSTEM_PROMPT).toContain('Every significant word after the label');
+    expect(DRAFTER_SYSTEM_PROMPT).toContain('copy the cited profile-fact summary verbatim after the label');
+    expect(DRAFTER_SYSTEM_PROMPT).toContain('Do not add synonyms, new verbs');
+    expect(DRAFTER_SYSTEM_PROMPT).toContain('inferred outcomes, or JD-derived claims');
+  });
 });
 
 function makeAgent(): LlmDrafterAgent {
