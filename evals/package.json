@@ -18,7 +18,8 @@
     "eval:real:planner": "vitest run --config vitest.real.config.ts real/planner.real.ts --reporter=verbose",
     "eval:real:research": "vitest run --config vitest.real.config.ts real/research.real.ts --reporter=verbose",
     "eval:real:interview": "vitest run --config vitest.real.config.ts real/interview.real.ts --reporter=verbose",
-    "eval:real:drafts": "vitest run --config vitest.real.config.ts real/drafts.real.ts --reporter=verbose"
+    "eval:real:drafts": "vitest run --config vitest.real.config.ts real/drafts.real.ts --reporter=verbose",
+    "eval:real:metrics": "vitest run --config vitest.real.config.ts real/metrics.real.ts --reporter=verbose"
   },
   "dependencies": {
     "@careeros/agents": "workspace:*",
