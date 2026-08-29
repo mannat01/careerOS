@@ -30,9 +30,12 @@ import {
   buildMetricComposerUserPrompt,
   type MetricExplanationBrief,
 } from './prompt.js';
-import { composeDashboardMetrics, rawMetricExplanationsSchema } from './io.js';
 import {
-  ALL_METRIC_KEYS,
+  composeDashboardMetrics,
+  metricEvidenceAnchors,
+  rawMetricExplanationsSchema,
+} from './io.js';
+import {
   type DashboardMetricComposition,
   type MetricComposerInput,
 } from './model.js';
@@ -56,14 +59,28 @@ export class LlmDashboardMetricComposerAgent implements DashboardMetricAgent {
   }
 
   /** Call the frontier LLM and parse (fail-closed). Explanations are advisory. */
-  private async propose(_input: MetricComposerInput) {
-    // Build one brief per A1.6 key so the model sees which metric to draft for.
-    const briefs: MetricExplanationBrief[] = ALL_METRIC_KEYS.map((key) => ({
-      key,
-      status: 'ok',
-      trend: 'flat',
-      evidenceHooks: [],
-    }));
+  private async propose(input: MetricComposerInput) {
+    // Compute the authoritative structural dashboard before the model call. The
+    // model receives these fields as read-only context and still proposes only
+    // explanation text. The same unchanged composer runs again after the call
+    // to validate/substitute every untrusted explanation.
+    const computed = composeDashboardMetrics(EMPTY_EXPLANATIONS, input);
+    const actionTitles = new Map(input.activePlanActions.map((action) => [action.id, action.title]));
+    const briefs: MetricExplanationBrief[] = computed.metrics.map((metric) => {
+      const evidenceHooks = metricEvidenceAnchors(metric.key, input);
+      const linkedPlanActionTitle = metric.linkedPlanActionId
+        ? actionTitles.get(metric.linkedPlanActionId)
+        : undefined;
+      return {
+        key: metric.key,
+        status: metric.status,
+        trend: metric.trend,
+        evidenceHooks,
+        ...(metric.value !== undefined ? { value: metric.value } : {}),
+        ...(linkedPlanActionTitle !== undefined ? { linkedPlanActionTitle } : {}),
+        ...(evidenceHooks[0] !== undefined ? { anchorPhrase: evidenceHooks[0] } : {}),
+      };
+    });
 
     const messages = [
       { role: 'system' as const, content: METRIC_COMPOSER_SYSTEM_PROMPT },

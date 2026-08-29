@@ -37,6 +37,7 @@ import {
   ALL_METRIC_KEYS,
   METRIC_COMPOSER_MODEL_VERSION,
 } from './model.js';
+import { METRIC_COMPOSER_PROMPT_VERSION } from './prompt.js';
 import type { MetricComposerInput } from './model.js';
 
 // ---------- a single grounded input (mirrors the dm-03 skill_momentum flat shape) ----------
@@ -244,6 +245,35 @@ describe('dashboard metric composer — deterministic grounding guardrail', () =
     const { agent, provider } = agentReturning(FABRICATED_EXPLANATIONS);
     await agent.compose(FLAT_INPUT);
     expect(provider.calls[0]?.model).toBe('fixture-frontier');
+  });
+
+  it('passes the real computed metric context into the explanation brief', async () => {
+    const { agent, provider } = agentReturning(FABRICATED_EXPLANATIONS);
+    await agent.compose(FLAT_INPUT);
+    const userPrompt = provider.calls[0]?.messages.find((message) => message.role === 'user')?.content;
+    expect(userPrompt).toBeDefined();
+    expect(userPrompt).toContain('METRIC skill_momentum');
+    expect(userPrompt).toContain('status: ok');
+    expect(userPrompt).toContain('value: 45/100');
+    expect(userPrompt).toContain('trend: flat');
+    expect(userPrompt).toContain('no new demonstrations in 90d');
+    expect(userPrompt).toContain('kubernetes');
+    expect(userPrompt).toContain('linked plan action: "Ship a production K8s deploy at work this month"');
+  });
+
+  it('passes honest insufficient-data context without a value or fabricated action', async () => {
+    const { agent, provider } = agentReturning(FABRICATED_EXPLANATIONS);
+    await agent.compose(FLAT_INPUT);
+    const userPrompt = provider.calls[0]?.messages.find((message) => message.role === 'user')?.content ?? '';
+    const networking = userPrompt.split('METRIC networking_strength')[1]?.split('\n\nMETRIC ')[0] ?? '';
+    expect(networking).toContain('status: insufficient_data');
+    expect(networking).toContain('value: insufficient data');
+    expect(networking).toContain('evidence hooks:\n  (none)');
+    expect(networking).toContain('linked plan action: (none)');
+  });
+
+  it('versions the real-context prompt contract', () => {
+    expect(METRIC_COMPOSER_PROMPT_VERSION).toBe('1.1.0');
   });
 });
 

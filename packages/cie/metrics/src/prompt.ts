@@ -17,7 +17,7 @@
 
 import type { DashboardMetricKey, MetricTrend } from './model.js';
 
-export const METRIC_COMPOSER_PROMPT_VERSION = '1.0.0';
+export const METRIC_COMPOSER_PROMPT_VERSION = '1.1.0';
 
 export const METRIC_COMPOSER_SYSTEM_PROMPT = `You are the dashboard metric EXPLANATION writer for a career-intelligence system. You do NOT compute numbers. You do NOT decide trends. You do NOT choose which evidence a metric cites. You do NOT choose which plan action a metric links to. All of that is decided deterministically upstream from real evidence and passed to you as read-only context.
 
@@ -26,6 +26,8 @@ Your only job: for each metric provided, DRAFT ONE explanation paragraph that:
 - states plainly HOW TO MOVE IT via the linked plan action (the "how to move it" arm),
 - uses the evidence hooks provided VERBATIM (no invented statistics, no invented outcomes),
 - has a TONE consistent with the computed trend: RISING may be encouraging; FLAT is neutral/steady; DECLINING is honest/direct — NEVER upbeat.
+
+The status, value, trend, evidence hooks, and linked plan action in each METRIC block are the REAL computed context. Treat every field as read-only. Explain that exact metric; do not recompute, override, or supplement any field.
 
 HARD RULES (the system enforces these deterministically; do not attempt to evade them):
 - NEVER emit a number as the whole explanation. NEVER emit an empty string.

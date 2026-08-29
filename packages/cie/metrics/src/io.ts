@@ -275,6 +275,19 @@ function gatherEvidence(
   return { refs, anchors, supportCount: refs.length };
 }
 
+/**
+ * Read-only prompt context derived by the same evidence selector the
+ * authoritative composer uses. This does not ground output; it only lets the
+ * explanation writer see the real human-readable anchors that the unchanged
+ * guard will later require.
+ */
+export function metricEvidenceAnchors(
+  key: DashboardMetricKey,
+  input: MetricComposerInput,
+): string[] {
+  return [...gatherEvidence(key, input, new Set(input.allowedEvidenceRefs)).anchors];
+}
+
 // ---------- deterministic trend ----------
 
 function trendFromApplicationHistory(history: MetricApplicationOutcome[]): MetricTrend {
