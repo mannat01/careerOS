@@ -4,19 +4,92 @@
 
 **Agent:** `@careeros/cie-metrics` dashboard metric composer
 
-**Campaign date:** 2026-08-28
+**Campaign dates:** 2026-08-28 (pre-fix), 2026-08-29 (post-fix attempt)
 
-**Baseline:** clean, pushed `main` at `19410e1cb8f799cc3863ad3b782d0c0ba0439e8c`
+**Pre-fix validation baseline:** clean, pushed `main` at `19410e1cb8f799cc3863ad3b782d0c0ba0439e8c`
+
+**Brief-context fix commit:** `fdc471fd9d2b4b2632f93df06dd761321e3455d8` (`fix(metrics): pass computed context into explanation brief`)
 
 **Provider/model:** OmniRoute `http://127.0.0.1:20128/v1` → `openai/gpt-5.6-sol`
 
 **Planned campaign:** 12 frozen goldens + one real-only strategic-recommendations case, each ×3 = **39 real paid completions**
 
-**Completed campaign:** **6/39 successful paid completions** across two frozen cases; 60/60 final metric objects grounded; three consecutive provider-route failures prevented the remaining 33 completions
+**Pre-fix completed campaign:** **6/39 successful paid completions** across two frozen cases; 60/60 final metric objects grounded; three consecutive provider-route failures prevented the remaining 33 completions
 
-**Verdict:** **YELLOW — provider-blocked incomplete validation; no leak was observed in completed samples, but the required thin/adversarial campaign was not completed and the guard replaced explanations in every measured sample**
+**Current verdict:** **YELLOW — Part A is deterministic/CI-green and preserves the byte-identical zero-leak guard, but post-fix real-model re-validation is provider-blocked at 0/39 successful completions; survival, grounding, leaks, and thin handling are not re-measured**
 
-## Executive result
+## Post-fix brief-context remediation and re-validation attempt
+
+### Part A result (`fdc471f`)
+
+The prompt/wiring-only fix now computes the authoritative structural dashboard before the model call and passes each metric's real read-only context into the explanation brief:
+
+- computed `status`;
+- computed `value`, only when status is `ok`;
+- computed `trend`;
+- human-readable evidence anchors selected by the same deterministic evidence gatherer used by production;
+- the title of the deterministically selected real linked action, when one exists; and
+- honest `insufficient_data`, no value, no evidence hooks, and no linked action when evidence is insufficient.
+
+`METRIC_COMPOSER_PROMPT_VERSION` advanced from `1.0.0` to `1.1.0`. The prompt explicitly marks status/value/trend/hooks/action as real, computed, and read-only. The model still proposes only explanation strings.
+
+The authoritative `composeDashboardMetrics()` body remained byte-identical before and after the fix:
+
+```text
+SHA-256 9205e863a1c1bdcab6f95276fbd7251644d27d369da218fe3f060d867b692d42
+bytes   2008
+```
+
+No contract, frontend, service interface, adapter, or guardrail change was required. Focused proof:
+
+- metrics package: **18/18**, including prompt-capture tests for real `ok` and `insufficient_data` briefs;
+- neutered-guard red-tests: **5/5**, still proving cheerleading, fabricated value, nonexistent evidence, and nonexistent action leak if the guard is bypassed;
+- deterministic metrics golden: **16/16**, including zero grounding leaks and zero fabricated insufficient-data values;
+- deterministic `eval:ci`: **217/217**;
+- canonical Part A `make verify`: **exit 0**; and
+- exact Part A GitHub Actions run [33222537179](https://github.com/mannat01/careerOS/actions/runs/33222537179): completed **success** for `fdc471f`.
+
+### Part B post-fix campaign attempt
+
+The same 13 cases ×3 campaign was started only after Part A was pushed and CI-green. All paid prerequisites passed immediately before execution: repository clean and remote-aligned at `fdc471f`, required environment values present, real key masked/non-placeholder, OmniRoute reachable on `:20128`, and `/v1/models` advertising `openai/gpt-5.6-sol`.
+
+OmniRoute's completion route then failed before the first successful response on every reasonable attempt:
+
+| Attempt | Successful scored samples | Completed cases | Failure | Client duration |
+| --- | ---: | ---: | --- | ---: |
+| 1 | 0 | 0 | `transport_error` on `dm-01`, run 1 | 28.72 s |
+| 2, after 60-second wait + model-health check | 0 | 0 | `transport_error` on `dm-01`, run 1 | 29.63 s |
+| 3, after 90-second wait + model-health check | 0 | 0 | `transport_error` on `dm-01`, run 1 | 27.11 s |
+
+`/v1/models` continued returning successfully and advertising the exact required model after each wait and after the final failure. No attempt returned a successful completion body, usage, or cost response. Consequently:
+
+- post-fix successful completions: **0/39**;
+- post-fix checkpoint records: **0**;
+- completed samples repurchased: **0**;
+- reached cases: **none**;
+- unreached cases: **all 13**, including both dedicated thin cases (`dm-08`, `dm-10`) and all four adversarial cases (`dm-09..12`);
+- post-fix explanation survival/substitution rate: **not measured**;
+- post-fix grounding and leak count: **not measured**;
+- post-fix accuracy: **not measured**;
+- post-fix thin `insufficient_data` correctness: **not measured**; and
+- post-fix latency/tokens/cost/variance: **not measured**, because no completion succeeded.
+
+The requested expected improvement cannot be claimed from deterministic tests. The before/after measurement is therefore:
+
+| Measurement | Pre-fix measured subset | Post-fix |
+| --- | ---: | ---: |
+| Successful completions | 6/39 | **0/39** |
+| Explanation substitutions | 26; 6/6 samples affected | **Not measured** |
+| Grounding fidelity | 60/60 = 100% | **Not measured** |
+| Final fabrication leaks | 0 | **Not measured** |
+| Frozen-property accuracy | 6/6 = 100% | **Not measured** |
+| Dedicated thin cases | Not reached | **Not reached** |
+
+### Current post-fix verdict: YELLOW — provider-blocked
+
+Part A is safe and complete, but Part B cannot be GREEN without real post-fix samples. It is not RED because no post-fix completion exists in which a leak could occur. The correct result is **YELLOW / provider-blocked re-validation**. Resume the same 13×3 campaign only after the completion route is stable; require zero final leaks, 100% grounding, both thin cases ×3 honest, and materially lower substitution/affected-sample rates before promoting to GREEN.
+
+## Pre-fix campaign — executive result
 
 The metrics composer is **LLM-backed**, not deterministic-only. Production calls a frontier model to draft explanation text. Production then deterministically computes and guards every metric value, status, trend, evidence reference, linked action, and confidence, and validates or replaces each explanation.
 
@@ -186,7 +259,7 @@ Execution chronology:
 
 No failed attempt is counted as a completion, no successful call was repurchased, and no raw model text, checkpoint, prompt, account metadata, or secret is committed.
 
-## Verdict and follow-up
+## Pre-fix verdict and follow-up
 
 ### YELLOW — provider-blocked incomplete validation
 
@@ -195,13 +268,11 @@ Safety on the completed subset is positive: zero leaks, exact deterministic stru
 1. **campaign completeness:** only 6/39 completions succeeded, so dedicated thin and adversarial behavior remains unvalidated with the real model;
 2. **guard dependence:** the explanation guard substituted text in 6/6 measured samples (26 per-metric substitutions), above the usual 25% affected-sample YELLOW threshold.
 
-Recommended next steps, outside this completed lane:
+Historical recommended next steps from the pre-fix campaign:
 
 1. restore stable OmniRoute completion routing for `openai/gpt-5.6-sol`;
-2. resume the same checkpointed case order rather than repurchasing the first six calls;
-3. complete all remaining 33 responses, requiring zero final leaks and 3/3 strict behavior on both dedicated thin cases;
-4. align `LlmDashboardMetricComposerAgent.propose()` briefs with the real deterministically computed status/trend/value/hooks/action context promised by the prompt; and
-5. rerun after alignment, preserving the production guard, and require materially fewer guard-affected samples for GREEN.
+2. preserve the production guard and align `LlmDashboardMetricComposerAgent.propose()` briefs with the real deterministically computed status/trend/value/hooks/action context promised by the prompt — **completed in Part A at `fdc471f`**; and
+3. run a fresh post-fix 13×3 campaign, requiring zero final leaks, 3/3 strict behavior on both dedicated thin cases, and materially fewer guard-affected samples for GREEN — **attempted in Part B but blocked at 0/39 by the provider completion route**.
 
 ## Harness and lane integrity
 
@@ -213,11 +284,11 @@ pnpm --filter @careeros/evals eval:real:metrics
 
 The metrics suite is included only by `evals/vitest.real.config.ts`. It is not part of `eval:ci`, `GREEN_EVAL_SUITES`, or a CI gate.
 
-Changes are limited to `evals/` and this report. This slice did not modify:
+The original Slice 10 changes were limited to `evals/` and this report. This remediation session changed the metrics prompt/wiring and package tests in Part A, then only this report in Part B. Across both parts it did not modify:
 
 - `apps/web` or any other application file;
 - `evals/vitest.eval-ci.config.ts` or `GREEN_EVAL_SUITES`;
-- any production prompt, agent, service, adapter, contract, or guardrail; or
+- any frontend, service interface, adapter, contract, or guardrail; or
 - another agent's real-model harness.
 
 Pre-campaign validation passed:
@@ -227,4 +298,4 @@ Pre-campaign validation passed:
 - deterministic `eval:ci`: **217/217**;
 - canonical baseline `make verify`: **exit 0**.
 
-The ignored paid checkpoint and all transient `/tmp` logs were removed after report verification. Canonical final completed-tree `make verify` exited **0**, including workspace typecheck/lint/tests, deterministic `eval:ci` **217/217**, accessibility **77/77**, and Playwright **4/4**.
+The original ignored paid checkpoint and all current transient `/tmp` logs were removed after report verification. Part A and final Part B canonical `make verify` both exited **0**, including deterministic `eval:ci` **217/217**, accessibility **77/77**, and Playwright **4/4**.
